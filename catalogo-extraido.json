@@ -1,0 +1,925 @@
+{
+  "sources": [
+    "mayoristas.jpg",
+    "Minoristas.jpg"
+  ],
+  "currency": "COP",
+  "source_date": null,
+  "notes": [
+    "Los nombres diferentes se conservan como productos distintos; no se asumen equivalencias entre cortes.",
+    "Pata de res: 9000 COP por unidad; no por libra o kilo.",
+    "La fecha de vigencia original no está indicada en las imágenes."
+  ],
+  "entries": [
+    {
+      "segment": "mayorista",
+      "category": "res",
+      "name": "Carne primera",
+      "price_libra": 16000,
+      "price_kilo": 32000,
+      "price_unidad": null,
+      "source": "mayoristas.jpg",
+      "key": "res:carne primera"
+    },
+    {
+      "segment": "mayorista",
+      "category": "res",
+      "name": "Atravesado",
+      "price_libra": 15100,
+      "price_kilo": 30200,
+      "price_unidad": null,
+      "source": "mayoristas.jpg",
+      "key": "res:atravesado"
+    },
+    {
+      "segment": "mayorista",
+      "category": "res",
+      "name": "Bollo",
+      "price_libra": 15100,
+      "price_kilo": 30200,
+      "price_unidad": null,
+      "source": "mayoristas.jpg",
+      "key": "res:bollo"
+    },
+    {
+      "segment": "mayorista",
+      "category": "res",
+      "name": "Lomo fino",
+      "price_libra": 25000,
+      "price_kilo": 50000,
+      "price_unidad": null,
+      "source": "mayoristas.jpg",
+      "key": "res:lomo fino"
+    },
+    {
+      "segment": "mayorista",
+      "category": "res",
+      "name": "Punta gorda",
+      "price_libra": 19500,
+      "price_kilo": 39000,
+      "price_unidad": null,
+      "source": "mayoristas.jpg",
+      "key": "res:punta gorda"
+    },
+    {
+      "segment": "mayorista",
+      "category": "res",
+      "name": "Espaldilla",
+      "price_libra": 14200,
+      "price_kilo": 28400,
+      "price_unidad": null,
+      "source": "mayoristas.jpg",
+      "key": "res:espaldilla"
+    },
+    {
+      "segment": "mayorista",
+      "category": "res",
+      "name": "Molida especial",
+      "price_libra": 11300,
+      "price_kilo": 22600,
+      "price_unidad": null,
+      "source": "mayoristas.jpg",
+      "key": "res:molida especial"
+    },
+    {
+      "segment": "mayorista",
+      "category": "res",
+      "name": "Molida corriente",
+      "price_libra": 9750,
+      "price_kilo": 19500,
+      "price_unidad": null,
+      "source": "mayoristas.jpg",
+      "key": "res:molida corriente"
+    },
+    {
+      "segment": "mayorista",
+      "category": "res",
+      "name": "Jarrete",
+      "price_libra": 12100,
+      "price_kilo": 24200,
+      "price_unidad": null,
+      "source": "mayoristas.jpg",
+      "key": "res:jarrete"
+    },
+    {
+      "segment": "mayorista",
+      "category": "res",
+      "name": "Jarreton",
+      "price_libra": 13100,
+      "price_kilo": 26200,
+      "price_unidad": null,
+      "source": "mayoristas.jpg",
+      "key": "res:jarreton"
+    },
+    {
+      "segment": "mayorista",
+      "category": "res",
+      "name": "Morro",
+      "price_libra": 13100,
+      "price_kilo": 26200,
+      "price_unidad": null,
+      "source": "mayoristas.jpg",
+      "key": "res:morro"
+    },
+    {
+      "segment": "mayorista",
+      "category": "res",
+      "name": "Sobrebarriga",
+      "price_libra": 14000,
+      "price_kilo": 28000,
+      "price_unidad": null,
+      "source": "mayoristas.jpg",
+      "key": "res:sobrebarriga"
+    },
+    {
+      "segment": "mayorista",
+      "category": "res",
+      "name": "Costilla",
+      "price_libra": 9500,
+      "price_kilo": 19000,
+      "price_unidad": null,
+      "source": "mayoristas.jpg",
+      "key": "res:costilla"
+    },
+    {
+      "segment": "mayorista",
+      "category": "res",
+      "name": "Costillita",
+      "price_libra": 6400,
+      "price_kilo": 12800,
+      "price_unidad": null,
+      "source": "mayoristas.jpg",
+      "key": "res:costillita"
+    },
+    {
+      "segment": "mayorista",
+      "category": "res",
+      "name": "Asado de tira",
+      "price_libra": 12200,
+      "price_kilo": 24400,
+      "price_unidad": null,
+      "source": "mayoristas.jpg",
+      "key": "res:asado de tira"
+    },
+    {
+      "segment": "mayorista",
+      "category": "res",
+      "name": "Chocozuela",
+      "price_libra": 3500,
+      "price_kilo": 7000,
+      "price_unidad": null,
+      "source": "mayoristas.jpg",
+      "key": "res:chocozuela"
+    },
+    {
+      "segment": "mayorista",
+      "category": "res",
+      "name": "Hueso corriente",
+      "price_libra": 3000,
+      "price_kilo": 6000,
+      "price_unidad": null,
+      "source": "mayoristas.jpg",
+      "key": "res:hueso corriente"
+    },
+    {
+      "segment": "mayorista",
+      "category": "res",
+      "name": "Hueso negro",
+      "price_libra": 3500,
+      "price_kilo": 7000,
+      "price_unidad": null,
+      "source": "mayoristas.jpg",
+      "key": "res:hueso negro"
+    },
+    {
+      "segment": "mayorista",
+      "category": "res",
+      "name": "Hueso negro especial",
+      "price_libra": 4500,
+      "price_kilo": 9000,
+      "price_unidad": null,
+      "source": "mayoristas.jpg",
+      "key": "res:hueso negro especial"
+    },
+    {
+      "segment": "mayorista",
+      "category": "res",
+      "name": "Hueso blanco",
+      "price_libra": 1200,
+      "price_kilo": 2400,
+      "price_unidad": null,
+      "source": "mayoristas.jpg",
+      "key": "res:hueso blanco"
+    },
+    {
+      "segment": "mayorista",
+      "category": "res",
+      "name": "Hueso paletero",
+      "price_libra": 9500,
+      "price_kilo": 19000,
+      "price_unidad": null,
+      "source": "mayoristas.jpg",
+      "key": "res:hueso paletero"
+    },
+    {
+      "segment": "mayorista",
+      "category": "res",
+      "name": "Lengua",
+      "price_libra": 11400,
+      "price_kilo": 22800,
+      "price_unidad": null,
+      "source": "mayoristas.jpg",
+      "key": "res:lengua"
+    },
+    {
+      "segment": "mayorista",
+      "category": "res",
+      "name": "Rabo entero",
+      "price_libra": 9500,
+      "price_kilo": 19000,
+      "price_unidad": null,
+      "source": "mayoristas.jpg",
+      "key": "res:rabo entero"
+    },
+    {
+      "segment": "mayorista",
+      "category": "res",
+      "name": "Pata de res",
+      "price_libra": null,
+      "price_kilo": null,
+      "price_unidad": 9000,
+      "source": "mayoristas.jpg",
+      "key": "res:pata de res"
+    },
+    {
+      "segment": "mayorista",
+      "category": "res",
+      "name": "Panza",
+      "price_libra": 8400,
+      "price_kilo": 16800,
+      "price_unidad": null,
+      "source": "mayoristas.jpg",
+      "key": "res:panza"
+    },
+    {
+      "segment": "mayorista",
+      "category": "res",
+      "name": "3 tela",
+      "price_libra": 6300,
+      "price_kilo": 12600,
+      "price_unidad": null,
+      "source": "mayoristas.jpg",
+      "key": "res:3 tela"
+    },
+    {
+      "segment": "mayorista",
+      "category": "res",
+      "name": "Higado",
+      "price_libra": 8100,
+      "price_kilo": 16200,
+      "price_unidad": null,
+      "source": "mayoristas.jpg",
+      "key": "res:higado"
+    },
+    {
+      "segment": "mayorista",
+      "category": "res",
+      "name": "Corazón",
+      "price_libra": 8500,
+      "price_kilo": 17000,
+      "price_unidad": null,
+      "source": "mayoristas.jpg",
+      "key": "res:corazon"
+    },
+    {
+      "segment": "mayorista",
+      "category": "res",
+      "name": "Bofe",
+      "price_libra": 7500,
+      "price_kilo": 15000,
+      "price_unidad": null,
+      "source": "mayoristas.jpg",
+      "key": "res:bofe"
+    },
+    {
+      "segment": "mayorista",
+      "category": "cerdo",
+      "name": "Costilla de cerdo con piel",
+      "price_libra": 8750,
+      "price_kilo": 17500,
+      "price_unidad": null,
+      "source": "mayoristas.jpg",
+      "key": "cerdo:costilla de cerdo con piel"
+    },
+    {
+      "segment": "mayorista",
+      "category": "cerdo",
+      "name": "Pulpa de cerdo criollo",
+      "price_libra": 9000,
+      "price_kilo": 18000,
+      "price_unidad": null,
+      "source": "mayoristas.jpg",
+      "key": "cerdo:pulpa de cerdo criollo"
+    },
+    {
+      "segment": "mayorista",
+      "category": "cerdo",
+      "name": "Pezuña de cerdo",
+      "price_libra": 4000,
+      "price_kilo": 8000,
+      "price_unidad": null,
+      "source": "mayoristas.jpg",
+      "key": "cerdo:pezuna de cerdo"
+    },
+    {
+      "segment": "mayorista",
+      "category": "cerdo",
+      "name": "Piel de cerdo",
+      "price_libra": 2000,
+      "price_kilo": 4000,
+      "price_unidad": null,
+      "source": "mayoristas.jpg",
+      "key": "cerdo:piel de cerdo"
+    },
+    {
+      "segment": "mayorista",
+      "category": "cerdo",
+      "name": "Chuleta ahumada",
+      "price_libra": 10000,
+      "price_kilo": 20000,
+      "price_unidad": null,
+      "source": "mayoristas.jpg",
+      "key": "cerdo:chuleta ahumada"
+    },
+    {
+      "segment": "mayorista",
+      "category": "cerdo",
+      "name": "Chuleta de cerdo criollo",
+      "price_libra": 6500,
+      "price_kilo": 13000,
+      "price_unidad": null,
+      "source": "mayoristas.jpg",
+      "key": "cerdo:chuleta de cerdo criollo"
+    },
+    {
+      "segment": "mayorista",
+      "category": "pollo",
+      "name": "Filete de pechuga",
+      "price_libra": 9000,
+      "price_kilo": 18000,
+      "price_unidad": null,
+      "source": "mayoristas.jpg",
+      "key": "pollo:filete de pechuga"
+    },
+    {
+      "segment": "mayorista",
+      "category": "pollo",
+      "name": "Pata de pollo",
+      "price_libra": 2000,
+      "price_kilo": 4000,
+      "price_unidad": null,
+      "source": "mayoristas.jpg",
+      "key": "pollo:pata de pollo"
+    },
+    {
+      "segment": "mayorista",
+      "category": "pollo",
+      "name": "Hueso de pechuga",
+      "price_libra": 2800,
+      "price_kilo": 5600,
+      "price_unidad": null,
+      "source": "mayoristas.jpg",
+      "key": "pollo:hueso de pechuga"
+    },
+    {
+      "segment": "minorista",
+      "category": "res",
+      "name": "Carne blanda",
+      "price_libra": 17000,
+      "price_kilo": 34000,
+      "price_unidad": null,
+      "source": "Minoristas.jpg",
+      "key": "res:carne blanda"
+    },
+    {
+      "segment": "minorista",
+      "category": "res",
+      "name": "Semi blanda",
+      "price_libra": 14500,
+      "price_kilo": 29000,
+      "price_unidad": null,
+      "source": "Minoristas.jpg",
+      "key": "res:semi blanda"
+    },
+    {
+      "segment": "minorista",
+      "category": "res",
+      "name": "Lomo ancho",
+      "price_libra": 17500,
+      "price_kilo": 35000,
+      "price_unidad": null,
+      "source": "Minoristas.jpg",
+      "key": "res:lomo ancho"
+    },
+    {
+      "segment": "minorista",
+      "category": "res",
+      "name": "Lomo fino",
+      "price_libra": 26000,
+      "price_kilo": 52000,
+      "price_unidad": null,
+      "source": "Minoristas.jpg",
+      "key": "res:lomo fino"
+    },
+    {
+      "segment": "minorista",
+      "category": "res",
+      "name": "Punta gorda",
+      "price_libra": 19500,
+      "price_kilo": 39000,
+      "price_unidad": null,
+      "source": "Minoristas.jpg",
+      "key": "res:punta gorda"
+    },
+    {
+      "segment": "minorista",
+      "category": "res",
+      "name": "Atravessado",
+      "price_libra": 15700,
+      "price_kilo": 31400,
+      "price_unidad": null,
+      "source": "Minoristas.jpg",
+      "key": "res:atravessado"
+    },
+    {
+      "segment": "minorista",
+      "category": "res",
+      "name": "Bollo",
+      "price_libra": 15700,
+      "price_kilo": 31400,
+      "price_unidad": null,
+      "source": "Minoristas.jpg",
+      "key": "res:bollo"
+    },
+    {
+      "segment": "minorista",
+      "category": "res",
+      "name": "Espaldilla",
+      "price_libra": 14500,
+      "price_kilo": 29000,
+      "price_unidad": null,
+      "source": "Minoristas.jpg",
+      "key": "res:espaldilla"
+    },
+    {
+      "segment": "minorista",
+      "category": "res",
+      "name": "Molida súper especial",
+      "price_libra": 11500,
+      "price_kilo": 23000,
+      "price_unidad": null,
+      "source": "Minoristas.jpg",
+      "key": "res:molida super especial"
+    },
+    {
+      "segment": "minorista",
+      "category": "res",
+      "name": "Molida Corriente",
+      "price_libra": 10000,
+      "price_kilo": 20000,
+      "price_unidad": null,
+      "source": "Minoristas.jpg",
+      "key": "res:molida corriente"
+    },
+    {
+      "segment": "minorista",
+      "category": "res",
+      "name": "Jarrete",
+      "price_libra": 12700,
+      "price_kilo": 25400,
+      "price_unidad": null,
+      "source": "Minoristas.jpg",
+      "key": "res:jarrete"
+    },
+    {
+      "segment": "minorista",
+      "category": "res",
+      "name": "Jarretón",
+      "price_libra": 13200,
+      "price_kilo": 26400,
+      "price_unidad": null,
+      "source": "Minoristas.jpg",
+      "key": "res:jarreton"
+    },
+    {
+      "segment": "minorista",
+      "category": "res",
+      "name": "Morro",
+      "price_libra": 13200,
+      "price_kilo": 26400,
+      "price_unidad": null,
+      "source": "Minoristas.jpg",
+      "key": "res:morro"
+    },
+    {
+      "segment": "minorista",
+      "category": "res",
+      "name": "Sobre barriga delgada",
+      "price_libra": 14500,
+      "price_kilo": 29000,
+      "price_unidad": null,
+      "source": "Minoristas.jpg",
+      "key": "res:sobre barriga delgada"
+    },
+    {
+      "segment": "minorista",
+      "category": "res",
+      "name": "Costillita",
+      "price_libra": 6500,
+      "price_kilo": 13000,
+      "price_unidad": null,
+      "source": "Minoristas.jpg",
+      "key": "res:costillita"
+    },
+    {
+      "segment": "minorista",
+      "category": "res",
+      "name": "Costilla",
+      "price_libra": 10200,
+      "price_kilo": 20400,
+      "price_unidad": null,
+      "source": "Minoristas.jpg",
+      "key": "res:costilla"
+    },
+    {
+      "segment": "minorista",
+      "category": "res",
+      "name": "Hueso negro",
+      "price_libra": 3500,
+      "price_kilo": 7000,
+      "price_unidad": null,
+      "source": "Minoristas.jpg",
+      "key": "res:hueso negro"
+    },
+    {
+      "segment": "minorista",
+      "category": "res",
+      "name": "Hueso negro especial",
+      "price_libra": 4000,
+      "price_kilo": 8000,
+      "price_unidad": null,
+      "source": "Minoristas.jpg",
+      "key": "res:hueso negro especial"
+    },
+    {
+      "segment": "minorista",
+      "category": "res",
+      "name": "Hueso blanco",
+      "price_libra": 1400,
+      "price_kilo": 2800,
+      "price_unidad": null,
+      "source": "Minoristas.jpg",
+      "key": "res:hueso blanco"
+    },
+    {
+      "segment": "minorista",
+      "category": "res",
+      "name": "Hueso paletero",
+      "price_libra": 10200,
+      "price_kilo": 20400,
+      "price_unidad": null,
+      "source": "Minoristas.jpg",
+      "key": "res:hueso paletero"
+    },
+    {
+      "segment": "minorista",
+      "category": "res",
+      "name": "Chocosuela",
+      "price_libra": 3500,
+      "price_kilo": 7000,
+      "price_unidad": null,
+      "source": "Minoristas.jpg",
+      "key": "res:chocosuela"
+    },
+    {
+      "segment": "minorista",
+      "category": "res",
+      "name": "Tira Tira",
+      "price_libra": 3500,
+      "price_kilo": 7000,
+      "price_unidad": null,
+      "source": "Minoristas.jpg",
+      "key": "res:tira tira"
+    },
+    {
+      "segment": "minorista",
+      "category": "res",
+      "name": "Asado tira",
+      "price_libra": 13000,
+      "price_kilo": 26000,
+      "price_unidad": null,
+      "source": "Minoristas.jpg",
+      "key": "res:asado tira"
+    },
+    {
+      "segment": "minorista",
+      "category": "res",
+      "name": "3 telas",
+      "price_libra": 6500,
+      "price_kilo": 13000,
+      "price_unidad": null,
+      "source": "Minoristas.jpg",
+      "key": "res:3 telas"
+    },
+    {
+      "segment": "minorista",
+      "category": "res",
+      "name": "Ubre",
+      "price_libra": 7000,
+      "price_kilo": 14000,
+      "price_unidad": null,
+      "source": "Minoristas.jpg",
+      "key": "res:ubre"
+    },
+    {
+      "segment": "minorista",
+      "category": "res",
+      "name": "Lengua",
+      "price_libra": 12000,
+      "price_kilo": 24000,
+      "price_unidad": null,
+      "source": "Minoristas.jpg",
+      "key": "res:lengua"
+    },
+    {
+      "segment": "minorista",
+      "category": "res",
+      "name": "Rabo entero",
+      "price_libra": 10200,
+      "price_kilo": 20400,
+      "price_unidad": null,
+      "source": "Minoristas.jpg",
+      "key": "res:rabo entero"
+    },
+    {
+      "segment": "minorista",
+      "category": "res",
+      "name": "Pata de res",
+      "price_libra": null,
+      "price_kilo": null,
+      "price_unidad": 9000,
+      "source": "Minoristas.jpg",
+      "key": "res:pata de res"
+    },
+    {
+      "segment": "minorista",
+      "category": "res",
+      "name": "Panza",
+      "price_libra": 9000,
+      "price_kilo": 18000,
+      "price_unidad": null,
+      "source": "Minoristas.jpg",
+      "key": "res:panza"
+    },
+    {
+      "segment": "minorista",
+      "category": "res",
+      "name": "Hígado",
+      "price_libra": 9000,
+      "price_kilo": 18000,
+      "price_unidad": null,
+      "source": "Minoristas.jpg",
+      "key": "res:higado"
+    },
+    {
+      "segment": "minorista",
+      "category": "res",
+      "name": "Corazón",
+      "price_libra": 9000,
+      "price_kilo": 18000,
+      "price_unidad": null,
+      "source": "Minoristas.jpg",
+      "key": "res:corazon"
+    },
+    {
+      "segment": "minorista",
+      "category": "res",
+      "name": "Bofe",
+      "price_libra": 9000,
+      "price_kilo": 18000,
+      "price_unidad": null,
+      "source": "Minoristas.jpg",
+      "key": "res:bofe"
+    },
+    {
+      "segment": "minorista",
+      "category": "cerdo",
+      "name": "Pulpa",
+      "price_libra": 11000,
+      "price_kilo": 22000,
+      "price_unidad": null,
+      "source": "Minoristas.jpg",
+      "key": "cerdo:pulpa"
+    },
+    {
+      "segment": "minorista",
+      "category": "cerdo",
+      "name": "Costilla",
+      "price_libra": 10000,
+      "price_kilo": 20000,
+      "price_unidad": null,
+      "source": "Minoristas.jpg",
+      "key": "cerdo:costilla"
+    },
+    {
+      "segment": "minorista",
+      "category": "cerdo",
+      "name": "Chuleta",
+      "price_libra": 7500,
+      "price_kilo": 15000,
+      "price_unidad": null,
+      "source": "Minoristas.jpg",
+      "key": "cerdo:chuleta"
+    },
+    {
+      "segment": "minorista",
+      "category": "cerdo",
+      "name": "Pata de cerdo",
+      "price_libra": 6000,
+      "price_kilo": 12000,
+      "price_unidad": null,
+      "source": "Minoristas.jpg",
+      "key": "cerdo:pata de cerdo"
+    },
+    {
+      "segment": "minorista",
+      "category": "cerdo",
+      "name": "Lomo ahumado",
+      "price_libra": 12000,
+      "price_kilo": 24000,
+      "price_unidad": null,
+      "source": "Minoristas.jpg",
+      "key": "cerdo:lomo ahumado"
+    },
+    {
+      "segment": "minorista",
+      "category": "cerdo",
+      "name": "Chuleta ahumada",
+      "price_libra": 12000,
+      "price_kilo": 24000,
+      "price_unidad": null,
+      "source": "Minoristas.jpg",
+      "key": "cerdo:chuleta ahumada"
+    },
+    {
+      "segment": "minorista",
+      "category": "cerdo",
+      "name": "Chorizo",
+      "price_libra": 11000,
+      "price_kilo": 22000,
+      "price_unidad": null,
+      "source": "Minoristas.jpg",
+      "key": "cerdo:chorizo"
+    },
+    {
+      "segment": "minorista",
+      "category": "cerdo",
+      "name": "Chicharrón carnudo",
+      "price_libra": 8000,
+      "price_kilo": 16000,
+      "price_unidad": null,
+      "source": "Minoristas.jpg",
+      "key": "cerdo:chicharron carnudo"
+    },
+    {
+      "segment": "minorista",
+      "category": "pollo",
+      "name": "Pollo entero",
+      "price_libra": 5000,
+      "price_kilo": 10000,
+      "price_unidad": null,
+      "source": "Minoristas.jpg",
+      "key": "pollo:pollo entero"
+    },
+    {
+      "segment": "minorista",
+      "category": "pollo",
+      "name": "Pernil mixto (contramuslo)",
+      "price_libra": 4000,
+      "price_kilo": 8000,
+      "price_unidad": null,
+      "source": "Minoristas.jpg",
+      "key": "pollo:pernil mixto (contramuslo)"
+    },
+    {
+      "segment": "minorista",
+      "category": "pollo",
+      "name": "Muslo Colombina",
+      "price_libra": 5000,
+      "price_kilo": 10000,
+      "price_unidad": null,
+      "source": "Minoristas.jpg",
+      "key": "pollo:muslo colombina"
+    },
+    {
+      "segment": "minorista",
+      "category": "pollo",
+      "name": "Molleja",
+      "price_libra": 6000,
+      "price_kilo": 12000,
+      "price_unidad": null,
+      "source": "Minoristas.jpg",
+      "key": "pollo:molleja"
+    },
+    {
+      "segment": "minorista",
+      "category": "pollo",
+      "name": "Ala especial",
+      "price_libra": 5500,
+      "price_kilo": 11000,
+      "price_unidad": null,
+      "source": "Minoristas.jpg",
+      "key": "pollo:ala especial"
+    },
+    {
+      "segment": "minorista",
+      "category": "pollo",
+      "name": "Pechuga congelada",
+      "price_libra": 7000,
+      "price_kilo": 14000,
+      "price_unidad": null,
+      "source": "Minoristas.jpg",
+      "key": "pollo:pechuga congelada"
+    },
+    {
+      "segment": "minorista",
+      "category": "pollo",
+      "name": "Filete relajado",
+      "price_libra": 11000,
+      "price_kilo": 22000,
+      "price_unidad": null,
+      "source": "Minoristas.jpg",
+      "key": "pollo:filete relajado"
+    },
+    {
+      "segment": "minorista",
+      "category": "pollo",
+      "name": "Pata de pollo",
+      "price_libra": 2500,
+      "price_kilo": 5000,
+      "price_unidad": null,
+      "source": "Minoristas.jpg",
+      "key": "pollo:pata de pollo"
+    },
+    {
+      "segment": "minorista",
+      "category": "pollo",
+      "name": "Hueso de pechuga",
+      "price_libra": 2500,
+      "price_kilo": 5000,
+      "price_unidad": null,
+      "source": "Minoristas.jpg",
+      "key": "pollo:hueso de pechuga"
+    },
+    {
+      "segment": "minorista",
+      "category": "pescado",
+      "name": "Bassa",
+      "price_libra": 10200,
+      "price_kilo": 20400,
+      "price_unidad": null,
+      "source": "Minoristas.jpg",
+      "key": "pescado:bassa"
+    },
+    {
+      "segment": "minorista",
+      "category": "pescado",
+      "name": "Bassa selecta",
+      "price_libra": 11200,
+      "price_kilo": 22400,
+      "price_unidad": null,
+      "source": "Minoristas.jpg",
+      "key": "pescado:bassa selecta"
+    },
+    {
+      "segment": "minorista",
+      "category": "otros",
+      "name": "Butifarra",
+      "price_libra": 4500,
+      "price_kilo": 9000,
+      "price_unidad": null,
+      "source": "Minoristas.jpg",
+      "key": "otros:butifarra"
+    },
+    {
+      "segment": "minorista",
+      "category": "otros",
+      "name": "Chorizo",
+      "price_libra": 4500,
+      "price_kilo": 9000,
+      "price_unidad": null,
+      "source": "Minoristas.jpg",
+      "key": "otros:chorizo"
+    }
+  ]
+}

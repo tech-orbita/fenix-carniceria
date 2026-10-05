@@ -1,97 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
 
-import { logout } from "./actions";
-
-type OrderStatus = "Nuevo" | "Preparando" | "Listo" | "Entregado";
-
-type Order = {
-  id: string;
-  customer: string;
-  phone: string;
-  createdAt: string;
-  relativeTime: string;
-  delivery: "Domicilio" | "Recoge en tienda";
-  address: string;
-  payment: string;
-  total: number;
-  status: OrderStatus;
-  items: Array<{ name: string; quantity: string; price: number }>;
-  notes?: string;
-};
-
-const statusOrder: OrderStatus[] = ["Nuevo", "Preparando", "Listo", "Entregado"];
-
-const initialOrders: Order[] = [
-  {
-    id: "FEN-1048",
-    customer: "María Fernanda",
-    phone: "+57 310 245 8091",
-    createdAt: "12:42 p. m.",
-    relativeTime: "Hace 4 min",
-    delivery: "Domicilio",
-    address: "Cra. 32 # 18-45, Apto. 301",
-    payment: "Transferencia",
-    total: 94600,
-    status: "Nuevo",
-    items: [
-      { name: "Punta de anca", quantity: "2 kg", price: 58000 },
-      { name: "Chorizo artesanal", quantity: "1 kg", price: 21600 },
-      { name: "Costilla de cerdo", quantity: "500 g", price: 15000 },
-    ],
-    notes: "Porcionar la punta de anca en cortes de 250 g.",
-  },
-  {
-    id: "FEN-1047",
-    customer: "Carlos Ramírez",
-    phone: "+57 300 688 1452",
-    createdAt: "12:31 p. m.",
-    relativeTime: "Hace 15 min",
-    delivery: "Recoge en tienda",
-    address: "Sede principal",
-    payment: "Efectivo",
-    total: 48200,
-    status: "Preparando",
-    items: [
-      { name: "Carne molida especial", quantity: "2 kg", price: 36000 },
-      { name: "Hueso carnudo", quantity: "1 kg", price: 12200 },
-    ],
-  },
-  {
-    id: "FEN-1046",
-    customer: "Juliana Gómez",
-    phone: "+57 315 427 9033",
-    createdAt: "12:18 p. m.",
-    relativeTime: "Hace 28 min",
-    delivery: "Domicilio",
-    address: "Calle 14 # 8-22",
-    payment: "Contraentrega",
-    total: 126400,
-    status: "Listo",
-    items: [
-      { name: "Lomo de res", quantity: "2 kg", price: 82000 },
-      { name: "Pechuga de pollo", quantity: "2 kg", price: 32400 },
-      { name: "Morcilla", quantity: "500 g", price: 12000 },
-    ],
-  },
-  {
-    id: "FEN-1045",
-    customer: "Andrés Molina",
-    phone: "+57 301 902 1148",
-    createdAt: "11:54 a. m.",
-    relativeTime: "Hace 52 min",
-    delivery: "Recoge en tienda",
-    address: "Sede principal",
-    payment: "Tarjeta",
-    total: 65800,
-    status: "Entregado",
-    items: [
-      { name: "Sobrebarriga", quantity: "1.5 kg", price: 43800 },
-      { name: "Chicharrón carnudo", quantity: "1 kg", price: 22000 },
-    ],
-  },
-];
+import { updateOrderStatus } from "./actions";
+import type { CustomerType, Order, OrderStatus } from "./types";
 
 const money = new Intl.NumberFormat("es-CO", {
   style: "currency",
@@ -99,14 +11,48 @@ const money = new Intl.NumberFormat("es-CO", {
   maximumFractionDigits: 0,
 });
 
-function Icon({ name }: { name: "search" | "clock" | "bag" | "pin" | "user" | "spark" }) {
+const dateTime = new Intl.DateTimeFormat("es-CO", {
+  day: "2-digit",
+  month: "short",
+  hour: "numeric",
+  minute: "2-digit",
+});
+
+const labels: Record<OrderStatus, string> = {
+  needs_review: "Revisar",
+  received: "Recibido",
+  quoted: "Cotizado",
+  confirmed: "Confirmado",
+  preparing: "Preparando",
+  ready: "Listo",
+  dispatched: "Enviado",
+  delivered: "Entregado",
+  cancelled: "Cancelado",
+  incident: "Incidencia",
+};
+
+const retailFlow: OrderStatus[] = ["received", "quoted", "confirmed", "preparing", "ready", "dispatched", "delivered"];
+const wholesaleFlow: OrderStatus[] = ["received", "confirmed", "preparing", "ready", "dispatched", "delivered"];
+
+function orderTotal(order: Order) {
+  return order.items.reduce(
+    (total, item) => total + (item.actualQuantity ?? item.quantity) * item.unitPrice,
+    order.deliveryFee + order.adjustments,
+  );
+}
+
+function csvCell(value: string | number) {
+  return `"${String(value).replaceAll('"', '""')}"`;
+}
+
+function Icon({ name }: { name: "search" | "download" | "print" | "user" | "truck" | "shop" }) {
   const paths = {
     search: <><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></>,
-    clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
-    bag: <><path d="M5 8h14l-1 12H6L5 8Z" /><path d="M9 8a3 3 0 0 1 6 0" /></>,
-    pin: <><path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z" /><circle cx="12" cy="10" r="2.5" /></>,
+    download: <><path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M5 21h14" /></>,
+    print: <><path d="M7 8V3h10v5" /><path d="M7 17H5a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2" /><path d="M7 14h10v7H7z" /></>,
     user: <><circle cx="12" cy="8" r="4" /><path d="M4.5 21a7.5 7.5 0 0 1 15 0" /></>,
-    spark: <><path d="m12 3 1.25 3.75L17 8l-3.75 1.25L12 13l-1.25-3.75L7 8l3.75-1.25L12 3Z" /><path d="m18.5 14 .75 2.25L21.5 17l-2.25.75L18.5 20l-.75-2.25L15.5 17l2.25-.75L18.5 14Z" /></>,
+    truck: <><path d="M3 6h11v10H3z" /><path d="M14 10h4l3 3v3h-7z" /><circle cx="7" cy="18" r="2" /><circle cx="17" cy="18" r="2" /></>,
+    shop: <><path d="M4 10v11h16V10" /><path d="M3 10 5 3h14l2 7" /><path d="M8 21v-7h8v7" /></>,
   };
 
   return (
@@ -116,170 +62,204 @@ function Icon({ name }: { name: "search" | "clock" | "bag" | "pin" | "user" | "s
   );
 }
 
-export function OrdersPanel({ email }: { email: string }) {
-  const [orders, setOrders] = useState(initialOrders);
-  const [activeStatus, setActiveStatus] = useState<"Todos" | OrderStatus>("Todos");
+function WholesaleMatrix({ orders, onAdvance, pendingId }: { orders: Order[]; onAdvance: (order: Order) => void; pendingId?: string }) {
+  const [route, setRoute] = useState("Todas las rutas");
+  const routes = useMemo(() => ["Todas las rutas", ...Array.from(new Set(orders.map((order) => order.route)))], [orders]);
+  const visible = route === "Todas las rutas" ? orders : orders.filter((order) => order.route === route);
+  const products = Array.from(new Set(visible.flatMap((order) => order.items.map((item) => item.productName))));
+
+  const quantityFor = (order: Order, product: string) => {
+    const item = order.items.find((candidate) => candidate.productName === product);
+    return item ? `${item.actualQuantity ?? item.quantity} ${item.unit}` : "";
+  };
+
+  const download = () => {
+    const header = ["Ruta", "Cliente", "Pedido", "Estado", ...products];
+    const rows = visible.map((order) => [
+      order.route,
+      order.businessName ?? order.customer,
+      order.orderNumber,
+      labels[order.status],
+      ...products.map((product) => quantityFor(order, product)),
+    ]);
+    const totals = ["", "TOTAL PRODUCTO", "", "", ...products.map((product) =>
+      visible.reduce((total, order) => {
+        const item = order.items.find((candidate) => candidate.productName === product);
+        return total + (item?.actualQuantity ?? item?.quantity ?? 0);
+      }, 0),
+    )];
+    const csv = [header, ...rows, totals].map((row) => row.map(csvCell).join(",")).join("\r\n");
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(new Blob(["\ufeff", csv], { type: "text/csv;charset=utf-8" }));
+    link.download = `planilla-mayoristas-${route.toLocaleLowerCase("es").replaceAll(" ", "-")}.csv`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  };
+
+  return (
+    <section className="wholesale-workspace">
+      <div className="section-toolbar">
+        <div><span className="section-kicker">Planilla mayorista</span><h2>Clientes × productos</h2><p>Consolidado para preparar y despachar por ruta.</p></div>
+        <div className="toolbar-actions">
+          <label><span className="sr-only">Filtrar por ruta</span><select onChange={(event) => setRoute(event.target.value)} value={route}>{routes.map((item) => <option key={item}>{item}</option>)}</select></label>
+          <button className="outline-action" onClick={download} type="button"><Icon name="download" /> Descargar CSV</button>
+          <button className="outline-action" onClick={() => window.print()} type="button"><Icon name="print" /> Imprimir</button>
+        </div>
+      </div>
+
+      <div className="route-strip">
+        {routes.slice(1).map((item) => (
+          <button className={route === item ? "is-active" : ""} key={item} onClick={() => setRoute(item)} type="button"><span>{item}</span><strong>{orders.filter((order) => order.route === item).length}</strong></button>
+        ))}
+      </div>
+
+      <div className="matrix-scroll">
+        <table className="order-matrix">
+          <thead><tr><th>Cliente</th><th>Estado</th>{products.map((product) => <th key={product}>{product}</th>)}<th>Acción</th></tr></thead>
+          <tbody>
+            {visible.map((order) => (
+              <tr key={order.id}>
+                <th><strong>{order.businessName ?? order.customer}</strong><small>{order.orderNumber} · {order.route}</small></th>
+                <td><span className={`status-pill status-${order.status}`}>{labels[order.status]}</span></td>
+                {products.map((product) => <td key={product}>{quantityFor(order, product)}</td>)}
+                <td><button className="matrix-action" disabled={order.status === "delivered" || pendingId === order.id} onClick={() => onAdvance(order)} type="button">{order.status === "delivered" ? "Completo" : pendingId === order.id ? "Guardando…" : "Avanzar"}</button></td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot><tr><th>Total a preparar</th><td />{products.map((product) => <td key={product}>{visible.reduce((total, order) => { const item = order.items.find((candidate) => candidate.productName === product); return total + (item?.actualQuantity ?? item?.quantity ?? 0); }, 0)}</td>)}<td /></tr></tfoot>
+        </table>
+        {!visible.length && <div className="empty-state">No hay pedidos mayoristas para esta ruta.</div>}
+      </div>
+      <p className="matrix-note">La descarga respeta la ruta seleccionada y reproduce la lógica de las planillas físicas.</p>
+    </section>
+  );
+}
+
+function ThermalTicket({ order }: { order: Order }) {
+  return (
+    <article className="thermal-ticket" aria-label={`Comanda ${order.orderNumber}`}>
+      <div className="ticket-brand"><strong>FÉNIX J.A.</strong><span>COMANDA DE PEDIDO</span></div>
+      <div className="ticket-rule" />
+      <dl className="ticket-meta">
+        <div><dt>Pedido</dt><dd>{order.orderNumber}</dd></div>
+        <div><dt>Fecha</dt><dd>{dateTime.format(new Date(order.receivedAt))}</dd></div>
+        <div><dt>Cliente</dt><dd>{order.customer}</dd></div>
+        <div><dt>Tel.</dt><dd>{order.phone}</dd></div>
+        <div><dt>Entrega</dt><dd>{order.fulfillment === "delivery" ? "Domicilio" : "Recoge"}</dd></div>
+      </dl>
+      <div className="ticket-rule" />
+      {order.items.map((item) => (
+        <div className="ticket-line" key={item.id}>
+          <strong>{item.productName}</strong><span>{item.actualQuantity ?? item.quantity} {item.unit} × {money.format(item.unitPrice)}</span><b>{money.format((item.actualQuantity ?? item.quantity) * item.unitPrice)}</b>
+          {item.preparation && <small>{item.preparation}</small>}
+        </div>
+      ))}
+      <div className="ticket-rule" />
+      <div className="ticket-total"><span>TOTAL</span><strong>{money.format(orderTotal(order))}</strong></div>
+      {order.notes && <p className="ticket-notes"><b>Nota:</b> {order.notes}</p>}
+      <p className="ticket-address">{order.address}</p>
+      <p className="ticket-footer">Comprobante de pedido · No es factura electrónica</p>
+    </article>
+  );
+}
+
+function RetailOrders({ orders, onAdvance, pendingId }: { orders: Order[]; onAdvance: (order: Order) => void; pendingId?: string }) {
   const [query, setQuery] = useState("");
-  const [selectedId, setSelectedId] = useState(initialOrders[0].id);
+  const [selectedId, setSelectedId] = useState(orders[0]?.id ?? "");
+  const normalized = query.trim().toLocaleLowerCase("es");
+  const visible = orders.filter((order) => !normalized || `${order.orderNumber} ${order.customer} ${order.phone}`.toLocaleLowerCase("es").includes(normalized));
+  const selected = orders.find((order) => order.id === selectedId) ?? visible[0];
 
-  const filteredOrders = useMemo(() => {
-    const normalizedQuery = query.trim().toLocaleLowerCase("es");
+  if (!selected) return <section className="empty-panel">No hay pedidos minoristas registrados.</section>;
 
-    return orders.filter((order) => {
-      const matchesStatus = activeStatus === "Todos" || order.status === activeStatus;
-      const matchesQuery =
-        !normalizedQuery ||
-        order.id.toLocaleLowerCase("es").includes(normalizedQuery) ||
-        order.customer.toLocaleLowerCase("es").includes(normalizedQuery) ||
-        order.phone.includes(normalizedQuery);
+  const flow = selected.fulfillment === "pickup" ? retailFlow.filter((status) => status !== "dispatched") : retailFlow;
+  const currentIndex = flow.indexOf(selected.status);
+  const nextStatus = flow[Math.min(Math.max(currentIndex, 0) + 1, flow.length - 1)];
 
-      return matchesStatus && matchesQuery;
+  return (
+    <section className="retail-workspace">
+      <div className="retail-list-panel">
+        <div className="retail-list-head"><div><span className="section-kicker">Consumo hogar</span><h2>Pedidos minoristas</h2></div><label className="search-control"><Icon name="search" /><span className="sr-only">Buscar</span><input onChange={(event) => setQuery(event.target.value)} placeholder="Cliente o pedido" type="search" value={query} /></label></div>
+        <div className="retail-orders">
+          {visible.map((order) => (
+            <button className={selected.id === order.id ? "retail-order is-selected" : "retail-order"} key={order.id} onClick={() => setSelectedId(order.id)} type="button">
+              <div><strong>{order.customer}</strong><span>{order.orderNumber} · {dateTime.format(new Date(order.receivedAt))}</span></div>
+              <span className={`status-pill status-${order.status}`}>{labels[order.status]}</span>
+              <p>{order.items.length} productos · {order.fulfillment === "delivery" ? order.route : "Recoge"}</p><b>{money.format(orderTotal(order))}</b>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="retail-detail-panel">
+        <div className="detail-topline"><div><span>Pedido seleccionado</span><h2>{selected.orderNumber}</h2></div><span className={`status-pill status-${selected.status}`}>{labels[selected.status]}</span></div>
+        <div className="customer-summary"><div className="customer-avatar">{selected.customer.split(" ").map((part) => part[0]).slice(0, 2).join("")}</div><div><strong>{selected.customer}</strong><span>{selected.phone}</span></div><div className="delivery-chip">{selected.fulfillment === "delivery" ? <Icon name="truck" /> : <Icon name="shop" />}<span>{selected.fulfillment === "delivery" ? "Domicilio" : "Recoge"}</span></div></div>
+        <p className="delivery-address">{selected.address}</p>
+        <div className="retail-lines">
+          <div className="line-heading"><span>Producto</span><span>Cant. / preparación</span><span>Subtotal</span></div>
+          {selected.items.map((item) => <div className="retail-line" key={item.id}><strong>{item.productName}</strong><span>{item.actualQuantity ?? item.quantity} {item.unit}<small>{item.preparation ?? "Sin indicaciones especiales"}</small></span><b>{money.format((item.actualQuantity ?? item.quantity) * item.unitPrice)}</b></div>)}
+        </div>
+        {selected.notes && <div className="order-note"><strong>Indicaciones</strong><p>{selected.notes}</p></div>}
+        <div className="payment-summary"><div><span>Pago</span><strong>{selected.paymentMethod ?? "Por definir"}</strong><small>{selected.paymentStatus}</small></div><div><span>Total</span><strong>{money.format(orderTotal(selected))}</strong></div></div>
+        <div className="detail-actions"><button className="outline-action" onClick={() => window.print()} type="button"><Icon name="print" /> Imprimir comanda</button><button className="primary-action" disabled={selected.status === "delivered" || pendingId === selected.id} onClick={() => onAdvance(selected)} type="button">{selected.status === "delivered" ? "Pedido completado" : pendingId === selected.id ? "Guardando…" : `Marcar como ${labels[nextStatus]}`}</button></div>
+        <ThermalTicket order={selected} />
+      </div>
+    </section>
+  );
+}
+
+export function OrdersPanel({ demo, email, initialOrders }: { demo: boolean; email: string; initialOrders: Order[] }) {
+  const [orders, setOrders] = useState(initialOrders);
+  const [activeType, setActiveType] = useState<CustomerType>("wholesale");
+  const [pendingId, setPendingId] = useState<string>();
+  const [notice, setNotice] = useState<string>();
+  const [, startTransition] = useTransition();
+
+  const wholesale = orders.filter((order) => order.customerType === "wholesale");
+  const retail = orders.filter((order) => order.customerType === "retail");
+  const deliveredToday = orders.filter((order) => order.status === "delivered");
+  const todaySales = deliveredToday.reduce((total, order) => total + orderTotal(order), 0);
+
+  const advance = (order: Order) => {
+    const baseFlow = order.customerType === "wholesale" ? wholesaleFlow : retailFlow;
+    const flow = order.fulfillment === "pickup" ? baseFlow.filter((status) => status !== "dispatched") : baseFlow;
+    const currentIndex = flow.indexOf(order.status);
+    const next = flow[Math.min(Math.max(currentIndex, 0) + 1, flow.length - 1)];
+    if (next === order.status) return;
+
+    setPendingId(order.id);
+    setNotice(undefined);
+    startTransition(async () => {
+      if (!demo) {
+        const result = await updateOrderStatus(order.id, next);
+        if (!result.ok) { setNotice(result.message); setPendingId(undefined); return; }
+      }
+      setOrders((current) => current.map((item) => item.id === order.id ? { ...item, status: next } : item));
+      setNotice(`El pedido ${order.orderNumber} quedó como ${labels[next].toLocaleLowerCase("es")}.`);
+      setPendingId(undefined);
     });
-  }, [activeStatus, orders, query]);
-
-  const selectedOrder =
-    orders.find((order) => order.id === selectedId) ?? filteredOrders[0] ?? orders[0];
-
-  const filterByStatus = (status: "Todos" | OrderStatus) => {
-    setActiveStatus(status);
-    if (status !== "Todos") {
-      const firstMatch = orders.find((order) => order.status === status);
-      if (firstMatch) setSelectedId(firstMatch.id);
-    }
   };
-
-  const advanceOrder = () => {
-    setOrders((current) =>
-      current.map((order) => {
-        if (order.id !== selectedOrder.id) return order;
-        const currentIndex = statusOrder.indexOf(order.status);
-        const nextStatus = statusOrder[Math.min(currentIndex + 1, statusOrder.length - 1)];
-        return { ...order, status: nextStatus };
-      }),
-    );
-  };
-
-  const counts = Object.fromEntries(
-    statusOrder.map((status) => [status, orders.filter((order) => order.status === status).length]),
-  ) as Record<OrderStatus, number>;
 
   return (
     <div className="orders-app">
       <header className="app-header">
-        <div className="brand-lockup">
-          <div className="brand-mark">F</div>
-          <div>
-            <strong>Fénix Carnes</strong>
-            <span>Centro de pedidos</span>
-          </div>
-        </div>
-        <div className="header-actions">
-          <span className="connection-state"><i /> Agente IA conectado</span>
-          <div className="user-chip" title={email}><Icon name="user" /><span>{email}</span></div>
-          <form action={logout}>
-            <button className="quiet-button" type="submit">Salir</button>
-          </form>
-        </div>
+        <div className="brand-lockup"><div className="brand-mark">F</div><div><strong>Fénix J.A.</strong><span>Centro de pedidos</span></div></div>
+        <div className="header-actions">{demo && <span className="demo-badge">Datos demostrativos</span>}<div className="user-chip" title={email}><Icon name="user" /><span>Acceso abierto · {email}</span></div></div>
       </header>
 
       <main className="dashboard-content">
-        <section className="dashboard-intro">
-          <div>
-            <p className="eyebrow"><Icon name="spark" /> Operación en tiempo real</p>
-            <h1>Pedidos recibidos por el agente</h1>
-            <p>Revisa, prepara y entrega cada pedido desde un solo lugar.</p>
-          </div>
-          <div className="today-summary">
-            <span>Ventas de hoy</span>
-            <strong>{money.format(335000)}</strong>
-            <small>4 pedidos registrados</small>
-          </div>
+        <section className="dashboard-intro"><div><p className="eyebrow">Operación del día</p><h1>Todos los pedidos, listos para coordinar.</h1><p>El administrador recibe, prepara, imprime y marca cada envío desde aquí.</p></div><div className="today-summary"><span>Ventas entregadas</span><strong>{money.format(todaySales)}</strong><small>{deliveredToday.length} pedidos completados</small></div></section>
+        <section className="metrics-grid" aria-label="Resumen de pedidos">
+          <article className="metric-card metric-0"><span>Pedidos activos</span><strong>{orders.filter((order) => !["delivered", "cancelled"].includes(order.status)).length}</strong><small>En operación</small></article>
+          <article className="metric-card"><span>Nuevos hoy</span><strong>{orders.filter((order) => new Date(order.receivedAt).toDateString() === new Date().toDateString()).length}</strong><small>Recibidos por el agente</small></article>
+          <article className="metric-card"><span>Por preparar</span><strong>{orders.filter((order) => ["received", "confirmed", "preparing"].includes(order.status)).length}</strong><small>Requieren atención</small></article>
         </section>
-
-        <section aria-label="Resumen de pedidos" className="metrics-grid">
-          {statusOrder.map((status, index) => (
-            <button className={`metric-card metric-${index}`} key={status} onClick={() => filterByStatus(status)} type="button">
-              <span>{status}</span>
-              <strong>{counts[status]}</strong>
-              <small>{index === 0 ? "Requiere atención" : index === 3 ? "Completado" : "En operación"}</small>
-            </button>
-          ))}
+        <section className="segment-switch" aria-label="Tipo de pedido">
+          <button aria-pressed={activeType === "wholesale"} onClick={() => setActiveType("wholesale")} type="button"><Icon name="truck" /><span><strong>Mayoristas</strong><small>{wholesale.length} pedidos · planilla por ruta</small></span></button>
+          <button aria-pressed={activeType === "retail"} onClick={() => setActiveType("retail")} type="button"><Icon name="shop" /><span><strong>Minoristas</strong><small>{retail.length} pedidos · comanda térmica</small></span></button>
         </section>
-
-        <section className="workspace-card">
-          <div className="orders-column">
-            <div className="orders-toolbar">
-              <div>
-                <h2>Pedidos</h2>
-                <span>{filteredOrders.length} visibles</span>
-              </div>
-              <label className="search-field">
-                <span className="sr-only">Buscar pedido</span>
-                <Icon name="search" />
-                <input onChange={(event) => setQuery(event.target.value)} placeholder="Buscar cliente o pedido" type="search" value={query} />
-              </label>
-            </div>
-
-            <div aria-label="Filtrar por estado" className="status-filters">
-              {(["Todos", ...statusOrder] as const).map((status) => (
-                <button aria-pressed={activeStatus === status} key={status} onClick={() => filterByStatus(status)} type="button">{status}</button>
-              ))}
-            </div>
-
-            <div className="orders-list">
-              {filteredOrders.map((order) => (
-                <button className={`order-row ${selectedOrder.id === order.id ? "is-selected" : ""}`} key={order.id} onClick={() => setSelectedId(order.id)} type="button">
-                  <div className="order-row-top">
-                    <strong>{order.customer}</strong>
-                    <span className={`status-badge status-${order.status.toLocaleLowerCase("es")}`}>{order.status}</span>
-                  </div>
-                  <div className="order-meta"><span>{order.id}</span><span>{order.relativeTime}</span></div>
-                  <div className="order-row-bottom">
-                    <span><Icon name="bag" /> {order.items.length} productos</span>
-                    <strong>{money.format(order.total)}</strong>
-                  </div>
-                </button>
-              ))}
-              {!filteredOrders.length && <div className="empty-state"><strong>No encontramos pedidos</strong><span>Prueba con otro filtro o término de búsqueda.</span></div>}
-            </div>
-          </div>
-
-          <aside className="detail-column">
-            <div className="detail-heading">
-              <div><span>Detalle del pedido</span><h2>{selectedOrder.id}</h2></div>
-              <span className={`status-badge status-${selectedOrder.status.toLocaleLowerCase("es")}`}>{selectedOrder.status}</span>
-            </div>
-
-            <div className="customer-card">
-              <div className="avatar">{selectedOrder.customer.split(" ").map((part) => part[0]).slice(0, 2).join("")}</div>
-              <div><strong>{selectedOrder.customer}</strong><span>{selectedOrder.phone}</span></div>
-            </div>
-
-            <dl className="detail-facts">
-              <div><dt><Icon name="clock" /> Hora</dt><dd>{selectedOrder.createdAt}</dd></div>
-              <div><dt><Icon name="pin" /> Entrega</dt><dd>{selectedOrder.delivery}<small>{selectedOrder.address}</small></dd></div>
-              <div><dt>Pago</dt><dd>{selectedOrder.payment}</dd></div>
-            </dl>
-
-            <div className="items-block">
-              <h3>Productos</h3>
-              {selectedOrder.items.map((item) => (
-                <div className="line-item" key={item.name}>
-                  <div><strong>{item.name}</strong><span>{item.quantity}</span></div>
-                  <span>{money.format(item.price)}</span>
-                </div>
-              ))}
-              <div className="order-total"><span>Total</span><strong>{money.format(selectedOrder.total)}</strong></div>
-            </div>
-
-            {selectedOrder.notes && <div className="notes-box"><strong>Indicaciones</strong><p>{selectedOrder.notes}</p></div>}
-
-            <button className="primary-action" disabled={selectedOrder.status === "Entregado"} onClick={advanceOrder} type="button">
-              {selectedOrder.status === "Entregado" ? "Pedido completado" : `Marcar como ${statusOrder[statusOrder.indexOf(selectedOrder.status) + 1]}`}
-            </button>
-            <p className="demo-caption">Vista demostrativa. Los cambios todavía no se guardan en la base de datos.</p>
-          </aside>
-        </section>
+        {notice && <div className="operation-notice" role="status">{notice}</div>}
+        {activeType === "wholesale" ? <WholesaleMatrix onAdvance={advance} orders={wholesale} pendingId={pendingId} /> : <RetailOrders onAdvance={advance} orders={retail} pendingId={pendingId} />}
       </main>
     </div>
   );

@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { login, signup } from "./actions";
+import { login } from "./actions";
 
 type LoginPageProps = {
   searchParams: Promise<{
@@ -20,7 +20,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
         </Link>
         <h1 className="mt-6 text-3xl font-bold">Acceso</h1>
         <p className="mt-2 text-sm leading-6 text-zinc-600">
-          Inicia sesión o crea tu cuenta de Pedidos Fenix.
+          Acceso exclusivo para el administrador de pedidos de Fénix.
         </p>
 
         {error ? (
@@ -61,12 +61,9 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
             type="password"
           />
 
-          <div className="grid grid-cols-2 gap-3 pt-2">
+          <div className="pt-2">
             <button className="button" formAction={login}>
               Entrar
-            </button>
-            <button className="button secondary" formAction={signup}>
-              Crear cuenta
             </button>
           </div>
         </form>

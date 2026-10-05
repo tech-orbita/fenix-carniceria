@@ -11,14 +11,10 @@ export default function Home() {
           Pedidos Fenix
         </h1>
         <p className="mt-6 max-w-2xl text-lg leading-8 text-zinc-600">
-          Proyecto iniciado con Next.js 16, autenticación SSR de Supabase y
-          despliegue preparado para Vercel.
+          Panel abierto para consultar y gestionar los pedidos de Fénix.
         </p>
         <div className="mt-8 flex flex-wrap gap-3">
-          <Link className="button" href="/login">
-            Iniciar sesión
-          </Link>
-          <Link className="button secondary" href="/dashboard">
+          <Link className="button" href="/dashboard">
             Abrir panel
           </Link>
         </div>
@@ -27,7 +23,7 @@ export default function Home() {
       <section className="mt-16 grid gap-4 sm:grid-cols-3">
         {[
           ["Next.js", "App Router, TypeScript y Tailwind CSS"],
-          ["Supabase", "Base de datos y Auth con sesiones en cookies"],
+          ["Supabase", "Base de datos para pedidos y clientes"],
           ["Vercel", "Proyecto enlazado para despliegues desde GitHub"],
         ].map(([title, description]) => (
           <article

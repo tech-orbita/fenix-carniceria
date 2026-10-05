@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
@@ -31,29 +30,4 @@ export async function login(formData: FormData) {
 
   revalidatePath("/", "layout");
   redirect("/dashboard");
-}
-
-export async function signup(formData: FormData) {
-  const supabase = await createClient();
-  const requestHeaders = await headers();
-  const origin =
-    requestHeaders.get("origin") ??
-    process.env.NEXT_PUBLIC_SITE_URL ??
-    "http://localhost:3000";
-
-  const { error } = await supabase.auth.signUp({
-    ...credentials(formData),
-    options: {
-      emailRedirectTo: `${origin}/auth/callback`,
-    },
-  });
-
-  if (error) {
-    redirect("/login?error=No%20fue%20posible%20crear%20la%20cuenta");
-  }
-
-  revalidatePath("/", "layout");
-  redirect(
-    "/login?message=Revisa%20tu%20correo%20para%20confirmar%20la%20cuenta",
-  );
 }
