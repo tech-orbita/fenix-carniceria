@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import ExcelJS from "exceljs";
+import { useState, useTransition } from "react";
 
 import { updateOrderStatus } from "./actions";
 import type { CustomerType, Order, OrderStatus } from "./types";
@@ -34,6 +35,30 @@ const labels: Record<OrderStatus, string> = {
 const retailFlow: OrderStatus[] = ["received", "quoted", "confirmed", "preparing", "ready", "dispatched", "delivered"];
 const wholesaleFlow: OrderStatus[] = ["received", "confirmed", "preparing", "ready", "dispatched", "delivered"];
 
+const wholesaleZones = [
+  "Riomar",
+  "Norte-Centro Histórico",
+  "Metropolitana",
+  "Suroccidente",
+  "Suroriente",
+] as const;
+
+const wholesaleProducts = [
+  "Carne blanda",
+  "Espaldilla",
+  "Molida especial",
+  "Atravesado",
+  "Costilla",
+  "Hueso carnudo",
+  "Costilla de cerdo",
+  "Pulpa de cerdo",
+  "Panceta",
+  "Filete de pechuga",
+  "Pechuga congelada",
+  "Pernil mixto (contramuslo)",
+  "Muslo",
+] as const;
+
 function orderTotal(order: Order) {
   return order.items.reduce(
     (total, item) => total + (item.actualQuantity ?? item.quantity) * item.unitPrice,
@@ -41,8 +66,44 @@ function orderTotal(order: Order) {
   );
 }
 
-function csvCell(value: string | number) {
-  return `"${String(value).replaceAll('"', '""')}"`;
+function normalizeLabel(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("es")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function zoneFor(order: Order) {
+  const route = normalizeLabel(order.route);
+  if (route.includes("riomar")) return "Riomar";
+  if (route.includes("norte") || route.includes("centro") || route.includes("historico")) return "Norte-Centro Histórico";
+  if (route.includes("metropolitana") || route.includes("soledad")) return "Metropolitana";
+  if (route.includes("suroccidente") || route.includes("sur occidente") || route === "sur") return "Suroccidente";
+  if (route.includes("suroriente") || route.includes("sur oriente") || route.includes("oriente")) return "Suroriente";
+  return order.route;
+}
+
+function productMatches(productName: string, product: (typeof wholesaleProducts)[number]) {
+  const name = normalizeLabel(productName);
+  const aliases: Record<(typeof wholesaleProducts)[number], string[]> = {
+    "Carne blanda": ["carne blanda", "blanda"],
+    Espaldilla: ["espaldilla"],
+    "Molida especial": ["molida especial"],
+    Atravesado: ["atravesado", "pollo atravesado"],
+    Costilla: ["costilla"],
+    "Hueso carnudo": ["hueso carnudo", "hueso"],
+    "Costilla de cerdo": ["costilla de cerdo"],
+    "Pulpa de cerdo": ["pulpa de cerdo"],
+    Panceta: ["panceta"],
+    "Filete de pechuga": ["filete de pechuga", "filete pechuga"],
+    "Pechuga congelada": ["pechuga congelada"],
+    "Pernil mixto (contramuslo)": ["pernil mixto", "contramuslo"],
+    Muslo: ["muslo"],
+  };
+  if (product === "Costilla") return name === "costilla";
+  return aliases[product].some((alias) => name === alias || name.includes(alias));
 }
 
 function Icon({ name }: { name: "search" | "download" | "print" | "user" | "truck" | "shop" }) {
@@ -63,35 +124,94 @@ function Icon({ name }: { name: "search" | "download" | "print" | "user" | "truc
 }
 
 function WholesaleMatrix({ orders, onAdvance, pendingId }: { orders: Order[]; onAdvance: (order: Order) => void; pendingId?: string }) {
-  const [route, setRoute] = useState("Todas las rutas");
-  const routes = useMemo(() => ["Todas las rutas", ...Array.from(new Set(orders.map((order) => order.route)))], [orders]);
-  const visible = route === "Todas las rutas" ? orders : orders.filter((order) => order.route === route);
-  const products = Array.from(new Set(visible.flatMap((order) => order.items.map((item) => item.productName))));
+  const [zone, setZone] = useState("Todas las zonas");
+  const visible = zone === "Todas las zonas" ? orders : orders.filter((order) => zoneFor(order) === zone);
+  const products = wholesaleProducts;
 
   const quantityFor = (order: Order, product: string) => {
-    const item = order.items.find((candidate) => candidate.productName === product);
+    const item = order.items.find((candidate) => productMatches(candidate.productName, product as (typeof wholesaleProducts)[number]));
     return item ? `${item.actualQuantity ?? item.quantity} ${item.unit}` : "";
   };
 
-  const download = () => {
-    const header = ["Ruta", "Cliente", "Pedido", "Estado", ...products];
-    const rows = visible.map((order) => [
-      order.route,
-      order.businessName ?? order.customer,
-      order.orderNumber,
-      labels[order.status],
-      ...products.map((product) => quantityFor(order, product)),
-    ]);
-    const totals = ["", "TOTAL PRODUCTO", "", "", ...products.map((product) =>
-      visible.reduce((total, order) => {
-        const item = order.items.find((candidate) => candidate.productName === product);
-        return total + (item?.actualQuantity ?? item?.quantity ?? 0);
-      }, 0),
-    )];
-    const csv = [header, ...rows, totals].map((row) => row.map(csvCell).join(",")).join("\r\n");
+  const quantityTotal = (product: string) => visible.reduce((total, order) => {
+    const item = order.items.find((candidate) => productMatches(candidate.productName, product as (typeof wholesaleProducts)[number]));
+    return total + (item?.actualQuantity ?? item?.quantity ?? 0);
+  }, 0);
+
+  const download = async () => {
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = "Orbita IA";
+    workbook.created = new Date();
+    const worksheet = workbook.addWorksheet("Planilla mayoristas", {
+      views: [{ state: "frozen", ySplit: 1, xSplit: 2, showGridLines: true }],
+    });
+    worksheet.pageSetup = {
+      paperSize: 9,
+      orientation: "landscape",
+      fitToPage: true,
+      fitToWidth: 1,
+      fitToHeight: 0,
+      horizontalDpi: 300,
+      verticalDpi: 300,
+      margins: { left: 0.25, right: 0.25, top: 0.5, bottom: 0.5, header: 0.2, footer: 0.2 },
+    };
+    worksheet.pageSetup.printTitlesRow = "1:1";
+
+    const headers = ["Zona", "Cliente", "Pedido", "Estado", ...products];
+    worksheet.addRow(headers);
+    visible.forEach((order) => {
+      worksheet.addRow([
+        zoneFor(order),
+        order.businessName ?? order.customer,
+        order.orderNumber,
+        labels[order.status],
+        ...products.map((product) => quantityFor(order, product)),
+      ]);
+    });
+    worksheet.addRow(["", "TOTAL A PREPARAR", "", "", ...products.map((product) => quantityTotal(product))]);
+
+    const lastRow = worksheet.rowCount;
+    const lastColumn = worksheet.columnCount;
+    const tableRange = `A1:${worksheet.getColumn(lastColumn).letter}${lastRow}`;
+    const headerFill = "1769E0";
+    const border = { style: "thin" as const, color: { argb: "FFD9E2F0" } };
+    const allBorders = { top: border, left: border, bottom: border, right: border };
+
+    worksheet.getRow(1).height = 30;
+    worksheet.getRow(1).eachCell((cell) => {
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: headerFill } };
+      cell.font = { name: "Arial", size: 10, bold: true, color: { argb: "FFFFFFFF" } };
+      cell.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
+      cell.border = allBorders;
+    });
+
+    worksheet.eachRow((row, rowNumber) => {
+      if (rowNumber === 1) return;
+      row.height = 22;
+      row.eachCell((cell, columnNumber) => {
+        cell.font = { name: "Arial", size: 10, color: { argb: "FF0B1736" } };
+        cell.alignment = { horizontal: columnNumber <= 4 ? "left" : "center", vertical: "middle" };
+        cell.border = allBorders;
+      });
+    });
+
+    const totalRow = worksheet.getRow(lastRow);
+    totalRow.font = { name: "Arial", size: 10, bold: true, color: { argb: "FF0B1736" } };
+    totalRow.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEAF2FF" } };
+    totalRow.eachCell((cell, columnNumber) => {
+      cell.alignment = { horizontal: columnNumber <= 4 ? "left" : "center", vertical: "middle" };
+      cell.border = allBorders;
+    });
+
+    const widths = [24, 28, 16, 17, ...products.map((product) => Math.max(16, Math.min(23, product.length + 4)))];
+    widths.forEach((width, index) => { worksheet.getColumn(index + 1).width = width; });
+    worksheet.autoFilter = { from: "A1", to: `${worksheet.getColumn(lastColumn).letter}${Math.max(1, lastRow - 1)}` };
+    worksheet.pageSetup.printArea = tableRange;
+
+    const buffer = await workbook.xlsx.writeBuffer();
     const link = document.createElement("a");
-    link.href = URL.createObjectURL(new Blob(["\ufeff", csv], { type: "text/csv;charset=utf-8" }));
-    link.download = `planilla-mayoristas-${route.toLocaleLowerCase("es").replaceAll(" ", "-")}.csv`;
+    link.href = URL.createObjectURL(new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
+    link.download = `planilla-mayoristas-${zone.toLocaleLowerCase("es").replaceAll(" ", "-")}.xlsx`;
     link.click();
     URL.revokeObjectURL(link.href);
   };
@@ -101,15 +221,15 @@ function WholesaleMatrix({ orders, onAdvance, pendingId }: { orders: Order[]; on
       <div className="section-toolbar">
         <div><span className="section-kicker">Planilla mayorista</span><h2>Clientes × productos</h2><p>Consolidado para preparar y despachar por ruta.</p></div>
         <div className="toolbar-actions">
-          <label><span className="sr-only">Filtrar por ruta</span><select onChange={(event) => setRoute(event.target.value)} value={route}>{routes.map((item) => <option key={item}>{item}</option>)}</select></label>
-          <button className="outline-action" onClick={download} type="button"><Icon name="download" /> Descargar CSV</button>
+          <label><span className="sr-only">Filtrar por zona</span><select onChange={(event) => setZone(event.target.value)} value={zone}>{["Todas las zonas", ...wholesaleZones].map((item) => <option key={item}>{item}</option>)}</select></label>
+          <button className="outline-action" onClick={() => void download()} type="button"><Icon name="download" /> Descargar Excel</button>
           <button className="outline-action" onClick={() => window.print()} type="button"><Icon name="print" /> Imprimir</button>
         </div>
       </div>
 
       <div className="route-strip">
-        {routes.slice(1).map((item) => (
-          <button className={route === item ? "is-active" : ""} key={item} onClick={() => setRoute(item)} type="button"><span>{item}</span><strong>{orders.filter((order) => order.route === item).length}</strong></button>
+        {wholesaleZones.map((item) => (
+          <button className={zone === item ? "is-active" : ""} key={item} onClick={() => setZone(item)} type="button"><span>{item}</span><strong>{orders.filter((order) => zoneFor(order) === item).length}</strong></button>
         ))}
       </div>
 
@@ -119,18 +239,18 @@ function WholesaleMatrix({ orders, onAdvance, pendingId }: { orders: Order[]; on
           <tbody>
             {visible.map((order) => (
               <tr key={order.id}>
-                <th><strong>{order.businessName ?? order.customer}</strong><small>{order.orderNumber} · {order.route}</small></th>
+                <th><strong>{order.businessName ?? order.customer}</strong><small>{order.orderNumber} · {zoneFor(order)}</small></th>
                 <td><span className={`status-pill status-${order.status}`}>{labels[order.status]}</span></td>
                 {products.map((product) => <td key={product}>{quantityFor(order, product)}</td>)}
                 <td><button className="matrix-action" disabled={order.status === "delivered" || pendingId === order.id} onClick={() => onAdvance(order)} type="button">{order.status === "delivered" ? "Completo" : pendingId === order.id ? "Guardando…" : "Avanzar"}</button></td>
               </tr>
             ))}
           </tbody>
-          <tfoot><tr><th>Total a preparar</th><td />{products.map((product) => <td key={product}>{visible.reduce((total, order) => { const item = order.items.find((candidate) => candidate.productName === product); return total + (item?.actualQuantity ?? item?.quantity ?? 0); }, 0)}</td>)}<td /></tr></tfoot>
+          <tfoot><tr><th>Total a preparar</th><td />{products.map((product) => <td key={product}>{quantityTotal(product)}</td>)}<td /></tr></tfoot>
         </table>
         {!visible.length && <div className="empty-state">No hay pedidos mayoristas para esta ruta.</div>}
       </div>
-      <p className="matrix-note">La descarga respeta la ruta seleccionada y reproduce la lógica de las planillas físicas.</p>
+      <p className="matrix-note">La descarga incluye las zonas de Barranquilla y las columnas fijas de productos para impresión.</p>
     </section>
   );
 }
