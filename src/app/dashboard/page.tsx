@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
   if (!hasSupabaseEnvironment()) {
-    return <OrdersPanel demo initialOrders={demoOrders} email="Modo demostración" />;
+    return <OrdersPanel demo initialOrders={demoOrders} />;
   }
 
   const supabase = await createClient();
@@ -85,7 +85,6 @@ export default async function DashboardPage() {
   return (
     <OrdersPanel
       demo={Boolean(ordersError)}
-      email={email}
       initialOrders={ordersError ? demoOrders : orders}
     />
   );

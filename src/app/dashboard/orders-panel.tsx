@@ -208,7 +208,7 @@ function RetailOrders({ orders, onAdvance, pendingId }: { orders: Order[]; onAdv
   );
 }
 
-export function OrdersPanel({ demo, email, initialOrders }: { demo: boolean; email: string; initialOrders: Order[] }) {
+export function OrdersPanel({ demo, initialOrders }: { demo: boolean; initialOrders: Order[] }) {
   const [orders, setOrders] = useState(initialOrders);
   const [activeType, setActiveType] = useState<CustomerType>("wholesale");
   const [pendingId, setPendingId] = useState<string>();
@@ -242,11 +242,6 @@ export function OrdersPanel({ demo, email, initialOrders }: { demo: boolean; ema
 
   return (
     <div className="orders-app">
-      <header className="app-header">
-        <div className="brand-lockup"><div className="brand-mark">F</div><div><strong>Fénix J.A.</strong><span>Centro de pedidos</span></div></div>
-        <div className="header-actions">{demo && <span className="demo-badge">Datos demostrativos</span>}<div className="user-chip" title={email}><Icon name="user" /><span>Acceso abierto · {email}</span></div></div>
-      </header>
-
       <main className="dashboard-content">
         <section className="dashboard-intro"><div><p className="eyebrow">Operación del día</p><h1>Todos los pedidos, listos para coordinar.</h1><p>El administrador recibe, prepara, imprime y marca cada envío desde aquí.</p></div><div className="today-summary"><span>Ventas entregadas</span><strong>{money.format(todaySales)}</strong><small>{deliveredToday.length} pedidos completados</small></div></section>
         <section className="metrics-grid" aria-label="Resumen de pedidos">

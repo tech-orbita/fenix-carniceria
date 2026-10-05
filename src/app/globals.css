@@ -6,8 +6,8 @@
   --muted: #71717a;
   --card: #ffffff;
   --border: #e4e4e7;
-  --primary: #e85d2a;
-  --primary-strong: #c74418;
+  --primary: #3284ff;
+  --primary-strong: #1769e0;
 }
 
 * {
@@ -241,7 +241,7 @@ a {
 
 .field:focus {
   border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(232, 93, 42, 0.12);
+  box-shadow: 0 0 0 3px rgba(50, 132, 255, 0.12);
 }
 
 .sr-only {
