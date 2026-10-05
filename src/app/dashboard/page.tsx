@@ -12,7 +12,6 @@ export default async function DashboardPage() {
   }
 
   const supabase = await createClient();
-  const email = "Panel abierto";
 
   const { data: rows, error: ordersError } = await supabase
     .from("orders")
