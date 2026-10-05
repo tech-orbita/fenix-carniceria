@@ -8,8 +8,8 @@ const geist = Geist({
 });
 
 export const metadata: Metadata = {
-  title: "Pedidos Fenix",
-  description: "Gestión de pedidos con Next.js y Supabase",
+  title: "Fénix Carnes | Centro de pedidos",
+  description: "Panel operativo de pedidos recibidos por el agente de IA",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
