@@ -20,7 +20,13 @@ type EditableOrderDetails = Pick<Order, "customer" | "phone" | "address"> & {
 };
 
 const money = new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 });
-const dateTime = new Intl.DateTimeFormat("es-CO", { day: "2-digit", month: "short", hour: "numeric", minute: "2-digit" });
+const dateTime = new Intl.DateTimeFormat("es-CO", {
+  day: "2-digit",
+  month: "short",
+  hour: "numeric",
+  minute: "2-digit",
+  timeZone: "America/Bogota",
+});
 
 const phaseOrder: OperationalPhase[] = ["new", "preparing", "dispatched"];
 const phaseLabels: Record<OperationalPhase, string> = {
