@@ -251,8 +251,19 @@ async function downloadWholesaleOrders(orders: Order[]) {
 
 function WholesaleOrdersTable({ orders }: { orders: Order[] }) {
   const [query, setQuery] = useState("");
+  const [selectedZone, setSelectedZone] = useState("all");
   const normalized = query.trim().toLocaleLowerCase("es");
-  const visibleOrders = useMemo(() => orders.filter((order) => !normalized || `${order.customer} ${order.businessName ?? ""} ${order.route}`.toLocaleLowerCase("es").includes(normalized)), [normalized, orders]);
+  const zoneOptions = useMemo(() => {
+    const counts = new Map<string, number>();
+    orders.forEach((order) => counts.set(order.route, (counts.get(order.route) ?? 0) + 1));
+    return [...counts.entries()]
+      .map(([name, count]) => ({ name, count }))
+      .sort((left, right) => left.name.localeCompare(right.name, "es"));
+  }, [orders]);
+  const visibleOrders = useMemo(() => orders.filter((order) => (
+    (selectedZone === "all" || order.route === selectedZone)
+    && (!normalized || `${order.orderNumber} ${order.customer} ${order.businessName ?? ""}`.toLocaleLowerCase("es").includes(normalized))
+  )), [normalized, orders, selectedZone]);
   const categories = [
     { name: "Carne de res", count: wholesaleProducts.filter((product) => product.category === "Carne de res").length },
     { name: "Carne de cerdo", count: wholesaleProducts.filter((product) => product.category === "Carne de cerdo").length },
@@ -260,7 +271,7 @@ function WholesaleOrdersTable({ orders }: { orders: Order[] }) {
   ];
   return (
     <section className="wholesale-workspace">
-      <div className="section-toolbar"><div><span className="section-kicker">Canal mayorista</span><h2>Plantilla de pedidos</h2><p>{visibleOrders.length} {visibleOrders.length === 1 ? "pedido" : "pedidos"} organizados por cliente, zona y producto.</p></div><div className="toolbar-actions"><label className="search-control wholesale-search"><Icon name="search" /><span className="sr-only">Buscar cliente o zona</span><input onChange={(event) => setQuery(event.target.value)} placeholder="Buscar cliente o zona" type="search" value={query} /></label><button className="outline-action" onClick={() => void downloadWholesaleOrders(visibleOrders)} type="button"><Icon name="download" /> Descargar Excel</button><button className="outline-action" onClick={() => window.print()} type="button"><Icon name="print" /> Imprimir</button></div></div>
+      <div className="section-toolbar"><div><span className="section-kicker">Canal mayorista</span><h2>Plantilla de pedidos</h2><p>{visibleOrders.length} {visibleOrders.length === 1 ? "pedido" : "pedidos"} {selectedZone === "all" ? "en todas las zonas" : `en ${selectedZone}`}.</p></div><div className="toolbar-actions"><label className="zone-filter"><span className="sr-only">Filtrar pedidos por zona</span><select aria-label="Filtrar pedidos por zona" onChange={(event) => setSelectedZone(event.target.value)} value={selectedZone}><option value="all">Todas las zonas ({orders.length})</option>{zoneOptions.map((zone) => <option key={zone.name} value={zone.name}>{zone.name} ({zone.count})</option>)}</select></label><label className="search-control wholesale-search"><Icon name="search" /><span className="sr-only">Buscar cliente o pedido</span><input onChange={(event) => setQuery(event.target.value)} placeholder="Buscar cliente o pedido" type="search" value={query} /></label><button className="outline-action" onClick={() => void downloadWholesaleOrders(visibleOrders)} type="button"><Icon name="download" /> Descargar Excel</button><button className="outline-action" onClick={() => window.print()} type="button"><Icon name="print" /> Imprimir</button></div></div>
       <div className="matrix-scroll"><table className="order-matrix wholesale-matrix"><thead><tr className="category-row"><th colSpan={2}>Pedido</th>{categories.map((category) => <th colSpan={category.count} key={category.name}>{category.name}</th>)}</tr><tr><th>Cliente</th><th>Zona</th>{wholesaleProducts.map((product) => <th key={product.name}>{product.name}</th>)}</tr></thead><tbody>{visibleOrders.map((order) => <tr key={order.id}><th scope="row"><strong>{order.businessName ?? order.customer}</strong><small>{order.orderNumber}</small></th><td>{order.route}</td>{wholesaleProducts.map((product) => <td key={product.name}>{productQuantity(order, product) || "—"}</td>)}</tr>)}{!visibleOrders.length && <tr><td className="matrix-empty" colSpan={wholesaleProducts.length + 2}>No hay pedidos mayoristas para mostrar.</td></tr>}</tbody></table></div>
       <p className="matrix-note">Las cantidades muestran la unidad registrada en cada pedido. El archivo de Excel conserva las mismas columnas de esta plantilla.</p>
     </section>
