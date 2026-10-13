@@ -38,6 +38,29 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus) {
   return { ok: true, message: "Estado actualizado." };
 }
 
+export async function updateOrderPaymentStatus(
+  orderId: string,
+  paymentStatus: "paid" | "pending",
+) {
+  if (!/^\d+$/.test(orderId) || !["paid", "pending"].includes(paymentStatus)) {
+    return { ok: false, message: "Pedido o estado de pago inválido." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("orders")
+    .update({ payment_status: paymentStatus })
+    .eq("id", Number(orderId))
+    .eq("customer_type", "retail");
+
+  if (error) {
+    return { ok: false, message: "No se pudo actualizar el estado de pago." };
+  }
+
+  revalidatePath("/dashboard");
+  return { ok: true, message: "Estado de pago actualizado." };
+}
+
 type OrderDetailsInput = {
   customer: string;
   phone: string;

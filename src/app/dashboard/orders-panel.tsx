@@ -1,13 +1,13 @@
 "use client";
 
-import ExcelJS from "exceljs";
 import { useMemo, useState } from "react";
 import type { FormEvent } from "react";
 
-import { updateOrderDetails, updateOrderStatus } from "./actions";
+import { updateOrderDetails, updateOrderPaymentStatus, updateOrderStatus } from "./actions";
 import type { CustomerType, Order, OrderStatus } from "./types";
 
 type OperationalPhase = "new" | "preparing" | "dispatched" | "help";
+type PaymentFilter = "all" | "paid" | "pending";
 type EditableOrderDetails = Pick<Order, "customer" | "phone" | "address"> & {
   notes: string;
   items: Array<{
@@ -27,6 +27,42 @@ const dateTime = new Intl.DateTimeFormat("es-CO", {
   minute: "2-digit",
   timeZone: "America/Bogota",
 });
+
+const wholesaleProducts = [
+  { category: "Carne de res", name: "Carne blanda", aliases: ["carne blanda", "blanda"] },
+  { category: "Carne de res", name: "Espaldilla", aliases: ["espaldilla", "espaldi"] },
+  { category: "Carne de res", name: "Molida especial", aliases: ["molida especial"] },
+  { category: "Carne de res", name: "Atravesado", aliases: ["atravesado", "pollo atravesado"] },
+  { category: "Carne de res", name: "Costilla", aliases: ["costilla", "costilla de res"], exact: true },
+  { category: "Carne de res", name: "Hueso carnudo", aliases: ["hueso carnudo", "hueso"] },
+  { category: "Carne de cerdo", name: "Costilla de cerdo", aliases: ["costilla de cerdo"] },
+  { category: "Carne de cerdo", name: "Pulpa de cerdo", aliases: ["pulpa de cerdo"] },
+  { category: "Carne de cerdo", name: "Panceta", aliases: ["panceta"] },
+  { category: "Aves", name: "Filete de pechuga", aliases: ["filete de pechuga"] },
+  { category: "Aves", name: "Pechuga congelada", aliases: ["pechuga congelada"] },
+  { category: "Aves", name: "Pernil mixto (contramuslo)", aliases: ["pernil mixto", "contramuslo"] },
+  { category: "Aves", name: "Muslo", aliases: ["muslo"], exact: true },
+] as const;
+
+function normalizeProductName(value: string) {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("es").replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function productQuantity(order: Order, product: (typeof wholesaleProducts)[number]) {
+  const amounts = new Map<string, number>();
+  order.items.forEach((item) => {
+    const normalized = normalizeProductName(item.productName);
+    const matches = "exact" in product && product.exact
+      ? product.aliases.some((alias) => normalized === alias)
+      : product.aliases.some((alias) => normalized.includes(alias));
+    if (matches) amounts.set(item.unit, (amounts.get(item.unit) ?? 0) + (item.actualQuantity ?? item.quantity));
+  });
+  return [...amounts.entries()].map(([unit, quantity]) => `${quantity} ${unit}`).join(" / ");
+}
+
+function isPaid(order: Order) {
+  return ["paid", "verified", "pagado", "verificado"].includes(order.paymentStatus.toLocaleLowerCase("es"));
+}
 
 const phaseOrder: OperationalPhase[] = ["new", "preparing", "dispatched"];
 const phaseLabels: Record<OperationalPhase, string> = {
@@ -158,7 +194,7 @@ function EditOrderForm({ order, saving, onCancel, onSave }: { order: Order; savi
   );
 }
 
-function OrderDetail({ order, pending, onMove, onSave }: { order: Order; pending: boolean; onMove: (order: Order, phase: OperationalPhase) => void; onSave: (order: Order, details: EditableOrderDetails) => Promise<boolean> }) {
+function OrderDetail({ order, pending, onMove, onPaymentChange, onSave }: { order: Order; pending: boolean; onMove: (order: Order, phase: OperationalPhase) => void; onPaymentChange: (order: Order, status: "paid" | "pending") => void; onSave: (order: Order, details: EditableOrderDetails) => Promise<boolean> }) {
   const [editing, setEditing] = useState(false);
   const phase = phaseForStatus(order.status);
   const phaseIndex = phaseOrder.indexOf(phase);
@@ -173,9 +209,10 @@ function OrderDetail({ order, pending, onMove, onSave }: { order: Order; pending
       <p className="delivery-address"><Icon name="address" /><span><b>Dirección del cliente</b>{order.address}</span></p>
       <div className="retail-lines"><div className="line-heading"><span>Producto</span><span>Cant. / preparación</span><span>Subtotal</span></div>{order.items.map((item) => <div className="retail-line" key={item.id}><strong>{item.productName}</strong><span>{item.actualQuantity ?? item.quantity} {item.unit}<small>{item.preparation ?? "Sin indicaciones especiales"}</small></span><b>{money.format((item.actualQuantity ?? item.quantity) * item.unitPrice)}</b></div>)}</div>
       {order.notes && <div className="order-note"><strong>Indicaciones</strong><p>{order.notes}</p></div>}
-      <div className="payment-summary"><div><span>Pago</span><strong>{order.paymentMethod ?? "Por definir"}</strong><small>{order.paymentStatus}</small></div><div><span>Total</span><strong>{money.format(orderTotal(order))}</strong></div></div>
+      <div className="payment-summary"><div><span>Pago</span><strong>{order.paymentMethod ?? "Por definir"}</strong><small className={isPaid(order) ? "payment-state is-paid" : "payment-state is-pending"}>{isPaid(order) ? "Pagado" : "Pendiente por pago"}</small></div><div><span>Total</span><strong>{money.format(orderTotal(order))}</strong></div></div>
       <div className="workflow-actions">
         <button className="outline-action" onClick={() => window.print()} type="button"><Icon name="print" /> Imprimir</button>
+        <button className={isPaid(order) ? "payment-action is-paid" : "payment-action"} disabled={pending} onClick={() => onPaymentChange(order, isPaid(order) ? "pending" : "paid")} type="button">{pending ? "Guardando…" : isPaid(order) ? "Marcar pendiente" : "Marcar como pagado"}</button>
         {phase === "help" ? <button className="outline-action" disabled={pending} onClick={() => onMove(order, "new")} type="button">Enviar a Nuevos</button> : <>{previousPhase && <button className="outline-action" disabled={pending} onClick={() => onMove(order, previousPhase)} type="button">← {phaseLabels[previousPhase]}</button>}{nextPhase && <button className="primary-action" disabled={pending} onClick={() => onMove(order, nextPhase)} type="button">{pending ? "Guardando…" : `Mover a ${phaseLabels[nextPhase]}`} →</button>}</>}
         {phase !== "help" && <button className="help-action" disabled={pending} onClick={() => onMove(order, "help")} type="button"><Icon name="help" /> Requiere ayuda</button>}
       </div>
@@ -184,38 +221,70 @@ function OrderDetail({ order, pending, onMove, onSave }: { order: Order; pending
   );
 }
 
-async function downloadWholesaleOrders(orders: Order[], phase: OperationalPhase) {
+async function downloadWholesaleOrders(orders: Order[]) {
+  const { default: ExcelJS } = await import("exceljs");
   const workbook = new ExcelJS.Workbook();
   const worksheet = workbook.addWorksheet("Pedidos mayoristas");
   worksheet.columns = [
-    { header: "Pedido", key: "order", width: 18 }, { header: "Cliente", key: "customer", width: 28 },
-    { header: "Teléfono", key: "phone", width: 18 }, { header: "Dirección", key: "address", width: 36 },
-    { header: "Ruta", key: "route", width: 20 }, { header: "Productos", key: "items", width: 55 }, { header: "Total", key: "total", width: 16 },
+    { header: "Cliente", key: "customer", width: 28 },
+    { header: "Zona", key: "zone", width: 18 },
+    ...wholesaleProducts.map((product, index) => ({ header: product.name, key: `product${index}`, width: 20 })),
   ];
-  orders.forEach((order) => worksheet.addRow({ order: order.orderNumber, customer: order.businessName ?? order.customer, phone: order.phone, address: order.address, route: order.route, items: order.items.map((item) => `${item.productName}: ${item.actualQuantity ?? item.quantity} ${item.unit}`).join(" · "), total: orderTotal(order) }));
+  orders.forEach((order) => worksheet.addRow({
+    customer: order.businessName ?? order.customer,
+    zone: order.route,
+    ...Object.fromEntries(wholesaleProducts.map((product, index) => [`product${index}`, productQuantity(order, product)])),
+  }));
   worksheet.getRow(1).font = { bold: true, color: { argb: "FFFFFFFF" } };
   worksheet.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1769E0" } };
-  worksheet.getColumn("total").numFmt = "$#,##0";
+  worksheet.getRow(1).alignment = { horizontal: "center", vertical: "middle", wrapText: true };
+  worksheet.eachRow((row, rowNumber) => {
+    row.alignment = { vertical: "middle", wrapText: true };
+    if (rowNumber > 1) row.height = 24;
+  });
   worksheet.views = [{ state: "frozen", ySplit: 1 }];
+  worksheet.autoFilter = { from: "A1", to: `${worksheet.getColumn(wholesaleProducts.length + 2).letter}1` };
   const buffer = await workbook.xlsx.writeBuffer();
   const url = URL.createObjectURL(new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
-  const link = document.createElement("a"); link.href = url; link.download = `pedidos-mayoristas-${phase}.xlsx`; link.click(); URL.revokeObjectURL(url);
+  const link = document.createElement("a"); link.href = url; link.download = "pedidos-mayoristas.xlsx"; link.click(); URL.revokeObjectURL(url);
 }
 
-function OrdersWorkspace({ activePhase, customerType, orders, pendingId, onMove, onSave }: { activePhase: OperationalPhase; customerType: CustomerType; orders: Order[]; pendingId?: string; onMove: (order: Order, phase: OperationalPhase) => void; onSave: (order: Order, details: EditableOrderDetails) => Promise<boolean> }) {
+function WholesaleOrdersTable({ orders }: { orders: Order[] }) {
+  const [query, setQuery] = useState("");
+  const normalized = query.trim().toLocaleLowerCase("es");
+  const visibleOrders = useMemo(() => orders.filter((order) => !normalized || `${order.customer} ${order.businessName ?? ""} ${order.route}`.toLocaleLowerCase("es").includes(normalized)), [normalized, orders]);
+  const categories = [
+    { name: "Carne de res", count: wholesaleProducts.filter((product) => product.category === "Carne de res").length },
+    { name: "Carne de cerdo", count: wholesaleProducts.filter((product) => product.category === "Carne de cerdo").length },
+    { name: "Aves", count: wholesaleProducts.filter((product) => product.category === "Aves").length },
+  ];
+  return (
+    <section className="wholesale-workspace">
+      <div className="section-toolbar"><div><span className="section-kicker">Canal mayorista</span><h2>Plantilla de pedidos</h2><p>{visibleOrders.length} {visibleOrders.length === 1 ? "pedido" : "pedidos"} organizados por cliente, zona y producto.</p></div><div className="toolbar-actions"><label className="search-control wholesale-search"><Icon name="search" /><span className="sr-only">Buscar cliente o zona</span><input onChange={(event) => setQuery(event.target.value)} placeholder="Buscar cliente o zona" type="search" value={query} /></label><button className="outline-action" onClick={() => void downloadWholesaleOrders(visibleOrders)} type="button"><Icon name="download" /> Descargar Excel</button><button className="outline-action" onClick={() => window.print()} type="button"><Icon name="print" /> Imprimir</button></div></div>
+      <div className="matrix-scroll"><table className="order-matrix wholesale-matrix"><thead><tr className="category-row"><th colSpan={2}>Pedido</th>{categories.map((category) => <th colSpan={category.count} key={category.name}>{category.name}</th>)}</tr><tr><th>Cliente</th><th>Zona</th>{wholesaleProducts.map((product) => <th key={product.name}>{product.name}</th>)}</tr></thead><tbody>{visibleOrders.map((order) => <tr key={order.id}><th scope="row"><strong>{order.businessName ?? order.customer}</strong><small>{order.orderNumber}</small></th><td>{order.route}</td>{wholesaleProducts.map((product) => <td key={product.name}>{productQuantity(order, product) || "—"}</td>)}</tr>)}{!visibleOrders.length && <tr><td className="matrix-empty" colSpan={wholesaleProducts.length + 2}>No hay pedidos mayoristas para mostrar.</td></tr>}</tbody></table></div>
+      <p className="matrix-note">Las cantidades muestran la unidad registrada en cada pedido. El archivo de Excel conserva las mismas columnas de esta plantilla.</p>
+    </section>
+  );
+}
+
+function OrdersWorkspace({ activePhase, orders, pendingId, onMove, onPaymentChange, onSave }: { activePhase: OperationalPhase; orders: Order[]; pendingId?: string; onMove: (order: Order, phase: OperationalPhase) => void; onPaymentChange: (order: Order, status: "paid" | "pending") => void; onSave: (order: Order, details: EditableOrderDetails) => Promise<boolean> }) {
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState("");
+  const [paymentFilter, setPaymentFilter] = useState<PaymentFilter>("all");
   const normalized = query.trim().toLocaleLowerCase("es");
-  const visibleOrders = useMemo(() => orders.filter((order) => phaseForStatus(order.status) === activePhase && (!normalized || `${order.orderNumber} ${order.customer} ${order.businessName ?? ""} ${order.phone} ${order.address}`.toLocaleLowerCase("es").includes(normalized))), [activePhase, normalized, orders]);
+  const phaseOrders = useMemo(() => orders.filter((order) => phaseForStatus(order.status) === activePhase), [activePhase, orders]);
+  const paymentCounts = { all: phaseOrders.length, paid: phaseOrders.filter(isPaid).length, pending: phaseOrders.filter((order) => !isPaid(order)).length };
+  const visibleOrders = useMemo(() => phaseOrders.filter((order) => (paymentFilter === "all" || (paymentFilter === "paid" ? isPaid(order) : !isPaid(order))) && (!normalized || `${order.orderNumber} ${order.customer} ${order.businessName ?? ""} ${order.phone} ${order.address}`.toLocaleLowerCase("es").includes(normalized))), [normalized, paymentFilter, phaseOrders]);
   const selected = visibleOrders.find((order) => order.id === selectedId) ?? visibleOrders[0];
   return (
     <section className="workflow-workspace">
       <aside className="workflow-list-panel">
-        <div className="workflow-list-heading"><div><span className="section-kicker">{customerType === "wholesale" ? "Canal mayorista" : "Consumo hogar"}</span><h2>{phaseLabels[activePhase]}</h2><p>{visibleOrders.length} {visibleOrders.length === 1 ? "pedido" : "pedidos"}</p></div>{customerType === "wholesale" && <button className="icon-action" onClick={() => void downloadWholesaleOrders(visibleOrders, activePhase)} title="Descargar esta lista" type="button"><Icon name="download" /><span className="sr-only">Descargar esta lista</span></button>}</div>
+        <div className="workflow-list-heading"><div><span className="section-kicker">Consumo hogar</span><h2>{phaseLabels[activePhase]}</h2><p>{visibleOrders.length} {visibleOrders.length === 1 ? "pedido" : "pedidos"}</p></div></div>
+        <nav aria-label="Filtrar por estado de pago" className="payment-filters">{(["all", "paid", "pending"] as PaymentFilter[]).map((filter) => <button aria-pressed={paymentFilter === filter} key={filter} onClick={() => setPaymentFilter(filter)} type="button"><span>{filter === "all" ? "Todos" : filter === "paid" ? "Pagados" : "Pendientes"}</span><strong>{paymentCounts[filter]}</strong></button>)}</nav>
         <label className="search-control"><Icon name="search" /><span className="sr-only">Buscar pedido</span><input onChange={(event) => setQuery(event.target.value)} placeholder="Cliente, pedido, teléfono o dirección" type="search" value={query} /></label>
         <div className="workflow-card-list">{visibleOrders.map((order) => <OrderCard key={order.id} onSelect={() => setSelectedId(order.id)} order={order} selected={selected?.id === order.id} />)}{!visibleOrders.length && <div className="workflow-empty"><strong>No hay pedidos aquí</strong><span>Cuando un pedido llegue a esta fase aparecerá en esta lista.</span></div>}</div>
       </aside>
-      <div className="workflow-detail-panel">{selected ? <OrderDetail key={selected.id} onMove={onMove} onSave={onSave} order={selected} pending={pendingId === selected.id} /> : <div className="workflow-empty detail-empty"><strong>Selecciona otra fase</strong><span>No hay un pedido para mostrar en esta bandeja.</span></div>}</div>
+      <div className="workflow-detail-panel">{selected ? <OrderDetail key={selected.id} onMove={onMove} onPaymentChange={onPaymentChange} onSave={onSave} order={selected} pending={pendingId === selected.id} /> : <div className="workflow-empty detail-empty"><strong>No hay pedidos para mostrar</strong><span>Cambia el filtro de pago o selecciona otra fase.</span></div>}</div>
     </section>
   );
 }
@@ -258,13 +327,23 @@ export function OrdersPanel({ demo, initialOrders }: { demo: boolean; initialOrd
     setNotice(`Los datos de ${order.orderNumber} fueron actualizados.`); setPendingId(undefined); return true;
   };
 
+  const changePaymentStatus = async (order: Order, paymentStatus: "paid" | "pending") => {
+    setPendingId(order.id); setNotice(undefined);
+    if (!demo) {
+      const result = await updateOrderPaymentStatus(order.id, paymentStatus);
+      if (!result.ok) { setNotice(result.message); setPendingId(undefined); return; }
+    }
+    setOrders((current) => current.map((item) => item.id === order.id ? { ...item, paymentStatus } : item));
+    setNotice(`${order.orderNumber} quedó ${paymentStatus === "paid" ? "pagado" : "pendiente por pago"}.`);
+    setPendingId(undefined);
+  };
+
   return (
     <div className="orders-app"><main className="dashboard-content">
       <section className="dashboard-intro"><div><p className="eyebrow">Centro de pedidos</p><h1>Cada pedido, en el momento correcto.</h1><p>Revisa conversaciones, prepara pedidos y coordina despachos desde una sola vista.</p></div>{demo && <span className="demo-badge">Datos de demostración</span>}</section>
-      <section aria-label="Tipo de cliente" className="segment-switch"><button aria-pressed={activeType === "wholesale"} onClick={() => setActiveType("wholesale")} type="button"><Icon name="truck" /><span><strong>Mayoristas</strong><small>{wholesale.length} pedidos de negocios</small></span></button><button aria-pressed={activeType === "retail"} onClick={() => setActiveType("retail")} type="button"><Icon name="shop" /><span><strong>Minoristas</strong><small>{retail.length} pedidos de hogares</small></span></button></section>
-      <PhaseNavigation activePhase={activePhase} counts={counts} onChange={setActivePhase} />
+      <section aria-label="Tipo de cliente" className="segment-switch"><button aria-pressed={activeType === "wholesale"} onClick={() => { setActiveType("wholesale"); setNotice(undefined); }} type="button"><Icon name="truck" /><span><strong>Mayoristas</strong><small>{wholesale.length} pedidos de negocios</small></span></button><button aria-pressed={activeType === "retail"} onClick={() => { setActiveType("retail"); setNotice(undefined); }} type="button"><Icon name="shop" /><span><strong>Minoristas</strong><small>{retail.length} pedidos de hogares</small></span></button></section>
       {notice && <div className="operation-notice" role="status">{notice}</div>}
-      <OrdersWorkspace activePhase={activePhase} customerType={activeType} onMove={(order, phase) => void moveOrder(order, phase)} onSave={saveOrder} orders={typeOrders} pendingId={pendingId} />
+      {activeType === "wholesale" ? <WholesaleOrdersTable orders={wholesale} /> : <><PhaseNavigation activePhase={activePhase} counts={counts} onChange={setActivePhase} /><OrdersWorkspace activePhase={activePhase} onMove={(order, phase) => void moveOrder(order, phase)} onPaymentChange={(order, status) => void changePaymentStatus(order, status)} onSave={saveOrder} orders={retail} pendingId={pendingId} /></>}
     </main></div>
   );
 }

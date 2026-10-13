@@ -156,6 +156,138 @@ body {
   background: var(--wine-dark);
 }
 
+.wholesale-search {
+  min-width: 230px;
+  margin: 0;
+}
+
+.wholesale-matrix {
+  min-width: 1740px;
+}
+
+.wholesale-matrix .category-row th {
+  top: 0;
+  height: 30px;
+  background: #0b1736;
+  font-size: 8px;
+  letter-spacing: 0.08em;
+}
+
+.wholesale-matrix thead tr:nth-child(2) th {
+  top: 30px;
+}
+
+.wholesale-matrix th:nth-child(2),
+.wholesale-matrix td:nth-child(2) {
+  min-width: 112px;
+}
+
+.wholesale-matrix td {
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.wholesale-matrix .matrix-empty {
+  height: 160px;
+  color: var(--subtle);
+  font-weight: 600;
+  text-align: center;
+}
+
+.payment-filters {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+  padding: 14px 20px 0;
+}
+
+.payment-filters button {
+  display: flex;
+  min-height: 38px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0 9px;
+  background: white;
+  color: var(--subtle);
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.payment-filters button[aria-pressed="true"] {
+  border-color: var(--wine);
+  background: #eef5ff;
+  color: var(--wine-dark);
+}
+
+.payment-filters strong {
+  display: grid;
+  min-width: 20px;
+  height: 20px;
+  place-items: center;
+  border-radius: 999px;
+  background: #edf1f7;
+  color: var(--ink);
+}
+
+.payment-state {
+  display: inline-flex !important;
+  width: fit-content;
+  min-height: 22px;
+  align-items: center;
+  margin-top: 5px;
+  border-radius: 999px;
+  padding: 0 8px;
+  font-weight: 850;
+}
+
+.payment-state.is-paid {
+  background: #e5f5eb;
+  color: #247348;
+}
+
+.payment-state.is-pending {
+  background: #fff0d9;
+  color: #8a5b17;
+}
+
+.payment-action {
+  min-height: 40px;
+  border: 1px solid #e6bd7b;
+  border-radius: 10px;
+  padding: 0 13px;
+  background: #fff7e8;
+  color: #815510;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 850;
+}
+
+.payment-action.is-paid {
+  border-color: #9fcdb2;
+  background: #edf8f1;
+  color: #256b45;
+}
+
+.payment-action:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+@media (max-width: 900px) {
+  .wholesale-workspace .section-toolbar,
+  .wholesale-workspace .toolbar-actions {
+    align-items: stretch;
+  }
+
+  .wholesale-search {
+    min-width: 100%;
+  }
+}
+
 /* Flujo operativo compartido por mayoristas y minoristas */
 .phase-navigation {
   display: grid;
