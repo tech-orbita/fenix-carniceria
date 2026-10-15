@@ -41,6 +41,7 @@ export type Order = {
   adjustments: number;
   status: OrderStatus;
   items: OrderItem[];
+  formData?: { form: string; order_text: string; tax_id?: string; billing?: string; maps_url?: string; receiver_phone?: string; payment_proof?: string };
   notes?: string;
 };
 

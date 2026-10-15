@@ -134,10 +134,10 @@ function PhaseNavigation({ activePhase, counts, onChange }: { activePhase: Opera
 function OrderCard({ order, selected, onSelect }: { order: Order; selected: boolean; onSelect: () => void }) {
   return (
     <button aria-pressed={selected} className={selected ? "workflow-card is-selected" : "workflow-card"} onClick={onSelect} type="button">
-      <span className="workflow-card-topline"><strong>{order.businessName ?? order.customer}</strong><b>{money.format(orderTotal(order))}</b></span>
+      <span className="workflow-card-topline"><strong>{order.businessName ?? order.customer}</strong><b>{(order.formData && order.items.length === 0 ? "Por cotizar" : money.format(orderTotal(order)))}</b></span>
       <span className="workflow-card-meta">{order.orderNumber} · {dateTime.format(new Date(order.receivedAt))}</span>
       <span className="workflow-card-address"><Icon name="address" />{order.address}</span>
-      <span className="workflow-card-bottom"><span>{order.items.length} productos</span><span>{order.fulfillment === "delivery" ? order.route : "Recoge en tienda"}</span></span>
+      <span className="workflow-card-bottom"><span>{order.items.length === 0 && order.formData ? "Pedido por cotizar" : `${order.items.length} productos`}</span><span>{order.fulfillment === "delivery" ? order.route : "Recoge en tienda"}</span></span>
     </button>
   );
 }
@@ -154,7 +154,8 @@ function ThermalTicket({ order }: { order: Order }) {
       </dl>
       <div className="ticket-rule" />
       {order.items.map((item) => <div className="ticket-line" key={item.id}><strong>{item.productName}</strong><span>{item.actualQuantity ?? item.quantity} {item.unit} × {money.format(item.unitPrice)}</span><b>{money.format((item.actualQuantity ?? item.quantity) * item.unitPrice)}</b>{item.preparation && <small>{item.preparation}</small>}</div>)}
-      <div className="ticket-rule" /><div className="ticket-total"><span>TOTAL</span><strong>{money.format(orderTotal(order))}</strong></div>
+      <div className="ticket-rule" /><div className="ticket-total"><span>TOTAL</span><strong>{(order.formData && order.items.length === 0 ? "Por cotizar" : money.format(orderTotal(order)))}</strong></div>
+      {order.formData && <p className="ticket-notes" style={{ whiteSpace: "pre-wrap" }}><b>Pedido por cotizar:</b> {order.formData.order_text}</p>}
       {order.notes && <p className="ticket-notes"><b>Nota:</b> {order.notes}</p>}<p className="ticket-address"><b>Dirección:</b> {order.address}</p>
       <p className="ticket-footer">Comprobante de pedido · No es factura electrónica</p>
     </article>
@@ -194,6 +195,27 @@ function EditOrderForm({ order, saving, onCancel, onSave }: { order: Order; savi
   );
 }
 
+function safeExternalUrl(value?: string) {
+  try { const url = new URL(value ?? ""); return ["http:", "https:"].includes(url.protocol) ? url.href : undefined; }
+  catch { return undefined; }
+}
+
+function FormDetails({ order }: { order: Order }) {
+  const form = order.formData;
+  if (!form) return null;
+  const maps = safeExternalUrl(form.maps_url);
+  const proof = safeExternalUrl(form.payment_proof);
+  return <div className="order-note"><strong>Pedido del formulario · {form.form === "nuevo-mayorista" ? "Nuevo mayorista" : "Mayorista cliente"}</strong>
+    <p style={{ whiteSpace: "pre-wrap" }}>{form.order_text}</p>
+    <p>Pendiente de desglosar y cotizar los productos.</p>
+    {form.tax_id && <p><b>NIT o cédula:</b> {form.tax_id}</p>}
+    {form.billing && <p><b>Facturación:</b> {form.billing}</p>}
+    {form.receiver_phone && <p><b>Teléfono de quien recibe:</b> {form.receiver_phone}</p>}
+    {maps && <p><a href={maps} target="_blank" rel="noreferrer">Ver ubicación de Maps</a></p>}
+    {proof && <p><a href={proof} target="_blank" rel="noreferrer">Ver comprobante de pago</a> · Pendiente de verificar</p>}
+  </div>;
+}
+
 function OrderDetail({ order, pending, onMove, onPaymentChange, onSave }: { order: Order; pending: boolean; onMove: (order: Order, phase: OperationalPhase) => void; onPaymentChange: (order: Order, status: "paid" | "pending") => void; onSave: (order: Order, details: EditableOrderDetails) => Promise<boolean> }) {
   const [editing, setEditing] = useState(false);
   const phase = phaseForStatus(order.status);
@@ -207,9 +229,10 @@ function OrderDetail({ order, pending, onMove, onPaymentChange, onSave }: { orde
       <div className="customer-summary"><div className="customer-avatar">{order.customer.split(" ").map((part) => part[0]).slice(0, 2).join("")}</div><div><strong>{order.businessName ?? order.customer}</strong><span>{order.phone}</span></div><div className="delivery-chip">{order.fulfillment === "delivery" ? <Icon name="truck" /> : <Icon name="shop" />}<span>{order.fulfillment === "delivery" ? "Domicilio" : "Recoge"}</span></div></div>
       <div className="contact-actions"><a className="chat-action" href={conversationUrl(order)} rel="noreferrer" target="_blank"><Icon name="chat" /> Abrir conversación</a><button className="outline-action" onClick={() => setEditing(true)} type="button"><Icon name="edit" /> Editar pedido</button></div>
       <p className="delivery-address"><Icon name="address" /><span><b>Dirección del cliente</b>{order.address}</span></p>
+      <FormDetails order={order} />
       <div className="retail-lines"><div className="line-heading"><span>Producto</span><span>Cant. / preparación</span><span>Subtotal</span></div>{order.items.map((item) => <div className="retail-line" key={item.id}><strong>{item.productName}</strong><span>{item.actualQuantity ?? item.quantity} {item.unit}<small>{item.preparation ?? "Sin indicaciones especiales"}</small></span><b>{money.format((item.actualQuantity ?? item.quantity) * item.unitPrice)}</b></div>)}</div>
       {order.notes && <div className="order-note"><strong>Indicaciones</strong><p>{order.notes}</p></div>}
-      <div className="payment-summary"><div><span>Pago</span><strong>{order.paymentMethod ?? "Por definir"}</strong><small className={isPaid(order) ? "payment-state is-paid" : "payment-state is-pending"}>{isPaid(order) ? "Pagado" : "Pendiente por pago"}</small></div><div><span>Total</span><strong>{money.format(orderTotal(order))}</strong></div></div>
+      <div className="payment-summary"><div><span>Pago</span><strong>{order.paymentMethod ?? "Por definir"}</strong><small className={isPaid(order) ? "payment-state is-paid" : "payment-state is-pending"}>{isPaid(order) ? "Pagado" : "Pendiente por pago"}</small></div><div><span>Total</span><strong>{(order.formData && order.items.length === 0 ? "Por cotizar" : money.format(orderTotal(order)))}</strong></div></div>
       <div className="workflow-actions">
         <button className="outline-action" onClick={() => window.print()} type="button"><Icon name="print" /> Imprimir</button>
         <button className={isPaid(order) ? "payment-action is-paid" : "payment-action"} disabled={pending} onClick={() => onPaymentChange(order, isPaid(order) ? "pending" : "paid")} type="button">{pending ? "Guardando…" : isPaid(order) ? "Marcar pendiente" : "Marcar como pagado"}</button>

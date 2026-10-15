@@ -20,6 +20,7 @@ export default async function DashboardPage() {
       order_number,
       customer_type,
       source,
+      source_payload,
       status,
       fulfillment_type,
       requested_delivery_at,
@@ -77,6 +78,7 @@ export default async function DashboardPage() {
             preparation: item.preparation ?? undefined,
             unitPrice: Number(item.unit_price),
           })),
+          formData: row.source_payload?.form_data ?? undefined,
           notes: row.notes ?? undefined,
         };
       });

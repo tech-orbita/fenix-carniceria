@@ -67,3 +67,11 @@ a `0.9` quedan en revisión antes de incorporarse a la operación.
 npm run lint
 npm run build
 ```
+
+## Formularios mayoristas de HighLevel
+
+Las rutas `/api/webhooks/highlevel/mayorista-cliente` y
+`/api/webhooks/highlevel/nuevo-mayorista` reciben pedidos de los dos formularios.
+Requieren `Authorization: Bearer <ORDERS_INGEST_SECRET>`.
+Consulta [la configuración y el mapeo de campos](docs/highlevel-webhooks.md).
+El texto original aparece en el detalle y la comanda como pedido por cotizar.
