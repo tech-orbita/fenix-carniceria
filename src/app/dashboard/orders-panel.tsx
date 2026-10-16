@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
+import { useRouter } from "next/navigation";
 
 import { updateOrderDetails, updateOrderPaymentStatus, updateOrderStatus } from "./actions";
 import type { CustomerType, Order, OrderStatus } from "./types";
@@ -249,13 +250,29 @@ async function downloadWholesaleOrders(orders: Order[]) {
   const workbook = new ExcelJS.Workbook();
   const worksheet = workbook.addWorksheet("Pedidos mayoristas");
   worksheet.columns = [
+    { header: "Pedido", key: "orderNumber", width: 16 },
+    { header: "Fecha", key: "receivedAt", width: 22 },
     { header: "Cliente", key: "customer", width: 28 },
+    { header: "Teléfono", key: "phone", width: 18 },
     { header: "Zona", key: "zone", width: 18 },
+    { header: "Entrega", key: "fulfillment", width: 18 },
+    { header: "Facturación", key: "billing", width: 18 },
+    { header: "Pedido solicitado", key: "orderText", width: 52 },
+    { header: "Observaciones", key: "notes", width: 42 },
+    { header: "NIT o cédula", key: "taxId", width: 20 },
     ...wholesaleProducts.map((product, index) => ({ header: product.name, key: `product${index}`, width: 20 })),
   ];
   orders.forEach((order) => worksheet.addRow({
+    orderNumber: order.orderNumber,
+    receivedAt: dateTime.format(new Date(order.receivedAt)),
     customer: order.businessName ?? order.customer,
+    phone: order.phone,
     zone: order.route,
+    fulfillment: order.fulfillment === "delivery" ? "Domicilio" : "Recoge en tienda",
+    billing: order.formData?.billing ?? "",
+    orderText: order.formData?.order_text ?? "",
+    notes: order.notes ?? "",
+    taxId: order.formData?.tax_id ?? "",
     ...Object.fromEntries(wholesaleProducts.map((product, index) => [`product${index}`, productQuantity(order, product)])),
   }));
   worksheet.getRow(1).font = { bold: true, color: { argb: "FFFFFFFF" } };
@@ -266,7 +283,7 @@ async function downloadWholesaleOrders(orders: Order[]) {
     if (rowNumber > 1) row.height = 24;
   });
   worksheet.views = [{ state: "frozen", ySplit: 1 }];
-  worksheet.autoFilter = { from: "A1", to: `${worksheet.getColumn(wholesaleProducts.length + 2).letter}1` };
+  worksheet.autoFilter = { from: "A1", to: `${worksheet.getColumn(worksheet.columnCount).letter}1` };
   const buffer = await workbook.xlsx.writeBuffer();
   const url = URL.createObjectURL(new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
   const link = document.createElement("a"); link.href = url; link.download = "pedidos-mayoristas.xlsx"; link.click(); URL.revokeObjectURL(url);
@@ -295,8 +312,8 @@ function WholesaleOrdersTable({ orders }: { orders: Order[] }) {
   return (
     <section className="wholesale-workspace">
       <div className="section-toolbar"><div><span className="section-kicker">Canal mayorista</span><h2>Plantilla de pedidos</h2><p>{visibleOrders.length} {visibleOrders.length === 1 ? "pedido" : "pedidos"} {selectedZone === "all" ? "en todas las zonas" : `en ${selectedZone}`}.</p></div><div className="toolbar-actions"><label className="zone-filter"><span className="sr-only">Filtrar pedidos por zona</span><select aria-label="Filtrar pedidos por zona" onChange={(event) => setSelectedZone(event.target.value)} value={selectedZone}><option value="all">Todas las zonas ({orders.length})</option>{zoneOptions.map((zone) => <option key={zone.name} value={zone.name}>{zone.name} ({zone.count})</option>)}</select></label><label className="search-control wholesale-search"><Icon name="search" /><span className="sr-only">Buscar cliente o pedido</span><input onChange={(event) => setQuery(event.target.value)} placeholder="Buscar cliente o pedido" type="search" value={query} /></label><button className="outline-action" onClick={() => void downloadWholesaleOrders(visibleOrders)} type="button"><Icon name="download" /> Descargar Excel</button><button className="outline-action" onClick={() => window.print()} type="button"><Icon name="print" /> Imprimir</button></div></div>
-      <div className="matrix-scroll"><table className="order-matrix wholesale-matrix"><thead><tr className="category-row"><th colSpan={2}>Pedido</th>{categories.map((category) => <th colSpan={category.count} key={category.name}>{category.name}</th>)}</tr><tr><th>Cliente</th><th>Zona</th>{wholesaleProducts.map((product) => <th key={product.name}>{product.name}</th>)}</tr></thead><tbody>{visibleOrders.map((order) => <tr key={order.id}><th scope="row"><strong>{order.businessName ?? order.customer}</strong><small>{order.orderNumber}</small></th><td>{order.route}</td>{wholesaleProducts.map((product) => <td key={product.name}>{productQuantity(order, product) || "—"}</td>)}</tr>)}{!visibleOrders.length && <tr><td className="matrix-empty" colSpan={wholesaleProducts.length + 2}>No hay pedidos mayoristas para mostrar.</td></tr>}</tbody></table></div>
-      <p className="matrix-note">Las cantidades muestran la unidad registrada en cada pedido. El archivo de Excel conserva las mismas columnas de esta plantilla.</p>
+      <div className="matrix-scroll"><table className="order-matrix wholesale-matrix"><thead><tr className="category-row"><th colSpan={5}>Pedido recibido</th>{categories.map((category) => <th colSpan={category.count} key={category.name}>{category.name}</th>)}</tr><tr><th>Cliente</th><th>Teléfono</th><th>Zona</th><th>Pedido solicitado</th><th>Facturación</th>{wholesaleProducts.map((product) => <th key={product.name}>{product.name}</th>)}</tr></thead><tbody>{visibleOrders.map((order) => <tr key={order.id}><th scope="row"><strong>{order.businessName ?? order.customer}</strong><small>{order.orderNumber}</small></th><td>{order.phone}</td><td>{order.route}</td><td className="order-request-cell">{order.formData?.order_text || "—"}</td><td>{order.formData?.billing || "—"}</td>{wholesaleProducts.map((product) => <td key={product.name}>{productQuantity(order, product) || "—"}</td>)}</tr>)}{!visibleOrders.length && <tr><td className="matrix-empty" colSpan={wholesaleProducts.length + 5}>No hay pedidos mayoristas para mostrar.</td></tr>}</tbody></table></div>
+      <p className="matrix-note">Los datos llegan directamente de los formularios. El archivo de Excel incluye el pedido completo, el contacto, la entrega y las observaciones.</p>
     </section>
   );
 }
@@ -323,30 +340,36 @@ function OrdersWorkspace({ activePhase, orders, pendingId, onMove, onPaymentChan
   );
 }
 
-export function OrdersPanel({ demo, initialOrders }: { demo: boolean; initialOrders: Order[] }) {
+export function OrdersPanel({ initialOrders, loadError }: { initialOrders: Order[]; loadError?: string }) {
+  const router = useRouter();
   const [orders, setOrders] = useState(initialOrders);
   const [activeType, setActiveType] = useState<CustomerType>("wholesale");
   const [activePhase, setActivePhase] = useState<OperationalPhase>("new");
   const [pendingId, setPendingId] = useState<string>();
-  const [notice, setNotice] = useState<string>();
+  const [notice, setNotice] = useState<string | undefined>(loadError);
   const typeOrders = orders.filter((order) => order.customerType === activeType);
   const wholesale = orders.filter((order) => order.customerType === "wholesale");
   const retail = orders.filter((order) => order.customerType === "retail");
   const counts = typeOrders.reduce<Record<OperationalPhase, number>>((totals, order) => { const phase = phaseForStatus(order.status); totals[phase] += 1; return totals; }, { new: 0, preparing: 0, dispatched: 0, help: 0 });
 
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") router.refresh();
+    }, 10_000);
+    return () => window.clearInterval(interval);
+  }, [router]);
+
   const moveOrder = async (order: Order, phase: OperationalPhase) => {
     const status = phaseStatus[phase]; setPendingId(order.id); setNotice(undefined);
-    if (!demo) { const result = await updateOrderStatus(order.id, status); if (!result.ok) { setNotice(result.message); setPendingId(undefined); return; } }
+    const result = await updateOrderStatus(order.id, status); if (!result.ok) { setNotice(result.message); setPendingId(undefined); return; }
     setOrders((current) => current.map((item) => item.id === order.id ? { ...item, status } : item));
     setNotice(`${order.orderNumber} pasó a “${phaseLabels[phase]}”.`); setPendingId(undefined);
   };
 
   const saveOrder = async (order: Order, details: EditableOrderDetails) => {
     setPendingId(order.id); setNotice(undefined);
-    if (!demo) {
-      const result = await updateOrderDetails(order.id, details);
-      if (!result.ok) { setNotice(result.message); setPendingId(undefined); return false; }
-    }
+    const result = await updateOrderDetails(order.id, details);
+    if (!result.ok) { setNotice(result.message); setPendingId(undefined); return false; }
     setOrders((current) => current.map((item) => item.id === order.id ? {
       ...item,
       customer: details.customer,
@@ -363,10 +386,8 @@ export function OrdersPanel({ demo, initialOrders }: { demo: boolean; initialOrd
 
   const changePaymentStatus = async (order: Order, paymentStatus: "paid" | "pending") => {
     setPendingId(order.id); setNotice(undefined);
-    if (!demo) {
-      const result = await updateOrderPaymentStatus(order.id, paymentStatus);
-      if (!result.ok) { setNotice(result.message); setPendingId(undefined); return; }
-    }
+    const result = await updateOrderPaymentStatus(order.id, paymentStatus);
+    if (!result.ok) { setNotice(result.message); setPendingId(undefined); return; }
     setOrders((current) => current.map((item) => item.id === order.id ? { ...item, paymentStatus } : item));
     setNotice(`${order.orderNumber} quedó ${paymentStatus === "paid" ? "pagado" : "pendiente por pago"}.`);
     setPendingId(undefined);
@@ -374,7 +395,7 @@ export function OrdersPanel({ demo, initialOrders }: { demo: boolean; initialOrd
 
   return (
     <div className="orders-app"><main className="dashboard-content">
-      <section className="dashboard-intro"><div><p className="eyebrow">Centro de pedidos</p><h1>Cada pedido, en el momento correcto.</h1><p>Revisa conversaciones, prepara pedidos y coordina despachos desde una sola vista.</p></div>{demo && <span className="demo-badge">Datos de demostración</span>}</section>
+      <section className="dashboard-intro"><div><p className="eyebrow">Centro de pedidos</p><h1>Cada pedido, en el momento correcto.</h1><p>Revisa conversaciones, prepara pedidos y coordina despachos desde una sola vista.</p></div><span className="live-badge">Actualización automática</span></section>
       <section aria-label="Tipo de cliente" className="segment-switch"><button aria-pressed={activeType === "wholesale"} onClick={() => { setActiveType("wholesale"); setNotice(undefined); }} type="button"><Icon name="truck" /><span><strong>Mayoristas</strong><small>{wholesale.length} pedidos de negocios</small></span></button><button aria-pressed={activeType === "retail"} onClick={() => { setActiveType("retail"); setNotice(undefined); }} type="button"><Icon name="shop" /><span><strong>Minoristas</strong><small>{retail.length} pedidos de hogares</small></span></button></section>
       {notice && <div className="operation-notice" role="status">{notice}</div>}
       {activeType === "wholesale" ? <WholesaleOrdersTable orders={wholesale} /> : <><PhaseNavigation activePhase={activePhase} counts={counts} onChange={setActivePhase} /><OrdersWorkspace activePhase={activePhase} onMove={(order, phase) => void moveOrder(order, phase)} onPaymentChange={(order, status) => void changePaymentStatus(order, status)} onSave={saveOrder} orders={retail} pendingId={pendingId} /></>}

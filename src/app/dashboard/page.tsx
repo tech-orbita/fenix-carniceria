@@ -1,19 +1,19 @@
-import { createClient } from "@/lib/supabase/server";
-import { hasSupabaseEnvironment } from "@/lib/supabase/config";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 import { OrdersPanel } from "./orders-panel";
-import { demoOrders, type Order } from "./types";
+import type { Order } from "./types";
 
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
-  if (!hasSupabaseEnvironment()) {
-    return <OrdersPanel demo initialOrders={demoOrders} />;
+  let admin: ReturnType<typeof createAdminClient>;
+  try {
+    admin = createAdminClient();
+  } catch {
+    return <OrdersPanel initialOrders={[]} loadError="El panel no está conectado a la base de datos." />;
   }
 
-  const supabase = await createClient();
-
-  const { data: rows, error: ordersError } = await supabase
+  const { data: rows, error: ordersError } = await admin
     .from("orders")
     .select(`
       id,
@@ -83,10 +83,9 @@ export default async function DashboardPage() {
         };
       });
 
-  return (
-    <OrdersPanel
-      demo={Boolean(ordersError)}
-      initialOrders={ordersError ? demoOrders : orders}
-    />
-  );
+  const dataVersion = orders
+    .map((order) => `${order.id}:${order.status}:${order.paymentStatus}:${order.receivedAt}`)
+    .join("|");
+
+  return <OrdersPanel initialOrders={orders} key={dataVersion} loadError={ordersError ? "No se pudieron cargar los pedidos. Intenta nuevamente." : undefined} />;
 }

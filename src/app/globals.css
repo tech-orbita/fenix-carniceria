@@ -1749,6 +1749,34 @@ a {
   font-weight: 800;
 }
 
+.live-badge {
+  align-items: center;
+  background: #eaf8ef;
+  border: 1px solid #b9e4c8;
+  border-radius: 999px;
+  color: #18733a;
+  display: inline-flex;
+  font-size: 0.78rem;
+  font-weight: 800;
+  gap: 0.45rem;
+  padding: 0.55rem 0.8rem;
+  white-space: nowrap;
+}
+
+.live-badge::before {
+  background: #2cb35b;
+  border-radius: 50%;
+  box-shadow: 0 0 0 4px rgb(44 179 91 / 12%);
+  content: "";
+  height: 0.5rem;
+  width: 0.5rem;
+}
+
+.order-request-cell {
+  min-width: 20rem;
+  white-space: pre-wrap;
+}
+
 .segment-switch {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

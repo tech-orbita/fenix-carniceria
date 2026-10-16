@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 import type { OrderStatus } from "./types";
 
@@ -24,7 +24,7 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus) {
     return { ok: false, message: "Pedido o estado inválido." };
   }
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   const { error } = await supabase
     .from("orders")
     .update({ status })
@@ -46,7 +46,7 @@ export async function updateOrderPaymentStatus(
     return { ok: false, message: "Pedido o estado de pago inválido." };
   }
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   const { error } = await supabase
     .from("orders")
     .update({ payment_status: paymentStatus })
@@ -104,7 +104,7 @@ export async function updateOrderDetails(
     return { ok: false, message: "Revisa los datos del cliente y las cantidades del pedido." };
   }
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   const { data: order, error: lookupError } = await supabase
     .from("orders")
     .select("customer_id")
