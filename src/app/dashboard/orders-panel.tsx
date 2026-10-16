@@ -4,7 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import { useRouter } from "next/navigation";
 
-import { updateOrderDetails, updateOrderPaymentStatus, updateOrderStatus } from "./actions";
+import { catalogProductFor, normalizeProductName, wholesaleProductCatalog } from "@/lib/orders/product-parser";
+import type { WholesaleProduct } from "@/lib/orders/product-parser";
+
+import { updateOrderDetails, updateOrderPaymentStatus, updateOrderStatus, updateWholesaleTable } from "./actions";
 import type { CustomerType, Order, OrderStatus } from "./types";
 
 type OperationalPhase = "new" | "preparing" | "dispatched" | "help";
@@ -29,36 +32,31 @@ const dateTime = new Intl.DateTimeFormat("es-CO", {
   timeZone: "America/Bogota",
 });
 
-const wholesaleProducts = [
-  { category: "Carne de res", name: "Carne blanda", aliases: ["carne blanda", "blanda"] },
-  { category: "Carne de res", name: "Espaldilla", aliases: ["espaldilla", "espaldi"] },
-  { category: "Carne de res", name: "Molida especial", aliases: ["molida especial"] },
-  { category: "Carne de res", name: "Atravesado", aliases: ["atravesado", "pollo atravesado"] },
-  { category: "Carne de res", name: "Costilla", aliases: ["costilla", "costilla de res"], exact: true },
-  { category: "Carne de res", name: "Hueso carnudo", aliases: ["hueso carnudo", "hueso"] },
-  { category: "Carne de cerdo", name: "Costilla de cerdo", aliases: ["costilla de cerdo"] },
-  { category: "Carne de cerdo", name: "Pulpa de cerdo", aliases: ["pulpa de cerdo"] },
-  { category: "Carne de cerdo", name: "Panceta", aliases: ["panceta"] },
-  { category: "Aves", name: "Filete de pechuga", aliases: ["filete de pechuga"] },
-  { category: "Aves", name: "Pechuga congelada", aliases: ["pechuga congelada"] },
-  { category: "Aves", name: "Pernil mixto (contramuslo)", aliases: ["pernil mixto", "contramuslo"] },
-  { category: "Aves", name: "Muslo", aliases: ["muslo"], exact: true },
-] as const;
-
-function normalizeProductName(value: string) {
-  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("es").replace(/[^a-z0-9]+/g, " ").trim();
-}
-
-function productQuantity(order: Order, product: (typeof wholesaleProducts)[number]) {
+function productQuantity(order: Order, product: WholesaleProduct) {
   const amounts = new Map<string, number>();
   order.items.forEach((item) => {
-    const normalized = normalizeProductName(item.productName);
-    const matches = "exact" in product && product.exact
-      ? product.aliases.some((alias) => normalized === alias)
-      : product.aliases.some((alias) => normalized.includes(alias));
+    const itemCatalog = catalogProductFor(item.productName);
+    const matches = itemCatalog
+      ? itemCatalog.name === product.name
+      : normalizeProductName(item.productName) === normalizeProductName(product.name);
     if (matches) amounts.set(item.unit, (amounts.get(item.unit) ?? 0) + (item.actualQuantity ?? item.quantity));
   });
   return [...amounts.entries()].map(([unit, quantity]) => `${quantity} ${unit}`).join(" / ");
+}
+
+function productsForOrders(orders: Order[]) {
+  const products: WholesaleProduct[] = [...wholesaleProductCatalog];
+  const known = new Set(products.map((product) => normalizeProductName(product.name)));
+  for (const order of orders) {
+    for (const item of order.items) {
+      if (catalogProductFor(item.productName)) continue;
+      const normalized = normalizeProductName(item.productName);
+      if (!normalized || known.has(normalized)) continue;
+      known.add(normalized);
+      products.push({ category: "Otros productos", name: item.productName, aliases: [item.productName] });
+    }
+  }
+  return products;
 }
 
 function isPaid(order: Order) {
@@ -245,7 +243,7 @@ function OrderDetail({ order, pending, onMove, onPaymentChange, onSave }: { orde
   );
 }
 
-async function downloadWholesaleOrders(orders: Order[]) {
+async function downloadWholesaleOrders(orders: Order[], products: WholesaleProduct[]) {
   const { default: ExcelJS } = await import("exceljs");
   const workbook = new ExcelJS.Workbook();
   const worksheet = workbook.addWorksheet("Pedidos mayoristas");
@@ -260,7 +258,7 @@ async function downloadWholesaleOrders(orders: Order[]) {
     { header: "Pedido solicitado", key: "orderText", width: 52 },
     { header: "Observaciones", key: "notes", width: 42 },
     { header: "NIT o cédula", key: "taxId", width: 20 },
-    ...wholesaleProducts.map((product, index) => ({ header: product.name, key: `product${index}`, width: 20 })),
+    ...products.map((product, index) => ({ header: product.name, key: `product${index}`, width: 20 })),
   ];
   orders.forEach((order) => worksheet.addRow({
     orderNumber: order.orderNumber,
@@ -273,7 +271,7 @@ async function downloadWholesaleOrders(orders: Order[]) {
     orderText: order.formData?.order_text ?? "",
     notes: order.notes ?? "",
     taxId: order.formData?.tax_id ?? "",
-    ...Object.fromEntries(wholesaleProducts.map((product, index) => [`product${index}`, productQuantity(order, product)])),
+    ...Object.fromEntries(products.map((product, index) => [`product${index}`, productQuantity(order, product)])),
   }));
   worksheet.getRow(1).font = { bold: true, color: { argb: "FFFFFFFF" } };
   worksheet.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1769E0" } };
@@ -290,9 +288,15 @@ async function downloadWholesaleOrders(orders: Order[]) {
 }
 
 function WholesaleOrdersTable({ orders }: { orders: Order[] }) {
+  const router = useRouter();
   const [query, setQuery] = useState("");
   const [selectedZone, setSelectedZone] = useState("all");
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [editNotice, setEditNotice] = useState<string>();
+  const [draftRows, setDraftRows] = useState<Record<string, { notes: string; quantities: Record<string, string> }>>({});
   const normalized = query.trim().toLocaleLowerCase("es");
+  const products = useMemo(() => productsForOrders(orders), [orders]);
   const zoneOptions = useMemo(() => {
     const counts = new Map<string, number>();
     orders.forEach((order) => counts.set(order.route, (counts.get(order.route) ?? 0) + 1));
@@ -304,16 +308,48 @@ function WholesaleOrdersTable({ orders }: { orders: Order[] }) {
     (selectedZone === "all" || order.route === selectedZone)
     && (!normalized || `${order.orderNumber} ${order.customer} ${order.businessName ?? ""}`.toLocaleLowerCase("es").includes(normalized))
   )), [normalized, orders, selectedZone]);
-  const categories = [
-    { name: "Carne de res", count: wholesaleProducts.filter((product) => product.category === "Carne de res").length },
-    { name: "Carne de cerdo", count: wholesaleProducts.filter((product) => product.category === "Carne de cerdo").length },
-    { name: "Aves", count: wholesaleProducts.filter((product) => product.category === "Aves").length },
-  ];
+  const categories = useMemo(() => {
+    const counts = new Map<string, number>();
+    products.forEach((product) => counts.set(product.category, (counts.get(product.category) ?? 0) + 1));
+    return [...counts.entries()].map(([name, count]) => ({ name, count }));
+  }, [products]);
+  const beginEditing = () => {
+    setDraftRows(Object.fromEntries(orders.map((order) => [order.id, {
+      notes: order.notes ?? "",
+      quantities: Object.fromEntries(products.map((product) => [product.name, productQuantity(order, product)])),
+    }])));
+    setEditNotice(undefined);
+    setEditing(true);
+  };
+  const updateDraft = (orderId: string, field: "notes" | string, value: string) => {
+    setDraftRows((current) => ({
+      ...current,
+      [orderId]: field === "notes"
+        ? { ...current[orderId], notes: value }
+        : { ...current[orderId], quantities: { ...current[orderId]?.quantities, [field]: value } },
+    }));
+  };
+  const saveTable = async () => {
+    setSaving(true);
+    setEditNotice(undefined);
+    const result = await updateWholesaleTable(visibleOrders.map((order) => ({
+      orderId: order.id,
+      notes: draftRows[order.id]?.notes ?? "",
+      quantities: products.map((product) => ({ productName: product.name, value: draftRows[order.id]?.quantities[product.name] ?? "" })),
+    })));
+    setSaving(false);
+    setEditNotice(result.message);
+    if (result.ok) {
+      setEditing(false);
+      router.refresh();
+    }
+  };
   return (
     <section className="wholesale-workspace">
-      <div className="section-toolbar"><div><span className="section-kicker">Canal mayorista</span><h2>Plantilla de pedidos</h2><p>{visibleOrders.length} {visibleOrders.length === 1 ? "pedido" : "pedidos"} {selectedZone === "all" ? "en todas las zonas" : `en ${selectedZone}`}.</p></div><div className="toolbar-actions"><label className="zone-filter"><span className="sr-only">Filtrar pedidos por zona</span><select aria-label="Filtrar pedidos por zona" onChange={(event) => setSelectedZone(event.target.value)} value={selectedZone}><option value="all">Todas las zonas ({orders.length})</option>{zoneOptions.map((zone) => <option key={zone.name} value={zone.name}>{zone.name} ({zone.count})</option>)}</select></label><label className="search-control wholesale-search"><Icon name="search" /><span className="sr-only">Buscar cliente o pedido</span><input onChange={(event) => setQuery(event.target.value)} placeholder="Buscar cliente o pedido" type="search" value={query} /></label><button className="outline-action" onClick={() => void downloadWholesaleOrders(visibleOrders)} type="button"><Icon name="download" /> Descargar Excel</button><button className="outline-action" onClick={() => window.print()} type="button"><Icon name="print" /> Imprimir</button></div></div>
-      <div className="matrix-scroll"><table className="order-matrix wholesale-matrix"><thead><tr className="category-row"><th colSpan={5}>Pedido recibido</th>{categories.map((category) => <th colSpan={category.count} key={category.name}>{category.name}</th>)}</tr><tr><th>Cliente</th><th>Teléfono</th><th>Zona</th><th>Pedido solicitado</th><th>Facturación</th>{wholesaleProducts.map((product) => <th key={product.name}>{product.name}</th>)}</tr></thead><tbody>{visibleOrders.map((order) => <tr key={order.id}><th scope="row"><strong>{order.businessName ?? order.customer}</strong><small>{order.orderNumber}</small></th><td>{order.phone}</td><td>{order.route}</td><td className="order-request-cell">{order.formData?.order_text || "—"}</td><td>{order.formData?.billing || "—"}</td>{wholesaleProducts.map((product) => <td key={product.name}>{productQuantity(order, product) || "—"}</td>)}</tr>)}{!visibleOrders.length && <tr><td className="matrix-empty" colSpan={wholesaleProducts.length + 5}>No hay pedidos mayoristas para mostrar.</td></tr>}</tbody></table></div>
-      <p className="matrix-note">Los datos llegan directamente de los formularios. El archivo de Excel incluye el pedido completo, el contacto, la entrega y las observaciones.</p>
+      <div className="section-toolbar"><div><span className="section-kicker">Canal mayorista</span><h2>Plantilla de pedidos</h2><p>{visibleOrders.length} {visibleOrders.length === 1 ? "pedido" : "pedidos"} {selectedZone === "all" ? "en todas las zonas" : `en ${selectedZone}`}.</p></div><div className="toolbar-actions"><label className="zone-filter"><span className="sr-only">Filtrar pedidos por zona</span><select aria-label="Filtrar pedidos por zona" onChange={(event) => setSelectedZone(event.target.value)} value={selectedZone}><option value="all">Todas las zonas ({orders.length})</option>{zoneOptions.map((zone) => <option key={zone.name} value={zone.name}>{zone.name} ({zone.count})</option>)}</select></label><label className="search-control wholesale-search"><Icon name="search" /><span className="sr-only">Buscar cliente o pedido</span><input onChange={(event) => setQuery(event.target.value)} placeholder="Buscar cliente o pedido" type="search" value={query} /></label>{editing ? <><button className="outline-action" disabled={saving} onClick={() => setEditing(false)} type="button">Cancelar</button><button className="primary-action" disabled={saving} onClick={() => void saveTable()} type="button">{saving ? "Guardando…" : "Guardar cambios"}</button></> : <button className="outline-action" onClick={beginEditing} type="button"><Icon name="edit" /> Editar tabla</button>}<button className="outline-action" onClick={() => void downloadWholesaleOrders(visibleOrders, products)} type="button"><Icon name="download" /> Descargar Excel</button><button className="outline-action" onClick={() => window.print()} type="button"><Icon name="print" /> Imprimir</button></div></div>
+      {editNotice && <div className="table-edit-notice" role="status">{editNotice}</div>}
+      <div className="matrix-scroll"><table className="order-matrix wholesale-matrix"><thead><tr className="category-row"><th colSpan={6}>Pedido recibido</th>{categories.map((category) => <th colSpan={category.count} key={category.name}>{category.name}</th>)}</tr><tr><th>Cliente</th><th>Teléfono</th><th>Zona</th><th>Pedido solicitado</th><th>Facturación</th><th>Comentario</th>{products.map((product) => <th key={product.name}>{product.name}</th>)}</tr></thead><tbody>{visibleOrders.map((order) => <tr key={order.id}><th scope="row"><strong>{order.businessName ?? order.customer}</strong><small>{order.orderNumber}</small></th><td>{order.phone}</td><td>{order.route}</td><td className="order-request-cell">{order.formData?.order_text || "—"}</td><td>{order.formData?.billing || "—"}</td><td className="matrix-comment-cell">{editing ? <textarea aria-label={`Comentario para ${order.orderNumber}`} onChange={(event) => updateDraft(order.id, "notes", event.target.value)} placeholder="Añade un comentario" rows={2} value={draftRows[order.id]?.notes ?? ""} /> : order.notes || "—"}</td>{products.map((product) => <td className={editing ? "matrix-quantity-cell is-editing" : "matrix-quantity-cell"} key={product.name}>{editing ? <input aria-label={`${product.name} de ${order.orderNumber}`} onChange={(event) => updateDraft(order.id, product.name, event.target.value)} placeholder="Ej. 1 lb" value={draftRows[order.id]?.quantities[product.name] ?? ""} /> : productQuantity(order, product) || "—"}</td>)}</tr>)}{!visibleOrders.length && <tr><td className="matrix-empty" colSpan={products.length + 6}>No hay pedidos mayoristas para mostrar.</td></tr>}</tbody></table></div>
+      <p className="matrix-note">Las cantidades se organizan automáticamente por producto. Usa “Editar tabla” para corregir cantidades o añadir comentarios; el Excel conserva esos cambios.</p>
     </section>
   );
 }

@@ -84,7 +84,7 @@ export default async function DashboardPage() {
       });
 
   const dataVersion = orders
-    .map((order) => `${order.id}:${order.status}:${order.paymentStatus}:${order.receivedAt}`)
+    .map((order) => `${order.id}:${order.status}:${order.paymentStatus}:${order.receivedAt}:${order.notes ?? ""}:${order.items.map((item) => `${item.id}-${item.actualQuantity ?? item.quantity}-${item.unit}`).join(",")}`)
     .join("|");
 
   return <OrdersPanel initialOrders={orders} key={dataVersion} loadError={ordersError ? "No se pudieron cargar los pedidos. Intenta nuevamente." : undefined} />;

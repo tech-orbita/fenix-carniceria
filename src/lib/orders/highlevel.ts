@@ -1,3 +1,5 @@
+import { parseOrderText } from "./product-parser";
+
 export type WholesaleForm = "mayorista-cliente" | "nuevo-mayorista";
 
 const normalize = (key: string) => key.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -52,7 +54,7 @@ export function mapHighLevelForm(value: unknown, form: WholesaleForm) {
     fulfillment_type: ["pickup", "tienda"].includes(fulfillment.toLowerCase()) ? "pickup" as const : "delivery" as const,
     route: get("zone", "Zona"),
     notes: get("observations", "Observaciones Adicionales"),
-    items: [],
+    items: parseOrderText(text),
     form_data: {
       form, order_text: text, tax_id: get("tax_id", "Nit o Cédula"), billing: get("billing", "Facturación"),
       maps_url: get("maps_url", "Ubicación de Maps"),
