@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { useRouter } from "next/navigation";
 
@@ -32,16 +32,64 @@ const dateTime = new Intl.DateTimeFormat("es-CO", {
   timeZone: "America/Bogota",
 });
 
-function productQuantity(order: Order, product: WholesaleProduct) {
-  const amounts = new Map<string, number>();
+const quantityFormat = new Intl.NumberFormat("es-CO", { maximumFractionDigits: 3 });
+
+function productAmounts(order: Order, product: WholesaleProduct, into = new Map<string, number>()) {
   order.items.forEach((item) => {
     const itemCatalog = catalogProductFor(item.productName);
     const matches = itemCatalog
       ? itemCatalog.name === product.name
       : normalizeProductName(item.productName) === normalizeProductName(product.name);
-    if (matches) amounts.set(item.unit, (amounts.get(item.unit) ?? 0) + (item.actualQuantity ?? item.quantity));
+    if (matches) into.set(item.unit, (into.get(item.unit) ?? 0) + (item.actualQuantity ?? item.quantity));
   });
-  return [...amounts.entries()].map(([unit, quantity]) => `${quantity} ${unit}`).join(" / ");
+  return into;
+}
+
+function formatAmounts(amounts: Map<string, number>) {
+  return [...amounts.entries()].map(([unit, quantity]) => `${quantityFormat.format(quantity)} ${unit}`).join(" / ");
+}
+
+function productQuantity(order: Order, product: WholesaleProduct) {
+  return [...productAmounts(order, product).entries()].map(([unit, quantity]) => `${quantity} ${unit}`).join(" / ");
+}
+
+const bogotaDay = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Bogota" });
+const dayLabel = new Intl.DateTimeFormat("es-CO", { weekday: "short", day: "2-digit", month: "short", timeZone: "America/Bogota" });
+
+function orderDay(order: Order) {
+  return bogotaDay.format(new Date(order.receivedAt));
+}
+
+function FilterMenu({ label, options, selected, onChange }: { label: string; options: Array<{ value: string; label: string; count: number }>; selected: string[]; onChange: (values: string[]) => void }) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (event: MouseEvent) => { if (!ref.current?.contains(event.target as Node)) setOpen(false); };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [open]);
+  const term = search.trim().toLocaleLowerCase("es");
+  const shown = options.filter((option) => !term || option.label.toLocaleLowerCase("es").includes(term));
+  const toggle = (value: string) => onChange(selected.includes(value) ? selected.filter((item) => item !== value) : [...selected, value]);
+  return (
+    <div className="filter-menu" ref={ref}>
+      <button aria-expanded={open} className={selected.length ? "outline-action is-filtered" : "outline-action"} onClick={() => setOpen((current) => !current)} type="button">
+        <Icon name="filter" />{label}{selected.length > 0 && <b>{selected.length}</b>}
+      </button>
+      {open && (
+        <div className="filter-popover" role="dialog" aria-label={`Filtrar por ${label.toLocaleLowerCase("es")}`}>
+          {options.length > 6 && <input className="filter-search" onChange={(event) => setSearch(event.target.value)} placeholder="Buscar…" type="search" value={search} />}
+          <div className="filter-quick"><button onClick={() => onChange(options.map((option) => option.value))} type="button">Seleccionar todo</button><button onClick={() => onChange([])} type="button">Limpiar</button></div>
+          <div className="filter-options">
+            {shown.map((option) => <label key={option.value}><input checked={selected.includes(option.value)} onChange={() => toggle(option.value)} type="checkbox" /><span>{option.label}</span><small>{option.count}</small></label>)}
+            {!shown.length && <p>Sin opciones</p>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function productsForOrders(orders: Order[]) {
@@ -101,8 +149,9 @@ function conversationUrl(order: Order) {
   return `https://wa.me/${international}?text=${message}`;
 }
 
-function Icon({ name }: { name: "address" | "chat" | "download" | "edit" | "help" | "print" | "search" | "shop" | "truck" }) {
+function Icon({ name }: { name: "address" | "chat" | "download" | "edit" | "filter" | "help" | "print" | "search" | "shop" | "truck" }) {
   const paths = {
+    filter: <path d="M3 5h18l-7 8v6l-4 2v-8Z" />,
     address: <><path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z" /><circle cx="12" cy="10" r="2.5" /></>,
     chat: <><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4Z" /><path d="M8 9h8M8 13h5" /></>,
     download: <><path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M5 21h14" /></>,
@@ -287,40 +336,76 @@ async function downloadWholesaleOrders(orders: Order[], products: WholesaleProdu
   const link = document.createElement("a"); link.href = url; link.download = "pedidos-mayoristas.xlsx"; link.click(); URL.revokeObjectURL(url);
 }
 
+type TableFilter = "days" | "zones" | "cuts" | "query";
+
 function WholesaleOrdersTable({ orders }: { orders: Order[] }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
-  const [selectedZone, setSelectedZone] = useState("all");
+  const [days, setDays] = useState<string[]>([]);
+  const [zones, setZones] = useState<string[]>([]);
+  const [cuts, setCuts] = useState<string[]>([]);
+  const [extraColumns, setExtraColumns] = useState<string[]>([]);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editNotice, setEditNotice] = useState<string>();
   const [draftRows, setDraftRows] = useState<Record<string, { notes: string; quantities: Record<string, string> }>>({});
   const normalized = query.trim().toLocaleLowerCase("es");
   const products = useMemo(() => productsForOrders(orders), [orders]);
-  const zoneOptions = useMemo(() => {
+  const orderCuts = useMemo(() => new Map(orders.map((order) => [
+    order.id,
+    new Set(products.filter((product) => productAmounts(order, product).size > 0).map((product) => product.name)),
+  ])), [orders, products]);
+
+  // Cada filtro calcula sus opciones con los demás filtros aplicados, como el autofiltro de Excel.
+  const passes = (order: Order, skip?: TableFilter) => (
+    (skip === "days" || !days.length || days.includes(orderDay(order)))
+    && (skip === "zones" || !zones.length || zones.includes(order.route))
+    && (skip === "cuts" || !cuts.length || cuts.some((cut) => orderCuts.get(order.id)?.has(cut)))
+    && (skip === "query" || !normalized || `${order.orderNumber} ${order.customer} ${order.businessName ?? ""} ${order.phone}`.toLocaleLowerCase("es").includes(normalized))
+  );
+  const countBy = (filter: TableFilter, keyOf: (order: Order) => string[]) => {
     const counts = new Map<string, number>();
-    orders.forEach((order) => counts.set(order.route, (counts.get(order.route) ?? 0) + 1));
-    return [...counts.entries()]
-      .map(([name, count]) => ({ name, count }))
-      .sort((left, right) => left.name.localeCompare(right.name, "es"));
-  }, [orders]);
-  const visibleOrders = useMemo(() => orders.filter((order) => (
-    (selectedZone === "all" || order.route === selectedZone)
-    && (!normalized || `${order.orderNumber} ${order.customer} ${order.businessName ?? ""}`.toLocaleLowerCase("es").includes(normalized))
-  )), [normalized, orders, selectedZone]);
-  const categories = useMemo(() => {
-    const counts = new Map<string, number>();
-    products.forEach((product) => counts.set(product.category, (counts.get(product.category) ?? 0) + 1));
-    return [...counts.entries()].map(([name, count]) => ({ name, count }));
-  }, [products]);
+    orders.filter((order) => passes(order, filter)).forEach((order) => keyOf(order).forEach((key) => counts.set(key, (counts.get(key) ?? 0) + 1)));
+    return counts;
+  };
+  const dayCounts = countBy("days", (order) => [orderDay(order)]);
+  const dayOptions = [...new Set(orders.map(orderDay))].sort().reverse().map((day) => ({
+    value: day,
+    label: dayLabel.format(new Date(`${day}T12:00:00-05:00`)),
+    count: dayCounts.get(day) ?? 0,
+  }));
+  const zoneCounts = countBy("zones", (order) => [order.route]);
+  const zoneOptions = [...new Set(orders.map((order) => order.route))].sort((left, right) => left.localeCompare(right, "es")).map((zone) => ({ value: zone, label: zone, count: zoneCounts.get(zone) ?? 0 }));
+  const cutCounts = countBy("cuts", (order) => [...(orderCuts.get(order.id) ?? [])]);
+  const cutOptions = products.filter((product) => cutCounts.has(product.name) || cuts.includes(product.name)).map((product) => ({ value: product.name, label: product.name, count: cutCounts.get(product.name) ?? 0 }));
+
+  const visibleOrders = orders.filter((order) => passes(order));
+  const visibleProducts = products.filter((product) => {
+    if (cuts.length) return cuts.includes(product.name) || (editing && extraColumns.includes(product.name));
+    if (visibleOrders.some((order) => orderCuts.get(order.id)?.has(product.name))) return true;
+    return editing && (extraColumns.includes(product.name) || visibleOrders.some((order) => draftRows[order.id]?.quantities[product.name]?.trim()));
+  });
+  const hiddenProducts = products.filter((product) => !visibleProducts.includes(product));
+  const categories = visibleProducts.reduce<Array<{ name: string; count: number }>>((groups, product) => {
+    const last = groups.at(-1);
+    if (last?.name === product.category) last.count += 1;
+    else groups.push({ name: product.category, count: 1 });
+    return groups;
+  }, []);
+  const totals = visibleProducts.map((product) => formatAmounts(visibleOrders.reduce((sum, order) => productAmounts(order, product, sum), new Map<string, number>())));
+  const hasFilters = days.length > 0 || zones.length > 0 || cuts.length > 0 || normalized.length > 0;
+  const clearFilters = () => { setDays([]); setZones([]); setCuts([]); setQuery(""); };
+
   const beginEditing = () => {
     setDraftRows(Object.fromEntries(orders.map((order) => [order.id, {
       notes: order.notes ?? "",
       quantities: Object.fromEntries(products.map((product) => [product.name, productQuantity(order, product)])),
     }])));
+    setExtraColumns([]);
     setEditNotice(undefined);
     setEditing(true);
   };
+  const stopEditing = () => { setEditing(false); setExtraColumns([]); };
   const updateDraft = (orderId: string, field: "notes" | string, value: string) => {
     setDraftRows((current) => ({
       ...current,
@@ -335,21 +420,61 @@ function WholesaleOrdersTable({ orders }: { orders: Order[] }) {
     const result = await updateWholesaleTable(visibleOrders.map((order) => ({
       orderId: order.id,
       notes: draftRows[order.id]?.notes ?? "",
-      quantities: products.map((product) => ({ productName: product.name, value: draftRows[order.id]?.quantities[product.name] ?? "" })),
+      quantities: visibleProducts.map((product) => ({ productName: product.name, value: draftRows[order.id]?.quantities[product.name] ?? "" })),
     })));
     setSaving(false);
     setEditNotice(result.message);
     if (result.ok) {
-      setEditing(false);
+      stopEditing();
       router.refresh();
     }
   };
   return (
     <section className="wholesale-workspace">
-      <div className="section-toolbar"><div><span className="section-kicker">Canal mayorista</span><h2>Plantilla de pedidos</h2><p>{visibleOrders.length} {visibleOrders.length === 1 ? "pedido" : "pedidos"} {selectedZone === "all" ? "en todas las zonas" : `en ${selectedZone}`}.</p></div><div className="toolbar-actions"><label className="zone-filter"><span className="sr-only">Filtrar pedidos por zona</span><select aria-label="Filtrar pedidos por zona" onChange={(event) => setSelectedZone(event.target.value)} value={selectedZone}><option value="all">Todas las zonas ({orders.length})</option>{zoneOptions.map((zone) => <option key={zone.name} value={zone.name}>{zone.name} ({zone.count})</option>)}</select></label><label className="search-control wholesale-search"><Icon name="search" /><span className="sr-only">Buscar cliente o pedido</span><input onChange={(event) => setQuery(event.target.value)} placeholder="Buscar cliente o pedido" type="search" value={query} /></label>{editing ? <><button className="outline-action" disabled={saving} onClick={() => setEditing(false)} type="button">Cancelar</button><button className="primary-action" disabled={saving} onClick={() => void saveTable()} type="button">{saving ? "Guardando…" : "Guardar cambios"}</button></> : <button className="outline-action" onClick={beginEditing} type="button"><Icon name="edit" /> Editar tabla</button>}<button className="outline-action" onClick={() => void downloadWholesaleOrders(visibleOrders, products)} type="button"><Icon name="download" /> Descargar Excel</button><button className="outline-action" onClick={() => window.print()} type="button"><Icon name="print" /> Imprimir</button></div></div>
+      <div className="section-toolbar">
+        <div className="table-filters">
+          <p className="toolbar-count"><strong>{visibleOrders.length}</strong> {visibleOrders.length === 1 ? "pedido" : "pedidos"} · <strong>{visibleProducts.length}</strong> {visibleProducts.length === 1 ? "corte" : "cortes"}</p>
+          <FilterMenu label="Fecha" onChange={setDays} options={dayOptions} selected={days} />
+          <FilterMenu label="Zona" onChange={setZones} options={zoneOptions} selected={zones} />
+          <FilterMenu label="Corte" onChange={setCuts} options={cutOptions} selected={cuts} />
+          <label className="search-control wholesale-search"><Icon name="search" /><span className="sr-only">Buscar cliente o pedido</span><input onChange={(event) => setQuery(event.target.value)} placeholder="Buscar cliente, pedido o teléfono" type="search" value={query} /></label>
+          {hasFilters && <button className="clear-filters" onClick={clearFilters} type="button">Limpiar filtros</button>}
+        </div>
+        <div className="toolbar-actions">
+          {editing ? <>
+            {hiddenProducts.length > 0 && <label className="zone-filter"><span className="sr-only">Agregar columna de corte</span><select aria-label="Agregar columna de corte" onChange={(event) => { if (event.target.value) setExtraColumns((current) => [...current, event.target.value]); }} value=""><option value="">+ Agregar corte</option>{hiddenProducts.map((product) => <option key={product.name} value={product.name}>{product.name}</option>)}</select></label>}
+            <button className="outline-action" disabled={saving} onClick={stopEditing} type="button">Cancelar</button>
+            <button className="primary-action" disabled={saving} onClick={() => void saveTable()} type="button">{saving ? "Guardando…" : "Guardar cambios"}</button>
+          </> : <button className="outline-action" onClick={beginEditing} type="button"><Icon name="edit" /> Editar tabla</button>}
+          <button className="outline-action" onClick={() => void downloadWholesaleOrders(visibleOrders, visibleProducts)} type="button"><Icon name="download" /> Excel</button>
+          <button className="outline-action" onClick={() => window.print()} type="button"><Icon name="print" /> Imprimir</button>
+        </div>
+      </div>
       {editNotice && <div className="table-edit-notice" role="status">{editNotice}</div>}
-      <div className="matrix-scroll"><table className="order-matrix wholesale-matrix"><thead><tr className="category-row"><th colSpan={6}>Pedido recibido</th>{categories.map((category) => <th colSpan={category.count} key={category.name}>{category.name}</th>)}</tr><tr><th>Cliente</th><th>Teléfono</th><th>Zona</th><th>Pedido solicitado</th><th>Facturación</th><th>Comentario</th>{products.map((product) => <th key={product.name}>{product.name}</th>)}</tr></thead><tbody>{visibleOrders.map((order) => <tr key={order.id}><th scope="row"><strong>{order.businessName ?? order.customer}</strong><small>{order.orderNumber}</small></th><td>{order.phone}</td><td>{order.route}</td><td className="order-request-cell">{order.formData?.order_text || "—"}</td><td>{order.formData?.billing || "—"}</td><td className="matrix-comment-cell">{editing ? <textarea aria-label={`Comentario para ${order.orderNumber}`} onChange={(event) => updateDraft(order.id, "notes", event.target.value)} placeholder="Añade un comentario" rows={2} value={draftRows[order.id]?.notes ?? ""} /> : order.notes || "—"}</td>{products.map((product) => <td className={editing ? "matrix-quantity-cell is-editing" : "matrix-quantity-cell"} key={product.name}>{editing ? <input aria-label={`${product.name} de ${order.orderNumber}`} onChange={(event) => updateDraft(order.id, product.name, event.target.value)} placeholder="Ej. 1 lb" value={draftRows[order.id]?.quantities[product.name] ?? ""} /> : productQuantity(order, product) || "—"}</td>)}</tr>)}{!visibleOrders.length && <tr><td className="matrix-empty" colSpan={products.length + 6}>No hay pedidos mayoristas para mostrar.</td></tr>}</tbody></table></div>
-      <p className="matrix-note">Las cantidades se organizan automáticamente por producto. Usa “Editar tabla” para corregir cantidades o añadir comentarios; el Excel conserva esos cambios.</p>
+      <div className="matrix-scroll">
+        <table className="order-matrix wholesale-matrix">
+          <thead>
+            <tr className="category-row"><th colSpan={6}>Pedido recibido</th>{categories.map((category, index) => <th colSpan={category.count} key={`${category.name}-${index}`}>{category.name}</th>)}</tr>
+            <tr><th>Cliente</th><th>Teléfono</th><th>Zona</th><th>Pedido solicitado</th><th>Facturación</th><th>Comentario</th>{visibleProducts.map((product) => <th key={product.name}>{product.name}</th>)}</tr>
+          </thead>
+          <tbody>
+            {visibleOrders.map((order) => <tr key={order.id}>
+              <th scope="row"><strong>{order.businessName ?? order.customer}</strong><small>{order.orderNumber} · {dateTime.format(new Date(order.receivedAt))}</small></th>
+              <td>{order.phone}</td>
+              <td>{order.route}</td>
+              <td className="order-request-cell">{order.formData?.order_text || "—"}</td>
+              <td>{order.formData?.billing || "—"}</td>
+              <td className="matrix-comment-cell">{editing ? <textarea aria-label={`Comentario para ${order.orderNumber}`} onChange={(event) => updateDraft(order.id, "notes", event.target.value)} placeholder="Añade un comentario" rows={2} value={draftRows[order.id]?.notes ?? ""} /> : order.notes || "—"}</td>
+              {visibleProducts.map((product) => {
+                const value = productQuantity(order, product);
+                return <td className={editing ? "matrix-quantity-cell is-editing" : value ? "matrix-quantity-cell has-value" : "matrix-quantity-cell"} key={product.name}>{editing ? <input aria-label={`${product.name} de ${order.orderNumber}`} onChange={(event) => updateDraft(order.id, product.name, event.target.value)} placeholder="Ej. 1 lb" value={draftRows[order.id]?.quantities[product.name] ?? ""} /> : value || ""}</td>;
+              })}
+            </tr>)}
+            {!visibleOrders.length && <tr><td className="matrix-empty" colSpan={visibleProducts.length + 6}>{hasFilters ? "Ningún pedido coincide con los filtros." : "No hay pedidos mayoristas para mostrar."}</td></tr>}
+          </tbody>
+          {visibleOrders.length > 0 && visibleProducts.length > 0 && <tfoot><tr><th scope="row">Total</th><td colSpan={5}>{visibleOrders.length} {visibleOrders.length === 1 ? "pedido" : "pedidos"}</td>{totals.map((total, index) => <td key={visibleProducts[index].name}>{total || "—"}</td>)}</tr></tfoot>}
+        </table>
+      </div>
     </section>
   );
 }
@@ -431,8 +556,10 @@ export function OrdersPanel({ initialOrders, loadError }: { initialOrders: Order
 
   return (
     <div className="orders-app"><main className="dashboard-content">
-      <section className="dashboard-intro"><div><p className="eyebrow">Centro de pedidos</p><h1>Cada pedido, en el momento correcto.</h1><p>Revisa conversaciones, prepara pedidos y coordina despachos desde una sola vista.</p></div><span className="live-badge">Actualización automática</span></section>
-      <section aria-label="Tipo de cliente" className="segment-switch"><button aria-pressed={activeType === "wholesale"} onClick={() => { setActiveType("wholesale"); setNotice(undefined); }} type="button"><Icon name="truck" /><span><strong>Mayoristas</strong><small>{wholesale.length} pedidos de negocios</small></span></button><button aria-pressed={activeType === "retail"} onClick={() => { setActiveType("retail"); setNotice(undefined); }} type="button"><Icon name="shop" /><span><strong>Minoristas</strong><small>{retail.length} pedidos de hogares</small></span></button></section>
+      <div className="dashboard-topbar">
+        <section aria-label="Tipo de cliente" className="segment-switch"><button aria-pressed={activeType === "wholesale"} onClick={() => { setActiveType("wholesale"); setNotice(undefined); }} type="button"><Icon name="truck" /><strong>Mayoristas</strong><b>{wholesale.length}</b></button><button aria-pressed={activeType === "retail"} onClick={() => { setActiveType("retail"); setNotice(undefined); }} type="button"><Icon name="shop" /><strong>Minoristas</strong><b>{retail.length}</b></button></section>
+        <span className="live-badge">Actualización automática</span>
+      </div>
       {notice && <div className="operation-notice" role="status">{notice}</div>}
       {activeType === "wholesale" ? <WholesaleOrdersTable orders={wholesale} /> : <><PhaseNavigation activePhase={activePhase} counts={counts} onChange={setActivePhase} /><OrdersWorkspace activePhase={activePhase} onMove={(order, phase) => void moveOrder(order, phase)} onPaymentChange={(order, status) => void changePaymentStatus(order, status)} onSave={saveOrder} orders={retail} pendingId={pendingId} /></>}
     </main></div>

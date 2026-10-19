@@ -2757,3 +2757,384 @@ a {
 .orders-app .btn-print:hover {
   background: var(--wine-dark);
 }
+
+/* Layout compacto: el panel ocupa toda la pantalla y prioriza la tabla. */
+.orders-app .dashboard-content {
+  display: flex;
+  width: 100%;
+  height: 100dvh;
+  flex-direction: column;
+  margin: 0;
+  padding: 10px 12px;
+}
+
+.orders-app .dashboard-topbar {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.orders-app .segment-switch {
+  display: inline-flex;
+  gap: 4px;
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 3px;
+  background: var(--paper);
+}
+
+.orders-app .segment-switch button {
+  min-height: 34px;
+  gap: 8px;
+  border: 0;
+  border-radius: 7px;
+  padding: 0 14px;
+  background: transparent;
+  box-shadow: none;
+  font-size: 13px;
+}
+
+.orders-app .segment-switch button:hover {
+  transform: none;
+  background: #f1f5fb;
+}
+
+.orders-app .segment-switch button[aria-pressed="true"] {
+  box-shadow: none;
+}
+
+.orders-app .segment-switch button > svg {
+  width: 18px;
+  height: 18px;
+}
+
+.orders-app .segment-switch strong {
+  font-size: 13px;
+}
+
+.orders-app .segment-switch b {
+  display: grid;
+  min-width: 22px;
+  height: 20px;
+  place-items: center;
+  border-radius: 999px;
+  padding: 0 6px;
+  background: #edf1f7;
+  color: var(--ink);
+  font-size: 11px;
+}
+
+.orders-app .segment-switch button[aria-pressed="true"] b {
+  background: rgba(255, 255, 255, 0.22);
+  color: white;
+}
+
+.orders-app .live-badge {
+  padding: 5px 10px;
+  font-size: 11px;
+}
+
+.orders-app .operation-notice {
+  flex: 0 0 auto;
+  margin-top: 8px;
+  padding: 7px 12px;
+}
+
+.orders-app .wholesale-workspace {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  margin-top: 8px;
+  border-radius: 10px;
+  box-shadow: 0 2px 10px rgba(20, 51, 88, 0.05);
+}
+
+.orders-app .wholesale-workspace .section-toolbar {
+  flex: 0 0 auto;
+  flex-direction: row;
+  gap: 12px;
+  padding: 8px 10px;
+}
+
+.orders-app .toolbar-count {
+  margin: 0;
+  color: var(--subtle);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.orders-app .toolbar-count strong {
+  color: var(--ink);
+}
+
+.orders-app .wholesale-workspace .toolbar-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.orders-app .wholesale-workspace .toolbar-actions > *,
+.orders-app .wholesale-workspace .toolbar-actions select,
+.orders-app .wholesale-workspace .toolbar-actions .primary-action {
+  height: 34px;
+  min-height: 34px;
+}
+
+.orders-app .toolbar-actions select,
+.orders-app .outline-action,
+.orders-app .wholesale-workspace .primary-action {
+  font-size: 12px;
+}
+
+.orders-app .wholesale-search {
+  min-width: 220px;
+}
+
+.orders-app .wholesale-workspace .matrix-scroll {
+  min-height: 0;
+  max-height: none;
+  flex: 1 1 auto;
+  border-top: 1px solid var(--line);
+}
+
+.orders-app .wholesale-matrix {
+  font-size: 13px;
+}
+
+.orders-app .wholesale-matrix th,
+.orders-app .wholesale-matrix td {
+  padding: 7px 10px;
+}
+
+.orders-app .wholesale-matrix thead th {
+  font-size: 11px;
+}
+
+.orders-app .wholesale-matrix .category-row th {
+  height: 26px;
+  font-size: 10px;
+}
+
+.orders-app .wholesale-matrix thead tr:nth-child(2) th {
+  top: 26px;
+}
+
+.orders-app .wholesale-matrix tbody th strong {
+  font-size: 13px;
+}
+
+.orders-app .wholesale-matrix tbody th small {
+  font-size: 11px;
+}
+
+.orders-app .wholesale-matrix td {
+  font-weight: 600;
+}
+
+.orders-app .order-request-cell,
+.orders-app .matrix-comment-cell {
+  text-align: left;
+}
+
+.orders-app .phase-navigation,
+.orders-app .workflow-workspace {
+  margin-top: 8px;
+}
+
+@media (max-width: 900px) {
+  .orders-app .dashboard-content {
+    height: auto;
+    min-height: 100dvh;
+  }
+
+  .orders-app .wholesale-workspace .section-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .orders-app .wholesale-workspace .matrix-scroll {
+    max-height: 70vh;
+  }
+}
+
+@media (max-width: 620px) {
+  .orders-app .dashboard-topbar {
+    flex-wrap: wrap;
+  }
+
+  .orders-app .wholesale-search {
+    min-width: 100%;
+  }
+}
+
+@media print {
+  .orders-app .dashboard-content {
+    display: block;
+    height: auto;
+  }
+
+  .orders-app .wholesale-workspace .matrix-scroll {
+    overflow: visible;
+  }
+}
+
+/* Tabla dinámica: filtros tipo autofiltro de Excel y fila de totales. */
+.orders-app .table-filters {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.orders-app .table-filters .toolbar-count {
+  margin-right: 4px;
+}
+
+.orders-app .table-filters > *,
+.orders-app .filter-menu > .outline-action {
+  height: 34px;
+  min-height: 34px;
+  margin: 0;
+}
+
+.orders-app .filter-menu {
+  position: relative;
+}
+
+.orders-app .filter-menu > .outline-action.is-filtered {
+  border-color: var(--wine);
+  background: #eef5ff;
+  color: var(--wine-dark);
+}
+
+.orders-app .filter-menu > .outline-action b {
+  display: grid;
+  min-width: 18px;
+  height: 18px;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--wine);
+  color: white;
+  font-size: 10px;
+}
+
+.orders-app .filter-popover {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 4px);
+  left: 0;
+  display: flex;
+  width: 260px;
+  max-height: 360px;
+  flex-direction: column;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px;
+  background: white;
+  box-shadow: 0 12px 32px rgba(20, 51, 88, 0.16);
+}
+
+.orders-app .filter-search {
+  height: 32px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 0 8px;
+  font-size: 12px;
+  outline: none;
+}
+
+.orders-app .filter-search:focus {
+  border-color: var(--wine);
+}
+
+.orders-app .filter-quick {
+  display: flex;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 6px;
+}
+
+.orders-app .filter-quick button,
+.orders-app .clear-filters {
+  border: 0;
+  padding: 2px 4px;
+  background: transparent;
+  color: var(--wine-dark);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.orders-app .filter-options {
+  overflow-y: auto;
+}
+
+.orders-app .filter-options label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 6px;
+  padding: 6px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.orders-app .filter-options label:hover {
+  background: #f1f5fb;
+}
+
+.orders-app .filter-options input {
+  accent-color: var(--wine);
+}
+
+.orders-app .filter-options span {
+  flex: 1;
+}
+
+.orders-app .filter-options small {
+  color: var(--subtle);
+  font-size: 11px;
+}
+
+.orders-app .filter-options p {
+  margin: 6px;
+  color: var(--subtle);
+  font-size: 12px;
+}
+
+.orders-app .wholesale-workspace .section-toolbar {
+  align-items: flex-start;
+}
+
+.orders-app .wholesale-matrix .matrix-quantity-cell.has-value {
+  background: #eef5ff;
+  color: var(--wine-dark);
+  font-weight: 800;
+}
+
+.orders-app .wholesale-matrix tfoot th,
+.orders-app .wholesale-matrix tfoot td {
+  z-index: 3;
+  border-top: 2px solid var(--wine);
+  background: #e6efff;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.orders-app .wholesale-matrix tfoot th:first-child {
+  z-index: 5;
+}
+
+@media print {
+  .orders-app .table-filters,
+  .orders-app .wholesale-workspace .toolbar-actions {
+    display: none;
+  }
+}
