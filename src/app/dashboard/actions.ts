@@ -2,10 +2,17 @@
 
 import { revalidatePath } from "next/cache";
 
-import { createAdminClient } from "@/lib/supabase/admin";
+import { requireViewer } from "@/lib/auth/viewer";
+import { createClient } from "@/lib/supabase/server";
 import { catalogProductFor, normalizeProductName, toKilograms } from "@/lib/orders/product-parser";
 
 import type { OrderStatus } from "./types";
+
+// Las acciones usan la sesión del usuario: RLS solo deja tocar pedidos de su segmento.
+async function sessionClient() {
+  await requireViewer();
+  return createClient();
+}
 
 const allowedStatuses: OrderStatus[] = [
   "needs_review",
@@ -25,13 +32,14 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus) {
     return { ok: false, message: "Pedido o estado inválido." };
   }
 
-  const supabase = createAdminClient();
-  const { error } = await supabase
+  const supabase = await sessionClient();
+  const { data, error } = await supabase
     .from("orders")
     .update({ status })
-    .eq("id", Number(orderId));
+    .eq("id", Number(orderId))
+    .select("id");
 
-  if (error) {
+  if (error || !data?.length) {
     return { ok: false, message: "No se pudo actualizar el pedido." };
   }
 
@@ -47,14 +55,15 @@ export async function updateOrderPaymentStatus(
     return { ok: false, message: "Pedido o estado de pago inválido." };
   }
 
-  const supabase = createAdminClient();
-  const { error } = await supabase
+  const supabase = await sessionClient();
+  const { data, error } = await supabase
     .from("orders")
     .update({ payment_status: paymentStatus })
     .eq("id", Number(orderId))
-    .eq("customer_type", "retail");
+    .eq("customer_type", "retail")
+    .select("id");
 
-  if (error) {
+  if (error || !data?.length) {
     return { ok: false, message: "No se pudo actualizar el estado de pago." };
   }
 
@@ -105,7 +114,7 @@ export async function updateOrderDetails(
     return { ok: false, message: "Revisa los datos del cliente y las cantidades del pedido." };
   }
 
-  const supabase = createAdminClient();
+  const supabase = await sessionClient();
   const { data: order, error: lookupError } = await supabase
     .from("orders")
     .select("customer_id")
@@ -188,7 +197,7 @@ export async function updateWholesaleTable(rows: WholesaleTableRowInput[]) {
     }
   }
 
-  const supabase = createAdminClient();
+  const supabase = await sessionClient();
 
   for (const row of rows) {
     const orderId = Number(row.orderId);

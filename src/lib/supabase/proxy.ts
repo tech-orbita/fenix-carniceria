@@ -1,19 +1,21 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-import { hasSupabaseEnvironment } from "./config";
+import { hasSupabaseEnvironment, sessionCookieOptions } from "./config";
 
+// Refresca la sesión de Supabase y devuelve si hay un usuario autenticado.
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({ request });
 
   if (!hasSupabaseEnvironment()) {
-    return response;
+    return { response, authenticated: false };
   }
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
     {
+      cookieOptions: sessionCookieOptions,
       cookies: {
         getAll() {
           return request.cookies.getAll();
@@ -37,7 +39,7 @@ export async function updateSession(request: NextRequest) {
     },
   );
 
-  await supabase.auth.getClaims();
+  const { data } = await supabase.auth.getClaims();
 
-  return response;
+  return { response, authenticated: Boolean(data?.claims?.sub) };
 }

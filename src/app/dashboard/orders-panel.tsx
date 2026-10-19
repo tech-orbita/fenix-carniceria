@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { catalogProductFor, normalizeProductName, toKilograms, wholesaleProductCatalog } from "@/lib/orders/product-parser";
@@ -12,6 +13,9 @@ import type { OperationalPhase } from "./panel-shared";
 import { RetailPanel } from "./retail-panel";
 import type { EditableOrderDetails } from "./retail-panel";
 import type { CustomerType, Order } from "./types";
+import { useOrdersRealtime } from "./use-orders-realtime";
+import { signOut } from "../login/actions";
+import type { Viewer } from "@/lib/auth/viewer";
 
 // Sin separador de miles para que el valor se pueda volver a editar y guardar tal cual.
 const quantityFormat = new Intl.NumberFormat("es-CO", { maximumFractionDigits: 3, useGrouping: false });
@@ -51,6 +55,18 @@ function serviceDayName(day: string, today: string) {
   if (day === addDays(today, 1)) return "Mañana";
   if (day === addDays(today, -1)) return "Ayer";
   return "";
+}
+
+// Búsqueda sin tildes ni mayúsculas; los teléfonos se comparan solo por dígitos.
+function searchText(value: string) {
+  return value.normalize("NFD").replace(/\p{M}/gu, "").toLocaleLowerCase("es");
+}
+
+function matchesSearch(order: Order, terms: string[]) {
+  if (!terms.length) return true;
+  const haystack = searchText([order.orderNumber, order.customer, order.businessName ?? "", order.phone, order.route, order.notes ?? ""].join(" "));
+  const phoneDigits = order.phone.replace(/\D/g, "");
+  return terms.every((term) => haystack.includes(term) || (/^\d+$/.test(term) && phoneDigits.includes(term)));
 }
 
 function isClosed(order: Order) {
@@ -166,7 +182,7 @@ function WholesaleOrdersTable({ orders: allOrders, pendingId, onStatusChange }: 
   const [saving, setSaving] = useState(false);
   const [editNotice, setEditNotice] = useState<string>();
   const [draftRows, setDraftRows] = useState<Record<string, { notes: string; quantities: Record<string, string> }>>({});
-  const normalized = query.trim().toLocaleLowerCase("es");
+  const searchTerms = searchText(query).split(/[\s\-()+]+/).filter(Boolean);
   // "Hoy" se recalcula en cada refresco para que el panel avance solo al cambiar el día.
   const today = bogotaDay.format(new Date());
   const selectedDay = addDays(today, dayOffset);
@@ -184,7 +200,7 @@ function WholesaleOrdersTable({ orders: allOrders, pendingId, onStatusChange }: 
   const passes = (order: Order, skip?: TableFilter) => (
     (skip === "zones" || !zones.length || zones.includes(order.route))
     && (skip === "cuts" || !cuts.length || cuts.some((cut) => orderCuts.get(order.id)?.has(cut)))
-    && (skip === "query" || !normalized || `${order.orderNumber} ${order.customer} ${order.businessName ?? ""} ${order.phone}`.toLocaleLowerCase("es").includes(normalized))
+    && (skip === "query" || matchesSearch(order, searchTerms))
   );
   const countBy = (filter: TableFilter, keyOf: (order: Order) => string[]) => {
     const counts = new Map<string, number>();
@@ -210,7 +226,7 @@ function WholesaleOrdersTable({ orders: allOrders, pendingId, onStatusChange }: 
     return groups;
   }, []);
   const totals = visibleProducts.map((product) => formatAmounts(visibleOrders.reduce((sum, order) => productAmounts(order, product, sum), new Map<string, number>())));
-  const hasFilters = zones.length > 0 || cuts.length > 0 || normalized.length > 0;
+  const hasFilters = zones.length > 0 || cuts.length > 0 || searchTerms.length > 0;
   const clearFilters = () => { setZones([]); setCuts([]); setQuery(""); };
 
   const beginEditing = () => {
@@ -256,10 +272,14 @@ function WholesaleOrdersTable({ orders: allOrders, pendingId, onStatusChange }: 
             <button aria-label="Día siguiente" disabled={editing} onClick={() => setDayOffset((current) => current + 1)} title={`${pendingByDay(dayOffset + 1)} pendientes`} type="button">›</button>
             {dayOffset !== 0 && <button className="day-today" disabled={editing} onClick={() => setDayOffset(0)} type="button">Hoy</button>}
           </div>
-          <p className="toolbar-count"><strong>{visibleOrders.length}</strong> {visibleOrders.length === 1 ? "pedido" : "pedidos"} · <strong>{visibleProducts.length}</strong> {visibleProducts.length === 1 ? "corte" : "cortes"}</p>
           <FilterMenu label="Zona" onChange={setZones} options={zoneOptions} selected={zones} />
           <FilterMenu label="Corte" onChange={setCuts} options={cutOptions} selected={cuts} />
-          <label className="search-control wholesale-search"><Icon name="search" /><span className="sr-only">Buscar cliente o pedido</span><input onChange={(event) => setQuery(event.target.value)} placeholder="Buscar cliente, pedido o teléfono" type="search" value={query} /></label>
+          <label className={query ? "table-search is-filtered" : "table-search"}>
+            <Icon name="search" />
+            <span className="sr-only">Buscar cliente, pedido o teléfono</span>
+            <input onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === "Escape") setQuery(""); }} placeholder="Buscar cliente o teléfono" type="text" value={query} />
+            {query && <button aria-label="Borrar búsqueda" onClick={() => setQuery("")} type="button">×</button>}
+          </label>
           {dispatchedCount > 0 && <label className="dispatched-toggle"><input checked={showDispatched} onChange={(event) => setShowDispatched(event.target.checked)} type="checkbox" />Ver despachados ({dispatchedCount})</label>}
           {hasFilters && <button className="clear-filters" onClick={clearFilters} type="button">Limpiar filtros</button>}
         </div>
@@ -303,27 +323,30 @@ function WholesaleOrdersTable({ orders: allOrders, pendingId, onStatusChange }: 
   );
 }
 
-export function OrdersPanel({ initialOrders, loadError }: { initialOrders: Order[]; loadError?: string }) {
-  const router = useRouter();
+export function OrdersPanel({ initialOrders, loadError, viewer }: { initialOrders: Order[]; loadError?: string; viewer?: Viewer }) {
   const [orders, setOrders] = useState(initialOrders);
-  // Sincroniza los datos del refresco automático sin remontar el panel (conserva día, filtros y edición).
+  // Sincroniza los datos refrescados del servidor sin remontar el panel (conserva día, filtros y edición).
   const [syncedOrders, setSyncedOrders] = useState(initialOrders);
   if (syncedOrders !== initialOrders) {
     setSyncedOrders(initialOrders);
     setOrders(initialOrders);
   }
-  const [activeType, setActiveType] = useState<CustomerType>("wholesale");
+  // Un operador solo trabaja con su segmento; el administrador puede cambiar entre ambos.
+  const assignedType = viewer?.customerType ?? null;
+  const [selectedType, setActiveType] = useState<CustomerType>("wholesale");
+  const activeType = assignedType ?? selectedType;
   const [pendingId, setPendingId] = useState<string>();
   const [notice, setNotice] = useState<string | undefined>(loadError);
   const wholesale = orders.filter((order) => order.customerType === "wholesale");
   const retail = orders.filter((order) => order.customerType === "retail");
+  useOrdersRealtime(assignedType ? [assignedType] : ["wholesale", "retail"]);
 
+  // El aviso se oculta solo tras unos segundos.
   useEffect(() => {
-    const interval = window.setInterval(() => {
-      if (document.visibilityState === "visible") router.refresh();
-    }, 10_000);
-    return () => window.clearInterval(interval);
-  }, [router]);
+    if (!notice) return;
+    const timeout = window.setTimeout(() => setNotice(undefined), 4_000);
+    return () => window.clearTimeout(timeout);
+  }, [notice]);
 
   const moveOrder = async (order: Order, phase: OperationalPhase) => {
     const status = phaseStatus[phase]; setPendingId(order.id); setNotice(undefined);
@@ -362,8 +385,12 @@ export function OrdersPanel({ initialOrders, loadError }: { initialOrders: Order
   return (
     <div className="orders-app"><main className="dashboard-content">
       <div className="dashboard-topbar">
-        <section aria-label="Tipo de cliente" className="segment-switch"><button aria-pressed={activeType === "wholesale"} onClick={() => { setActiveType("wholesale"); setNotice(undefined); }} type="button"><Icon name="truck" /><strong>Mayoristas</strong><b>{wholesale.length}</b></button><button aria-pressed={activeType === "retail"} onClick={() => { setActiveType("retail"); setNotice(undefined); }} type="button"><Icon name="shop" /><strong>Minoristas</strong><b>{retail.length}</b></button></section>
-        <span className="live-badge">Actualización automática</span>
+        {!assignedType && <section aria-label="Tipo de cliente" className="segment-switch"><button aria-pressed={activeType === "wholesale"} onClick={() => { setActiveType("wholesale"); setNotice(undefined); }} type="button"><Icon name="truck" /><strong>Mayoristas</strong><b>{wholesale.length}</b></button><button aria-pressed={activeType === "retail"} onClick={() => { setActiveType("retail"); setNotice(undefined); }} type="button"><Icon name="shop" /><strong>Minoristas</strong><b>{retail.length}</b></button></section>}
+        {viewer && <div className="session-bar">
+          <span>{viewer.email}{assignedType ? ` · ${assignedType === "wholesale" ? "Mayoristas" : "Minoristas"}` : " · Administrador"}</span>
+          {viewer.role === "admin" && <Link href="/usuarios">Usuarios</Link>}
+          <form action={signOut}><button type="submit">Salir</button></form>
+        </div>}
       </div>
       {notice && <div className="operation-notice" role="status">{notice}</div>}
       {activeType === "wholesale" ? <WholesaleOrdersTable onStatusChange={(order, phase) => void moveOrder(order, phase)} orders={wholesale} pendingId={pendingId} /> : <RetailPanel onMove={(order, phase) => void moveOrder(order, phase)} onPaymentChange={(order, status) => void changePaymentStatus(order, status)} onSave={saveOrder} orders={retail} pendingId={pendingId} />}

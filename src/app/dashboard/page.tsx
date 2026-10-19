@@ -1,19 +1,23 @@
-import { createAdminClient } from "@/lib/supabase/admin";
+import { requireViewer } from "@/lib/auth/viewer";
+import { hasSupabaseEnvironment } from "@/lib/supabase/config";
+import { createClient } from "@/lib/supabase/server";
 
+import "../auth.css";
 import { OrdersPanel } from "./orders-panel";
 import type { Order } from "./types";
 
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
-  let admin: ReturnType<typeof createAdminClient>;
-  try {
-    admin = createAdminClient();
-  } catch {
+  if (!hasSupabaseEnvironment()) {
     return <OrdersPanel initialOrders={[]} loadError="El panel no está conectado a la base de datos." />;
   }
 
-  const { data: rows, error: ordersError } = await admin
+  const viewer = await requireViewer();
+  const supabase = await createClient();
+
+  // RLS limita las filas al segmento del usuario; el filtro explícito lo deja claro.
+  let query = supabase
     .from("orders")
     .select(`
       id,
@@ -44,6 +48,8 @@ export default async function DashboardPage() {
       )
     `)
     .order("received_at", { ascending: false });
+  if (viewer.customerType) query = query.eq("customer_type", viewer.customerType);
+  const { data: rows, error: ordersError } = await query;
 
   const orders: Order[] = ordersError
     ? []
@@ -83,5 +89,5 @@ export default async function DashboardPage() {
         };
       });
 
-  return <OrdersPanel initialOrders={orders} loadError={ordersError ? "No se pudieron cargar los pedidos. Intenta nuevamente." : undefined} />;
+  return <OrdersPanel initialOrders={orders} viewer={viewer} loadError={ordersError ? "No se pudieron cargar los pedidos. Intenta nuevamente." : undefined} />;
 }

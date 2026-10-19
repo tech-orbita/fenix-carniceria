@@ -156,11 +156,6 @@ body {
   background: var(--wine-dark);
 }
 
-.wholesale-search {
-  min-width: 230px;
-  margin: 0;
-}
-
 .wholesale-workspace .section-toolbar {
   align-items: center;
 }
@@ -227,9 +222,6 @@ body {
     align-items: stretch;
   }
 
-  .wholesale-search {
-    min-width: 100%;
-  }
 }
 
 .orders-app .operation-notice {
@@ -2245,16 +2237,6 @@ a {
   padding: 8px 10px;
 }
 
-.orders-app .toolbar-count {
-  margin: 0;
-  color: var(--subtle);
-  font-size: 13px;
-  white-space: nowrap;
-}
-
-.orders-app .toolbar-count strong {
-  color: var(--ink);
-}
 
 .orders-app .wholesale-workspace .toolbar-actions {
   flex-wrap: wrap;
@@ -2273,10 +2255,6 @@ a {
 .orders-app .outline-action,
 .orders-app .wholesale-workspace .primary-action {
   font-size: 12px;
-}
-
-.orders-app .wholesale-search {
-  min-width: 220px;
 }
 
 .orders-app .wholesale-workspace .matrix-scroll {
@@ -2351,9 +2329,6 @@ a {
     flex-wrap: wrap;
   }
 
-  .orders-app .wholesale-search {
-    min-width: 100%;
-  }
 }
 
 @media print {
@@ -2374,10 +2349,6 @@ a {
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
-}
-
-.orders-app .table-filters .toolbar-count {
-  margin-right: 4px;
 }
 
 .orders-app .table-filters > *,
@@ -2406,6 +2377,89 @@ a {
   background: var(--wine);
   color: white;
   font-size: 10px;
+}
+
+/* Búsqueda con el mismo aspecto que los botones de filtro. */
+.orders-app .table-search {
+  display: inline-flex;
+  width: 240px;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0 6px 0 12px;
+  background: white;
+  color: var(--ink);
+  cursor: text;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.orders-app .table-search:hover {
+  border-color: #c7b9aa;
+}
+
+.orders-app .table-search:focus-within,
+.orders-app .table-search.is-filtered {
+  border-color: var(--wine);
+}
+
+.orders-app .table-search:focus-within {
+  box-shadow: 0 0 0 3px rgba(23, 105, 224, 0.12);
+}
+
+.orders-app .table-search.is-filtered {
+  background: #eef5ff;
+}
+
+.orders-app .table-search svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+}
+
+.orders-app .table-search input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.orders-app .table-search input::placeholder {
+  color: var(--subtle);
+  font-weight: 600;
+}
+
+.orders-app .table-search button {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  padding: 0;
+  background: transparent;
+  color: var(--subtle);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.orders-app .table-search button:hover {
+  background: rgba(23, 105, 224, 0.12);
+  color: var(--wine-dark);
+}
+
+@media (max-width: 620px) {
+  .orders-app .table-search {
+    width: 100%;
+  }
 }
 
 .orders-app .filter-popover {
