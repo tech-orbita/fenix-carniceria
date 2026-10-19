@@ -59,6 +59,16 @@ function normalizeUnit(value: string) {
   return unit;
 }
 
+// En la operación una libra equivale a medio kilo.
+export const KG_PER_LB = 0.5;
+
+// Lleva cualquier cantidad en libras o kilos a kilos; otras unidades (und, paquete…) se dejan igual.
+export function toKilograms(quantity: number, unit: string) {
+  const normalized = normalizeUnit(unit);
+  if (normalized === "lb") return { quantity: Math.round(quantity * KG_PER_LB * 1000) / 1000, unit: "kg" };
+  return { quantity, unit: normalized };
+}
+
 export function parseOrderText(text: string) {
   const normalized = text.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   const unit = "(?:kg|kgs|kilo|kilos|kilogramo|kilogramos|lb|lbs|lib|libra|libras)";

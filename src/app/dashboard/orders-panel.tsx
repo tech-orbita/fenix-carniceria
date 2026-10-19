@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { useRouter } from "next/navigation";
 
-import { catalogProductFor, normalizeProductName, wholesaleProductCatalog } from "@/lib/orders/product-parser";
+import { catalogProductFor, normalizeProductName, toKilograms, wholesaleProductCatalog } from "@/lib/orders/product-parser";
 import type { WholesaleProduct } from "@/lib/orders/product-parser";
 
 import { updateOrderDetails, updateOrderPaymentStatus, updateOrderStatus, updateWholesaleTable } from "./actions";
@@ -32,7 +32,8 @@ const dateTime = new Intl.DateTimeFormat("es-CO", {
   timeZone: "America/Bogota",
 });
 
-const quantityFormat = new Intl.NumberFormat("es-CO", { maximumFractionDigits: 3 });
+// Sin separador de miles para que el valor se pueda volver a editar y guardar tal cual.
+const quantityFormat = new Intl.NumberFormat("es-CO", { maximumFractionDigits: 3, useGrouping: false });
 
 function productAmounts(order: Order, product: WholesaleProduct, into = new Map<string, number>()) {
   order.items.forEach((item) => {
@@ -40,17 +41,21 @@ function productAmounts(order: Order, product: WholesaleProduct, into = new Map<
     const matches = itemCatalog
       ? itemCatalog.name === product.name
       : normalizeProductName(item.productName) === normalizeProductName(product.name);
-    if (matches) into.set(item.unit, (into.get(item.unit) ?? 0) + (item.actualQuantity ?? item.quantity));
+    if (!matches) return;
+    // La tabla mayorista trabaja todo en kilos: las libras se convierten a 0,5 kg.
+    const { quantity, unit } = toKilograms(item.actualQuantity ?? item.quantity, item.unit);
+    into.set(unit, (into.get(unit) ?? 0) + quantity);
   });
   return into;
 }
 
+// Los kilos se muestran solo como número (la unidad va en el encabezado); otras unidades conservan su nombre.
 function formatAmounts(amounts: Map<string, number>) {
-  return [...amounts.entries()].map(([unit, quantity]) => `${quantityFormat.format(quantity)} ${unit}`).join(" / ");
+  return [...amounts.entries()].map(([unit, quantity]) => unit === "kg" ? quantityFormat.format(quantity) : `${quantityFormat.format(quantity)} ${unit}`).join(" / ");
 }
 
 function productQuantity(order: Order, product: WholesaleProduct) {
-  return [...productAmounts(order, product).entries()].map(([unit, quantity]) => `${quantity} ${unit}`).join(" / ");
+  return formatAmounts(productAmounts(order, product));
 }
 
 const bogotaDay = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Bogota" });
@@ -325,7 +330,7 @@ async function downloadWholesaleOrders(orders: Order[], products: WholesaleProdu
     { header: "Pedido solicitado", key: "orderText", width: 52 },
     { header: "Observaciones", key: "notes", width: 42 },
     { header: "NIT o cédula", key: "taxId", width: 20 },
-    ...products.map((product, index) => ({ header: product.name, key: `product${index}`, width: 20 })),
+    ...products.map((product, index) => ({ header: `${product.name} (kg)`, key: `product${index}`, width: 20 })),
   ];
   orders.forEach((order) => worksheet.addRow({
     orderNumber: order.orderNumber,
@@ -338,7 +343,11 @@ async function downloadWholesaleOrders(orders: Order[], products: WholesaleProdu
     orderText: order.formData?.order_text ?? "",
     notes: order.notes ?? "",
     taxId: order.formData?.tax_id ?? "",
-    ...Object.fromEntries(products.map((product, index) => [`product${index}`, productQuantity(order, product)])),
+    ...Object.fromEntries(products.map((product, index) => {
+      const amounts = productAmounts(order, product);
+      // Celdas numéricas cuando todo está en kilos, para poder sumar en Excel.
+      return [`product${index}`, amounts.size === 1 && amounts.has("kg") ? amounts.get("kg") : formatAmounts(amounts)];
+    })),
   }));
   worksheet.getRow(1).font = { bold: true, color: { argb: "FFFFFFFF" } };
   worksheet.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1769E0" } };
@@ -480,7 +489,7 @@ function WholesaleOrdersTable({ orders: allOrders, pendingId, onStatusChange }: 
         <table className="order-matrix wholesale-matrix">
           <thead>
             <tr className="category-row"><th colSpan={5}>Pedido recibido</th>{categories.map((category, index) => <th colSpan={category.count} key={`${category.name}-${index}`}>{category.name}</th>)}</tr>
-            <tr><th>Cliente</th><th>Teléfono</th><th>Zona</th><th>Facturación</th><th>Comentario</th>{visibleProducts.map((product) => <th key={product.name}>{product.name}</th>)}</tr>
+            <tr><th>Cliente</th><th>Teléfono</th><th>Zona</th><th>Facturación</th><th>Comentario</th>{visibleProducts.map((product) => <th key={product.name}>{product.name}<small className="unit-label">kg</small></th>)}</tr>
           </thead>
           <tbody>
             {visibleOrders.map((order) => <tr className={isClosed(order) ? "is-dispatched" : undefined} key={order.id}>
@@ -493,7 +502,7 @@ function WholesaleOrdersTable({ orders: allOrders, pendingId, onStatusChange }: 
               <td className="matrix-comment-cell">{editing ? <textarea aria-label={`Comentario para ${order.orderNumber}`} onChange={(event) => updateDraft(order.id, "notes", event.target.value)} placeholder="Añade un comentario" rows={2} value={draftRows[order.id]?.notes ?? ""} /> : order.notes || "—"}</td>
               {visibleProducts.map((product) => {
                 const value = productQuantity(order, product);
-                return <td className={editing ? "matrix-quantity-cell is-editing" : value ? "matrix-quantity-cell has-value" : "matrix-quantity-cell"} key={product.name}>{editing ? <input aria-label={`${product.name} de ${order.orderNumber}`} onChange={(event) => updateDraft(order.id, product.name, event.target.value)} placeholder="Ej. 1 lb" value={draftRows[order.id]?.quantities[product.name] ?? ""} /> : value || ""}</td>;
+                return <td className={editing ? "matrix-quantity-cell is-editing" : value ? "matrix-quantity-cell has-value" : "matrix-quantity-cell"} key={product.name}>{editing ? <input aria-label={`${product.name} de ${order.orderNumber}`} onChange={(event) => updateDraft(order.id, product.name, event.target.value)} placeholder="kg" title="Cantidad en kg. También puedes escribir “2 lb” y se guarda como 1 kg." value={draftRows[order.id]?.quantities[product.name] ?? ""} /> : value || ""}</td>;
               })}
             </tr>)}
             {!visibleOrders.length && <tr><td className="matrix-empty" colSpan={visibleProducts.length + 5}>{hasFilters ? "Ningún pedido coincide con los filtros." : "No hay pedidos pendientes para este día."}</td></tr>}

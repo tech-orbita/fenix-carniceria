@@ -3302,3 +3302,12 @@ a {
     display: none;
   }
 }
+
+.orders-app .wholesale-matrix thead th .unit-label {
+  display: block;
+  margin-top: 1px;
+  font-size: 10px;
+  font-weight: 500;
+  opacity: 0.65;
+  text-transform: none;
+}

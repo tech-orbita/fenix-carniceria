@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { createAdminClient } from "@/lib/supabase/admin";
-import { catalogProductFor, normalizeProductName } from "@/lib/orders/product-parser";
+import { catalogProductFor, normalizeProductName, toKilograms } from "@/lib/orders/product-parser";
 
 import type { OrderStatus } from "./types";
 
@@ -158,7 +158,8 @@ function parseQuantity(value: string) {
   if (!match) return null;
   const quantity = Number(match[1].replace(",", "."));
   if (!Number.isFinite(quantity) || quantity <= 0) return null;
-  return { quantity, unit: match[2]?.trim().toLocaleLowerCase("es") || "lb" };
+  // La tabla trabaja en kilos: un número solo es kg y las libras se guardan convertidas (1 lb = 0,5 kg).
+  return toKilograms(quantity, match[2] ?? "kg");
 }
 
 function sameProduct(left: string, right: string) {
@@ -183,7 +184,7 @@ export async function updateWholesaleTable(rows: WholesaleTableRowInput[]) {
         !productName.trim() || productName.length > 120 || value.length > 40 || (value.trim() && !parseQuantity(value)),
       )
     ) {
-      return { ok: false, message: "Revisa las cantidades. Usa valores como “1 lb” o “2 kg”." };
+      return { ok: false, message: "Revisa las cantidades. Usa valores en kg como “1,5” o “2 kg”." };
     }
   }
 
@@ -226,7 +227,7 @@ export async function updateWholesaleTable(rows: WholesaleTableRowInput[]) {
         continue;
       }
 
-      if (!parsed) return { ok: false, message: "Usa cantidades como “1 lb” o “2 kg”." };
+      if (!parsed) return { ok: false, message: "Usa cantidades en kg como “1,5” o “2 kg”." };
       const canonicalName = catalogProductFor(entry.productName)?.name ?? entry.productName.trim();
 
       if (matching[0]) {
