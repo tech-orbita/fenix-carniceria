@@ -3138,3 +3138,167 @@ a {
     display: none;
   }
 }
+
+/* Espaciado más cómodo, navegación por día de despacho y acción de despachado. */
+.orders-app .dashboard-content {
+  padding: 18px clamp(16px, 2.2vw, 32px) 20px;
+}
+
+.orders-app .operation-notice,
+.orders-app .wholesale-workspace {
+  margin-top: 14px;
+}
+
+.orders-app .wholesale-workspace {
+  border-radius: 14px;
+}
+
+.orders-app .wholesale-workspace .section-toolbar {
+  gap: 16px;
+  padding: 14px 18px;
+}
+
+.orders-app .table-filters {
+  gap: 8px 10px;
+}
+
+.orders-app .wholesale-matrix th,
+.orders-app .wholesale-matrix td {
+  padding: 10px 14px;
+}
+
+.orders-app .wholesale-matrix .category-row th {
+  height: 30px;
+}
+
+.orders-app .wholesale-matrix thead tr:nth-child(2) th {
+  top: 30px;
+}
+
+.orders-app .day-navigator {
+  display: inline-flex;
+  height: 34px;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: white;
+}
+
+.orders-app .day-navigator > button {
+  height: 100%;
+  border: 0;
+  padding: 0 12px;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.orders-app .day-navigator > button:hover:not(:disabled) {
+  background: #f1f5fb;
+}
+
+.orders-app .day-navigator > button:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.orders-app .day-navigator > span {
+  display: flex;
+  min-width: 150px;
+  align-items: baseline;
+  justify-content: center;
+  gap: 6px;
+  border-inline: 1px solid var(--line);
+  padding: 0 10px;
+  color: var(--subtle);
+  font-size: 12px;
+}
+
+.orders-app .day-navigator > span strong {
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.orders-app .day-navigator > .day-today {
+  border-left: 1px solid var(--line);
+  color: var(--wine-dark);
+  font-size: 12px;
+}
+
+.orders-app .dispatched-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--subtle);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.orders-app .dispatched-toggle input {
+  accent-color: var(--wine);
+}
+
+.orders-app .matrix-client {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.orders-app .wholesale-matrix th:first-child {
+  min-width: 260px;
+}
+
+.orders-app .dispatch-action {
+  flex: 0 0 auto;
+  min-height: 28px;
+  border: 1px solid #9fd5b4;
+  border-radius: 8px;
+  padding: 0 10px;
+  background: #edf9f1;
+  color: #1d7442;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.orders-app .dispatch-action:hover:not(:disabled) {
+  border-color: #2f9a5a;
+  background: #2f9a5a;
+  color: white;
+}
+
+.orders-app .dispatch-action.is-done {
+  border-color: var(--line);
+  background: white;
+  color: var(--subtle);
+}
+
+.orders-app .dispatch-action:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.orders-app .wholesale-matrix tr.is-dispatched th,
+.orders-app .wholesale-matrix tr.is-dispatched td {
+  color: var(--subtle);
+  text-decoration: line-through;
+  text-decoration-color: rgba(110, 127, 153, 0.5);
+}
+
+.orders-app .wholesale-matrix tr.is-dispatched .dispatch-action {
+  text-decoration: none;
+}
+
+@media print {
+  .orders-app .dispatch-action,
+  .orders-app .day-navigator {
+    display: none;
+  }
+}
