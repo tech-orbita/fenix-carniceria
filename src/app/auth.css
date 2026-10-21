@@ -69,6 +69,52 @@
   outline: 2px solid rgba(50, 132, 255, 0.18);
 }
 
+.auth-password-field {
+  position: relative;
+}
+
+.auth-password-field input {
+  width: 100%;
+  padding-right: 44px;
+}
+
+.auth-password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  display: grid;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  place-items: center;
+  background: transparent;
+  color: #6e7f99;
+  cursor: pointer;
+  transform: translateY(-50%);
+}
+
+.auth-password-toggle:hover {
+  background: #edf4ff;
+  color: #1769e0;
+}
+
+.auth-password-toggle:focus-visible {
+  outline: 2px solid #3284ff;
+  outline-offset: 1px;
+}
+
+.auth-password-toggle svg {
+  width: 19px;
+  height: 19px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
 .auth-error {
   margin: 0 !important;
   color: #c2410c !important;
