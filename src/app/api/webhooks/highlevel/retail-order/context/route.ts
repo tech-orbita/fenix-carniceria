@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { authorized } from "@/lib/orders/ingest";
-import { retailOrderContext } from "@/lib/orders/retail-agent";
+import { authorizedRetail, retailOrderContext } from "@/lib/orders/retail-agent";
 
 export async function POST(request: NextRequest) {
-  if (!authorized(request)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!authorizedRetail(request)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   try {
     return retailOrderContext(await request.json());
   } catch {

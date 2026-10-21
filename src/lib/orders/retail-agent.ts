@@ -1,4 +1,6 @@
-import { NextResponse } from "next/server";
+import { timingSafeEqual } from "node:crypto";
+
+import { NextRequest, NextResponse } from "next/server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -36,6 +38,15 @@ type RetailAgentPayload = {
 };
 
 const OPEN_STATUSES = ["needs_review", "received", "quoted", "confirmed", "preparing"];
+
+export function authorizedRetail(request: NextRequest) {
+  const configured = process.env.RETAIL_ORDERS_INGEST_SECRET || process.env.ORDERS_INGEST_SECRET;
+  const supplied = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
+  if (!configured || !supplied) return false;
+  const left = Buffer.from(configured);
+  const right = Buffer.from(supplied);
+  return left.length === right.length && timingSafeEqual(left, right);
+}
 
 function bogotaDayStart() {
   const formatter = new Intl.DateTimeFormat("en-CA", {
