@@ -1,0 +1,1629 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ Config.item.json.APP_URL }}/api/webhooks/highlevel/retail-order/context",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Config').item.json.APP_INGEST_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ locationId: .locationId, contactId: .contactId, customer: { phone: .contactPhone } }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "fa5e7dce-871f-466b-9082-f7e5edb4a0e0",
+      "name": "Contexto del pedido",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -18736,
+        4864
+      ],
+      "notesInFlow": true,
+      "notes": "Pedido abierto de hoy y desde qué mensaje leer"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').item.json.APP_URL }}/api/webhooks/ghl/help-requests",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Config').item.json.APP_INGEST_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ locationId: $('Validar extracción').item.json.payload.locationId, contactId: $('Validar extracción').item.json.payload.contactId, conversationId: $('Validar extracción').item.json.conversationId || undefined, customer: { name: $('Validar extracción').item.json.payload.customer.name, phone: $('Validar extracción').item.json.payload.customer.phone }, reason: 'No se pudo leer el pedido automáticamente: ' + $('Validar extracción').item.json.problem }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "877aab00-1029-4b6a-8620-35b4fb7d46bd",
+      "name": "Pedir ayuda (extracción falló)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -15392,
+        5040
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Reemplaza cada [AUDIO n] por su texto, en el mismo lugar de la conversación.\nconst transcript = $('Armar transcripción').first().json;\nif (!transcript.audios.length) {\n  return [{ json: { ...transcript, audioProblem: null, audioFailures: 0 }, pairedItem: { item: 0 } }];\n}\nconst sources = $('Separar audios').all();\nconst results = $input.all();\nlet text = transcript.transcript;\nlet failures = 0;\nsources.forEach((source, index) => {\n  const response = results[index]?.json || {};\n  const spoken = response.statusCode === 200 ? String(response.body?.text || '').trim() : '';\n  const key = source.json.key;\n  if (spoken) {\n    text = text.replace(`[${key}]`, `[${key} - nota de voz transcrita]: ${spoken}`);\n  } else {\n    failures += 1;\n    text = text.replace(`[${key}]`, `[${key} - nota de voz que no se pudo transcribir]`);\n  }\n});\nreturn [{ json: {\n  ...transcript,\n  transcript: text,\n  audioFailures: failures,\n  audioProblem: failures ? `${failures} de ${sources.length} notas de voz no se pudieron transcribir; escúchalas en la conversación` : null,\n}, pairedItem: { item: 0 } }];"
+      },
+      "id": "73732c0c-ac90-4c0f-b18c-03c725a72e20",
+      "name": "Contexto de audio",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -17088,
+        4864
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/audio/transcriptions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "audio"
+            },
+            {
+              "name": "model",
+              "value": "={{ $('Config').first().json.OPENAI_TRANSCRIBE_MODEL }}"
+            },
+            {
+              "name": "language",
+              "value": "es"
+            },
+            {
+              "name": "response_format",
+              "value": "json"
+            },
+            {
+              "name": "prompt",
+              "value": "Nota de voz de un cliente de Fénix J.A., tienda de mercado en Cereté, Córdoba, Colombia. Pide frutas, verduras, víveres y carnes con cantidades como libras, kilos, unidades o valores en pesos, por ejemplo: me regala 3 libras de tomate, 5 mil de papa, pechuga blanca abierta, arroz Diana."
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "d9558015-bc9f-4671-974f-b1f9163ea1ae",
+      "name": "Transcribir audio",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -17216,
+        4592
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// OpenAI reconoce el formato por la extensión del nombre: WhatsApp manda .opus/.oga o URLs sin extensión.\nconst SUPPORTED = /\\.(?:flac|mp3|mp4|mpeg|mpga|m4a|ogg|wav|webm)$/i;\nconst byMime = { 'audio/ogg': 'ogg', 'audio/opus': 'ogg', 'audio/mpeg': 'mp3', 'audio/mp3': 'mp3', 'audio/mp4': 'm4a', 'audio/x-m4a': 'm4a', 'audio/aac': 'm4a', 'audio/wav': 'wav', 'audio/x-wav': 'wav', 'audio/webm': 'webm', 'video/mp4': 'mp4' };\nreturn $input.all().map((item, index) => {\n  const file = item.binary?.audio;\n  if (file && !SUPPORTED.test(file.fileName || '')) {\n    const mime = String(file.mimeType || '').split(';')[0].trim().toLowerCase();\n    file.fileName = `nota-de-voz-${index + 1}.${byMime[mime] || 'ogg'}`;\n    if (!byMime[mime]) file.mimeType = 'audio/ogg';\n  }\n  return { json: item.json, binary: item.binary, pairedItem: { item: index } };\n});"
+      },
+      "id": "704cc4df-0bc9-4e4a-86df-2bceb8d7741c",
+      "name": "Nombrar archivo de audio",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -17392,
+        4592
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "audio"
+            }
+          }
+        }
+      },
+      "id": "6f06caad-a510-4d3b-9eaa-d327f0c2c46a",
+      "name": "Descargar audio",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -17568,
+        4592
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Un ítem por nota de voz para descargarla y transcribirla.\nreturn $('Armar transcripción').first().json.audios.map((audio) => ({ json: audio, pairedItem: { item: 0 } }));"
+      },
+      "id": "947dfb39-0063-4b62-8be4-bde047260087",
+      "name": "Separar audios",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -17744,
+        4592
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "e1fd38f5-4959-49a1-9522-0f51f97f0fc9",
+              "leftValue": "={{ $json.audios.length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "14aeeb78-2ceb-4a1e-b107-bb2336113705",
+      "name": "¿Hay audios?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -17792,
+        4848
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "3d0c8f4e-6a52-4f0e-9a3b-6c1f2b7e9d41",
+              "leftValue": "={{ $json.readStatus !== 200 || $json.inboundMessages > 0 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "9eb92abe-9042-4f35-9335-ba96df8c1b2d",
+      "name": "¿Hay mensajes nuevos?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -18000,
+        4864
+      ],
+      "notesInFlow": true,
+      "notes": "Sin mensajes nuevos del cliente no se llama a OpenAI (ayuda y barrido repiten llamados)"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: true, ignored: true, reason: 'El cliente no ha escrito nada nuevo' }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "1ae76916-68d8-4c78-b8f6-d003d7c7904a",
+      "name": "200 Sin mensajes nuevos",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        -17744,
+        5120
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: true, ignored: true, reason: $('Validar extracción').item.json.problem }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "84489af4-1e90-4400-86df-70ed55a37555",
+      "name": "200 Sin pedido para registrar",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        -15392,
+        4816
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "e1611a1c-c2de-48aa-888c-58c9c3df3084",
+              "leftValue": "={{ $json.ignored }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "0219fc7e-3d1c-436e-814e-ed0ee3e433fb",
+      "name": "¿Mensaje sin pedido?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -15632,
+        4896
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const transcript = $('Armar transcripción').first().json;\nconst response = $input.first().json;\nif (!transcript.imageUrls.length) {\n  return [{ json: { imageText: '', visualStatus: 'not_needed', visualProblem: null } }];\n}\n\nlet imageText = '';\nlet visualProblem = null;\nif (response.statusCode !== 200) {\n  visualProblem = `OpenAI visual respondió ${response.statusCode || \"sin estado\"}`;\n} else {\n  try {\n    const rawContent = response.body?.choices?.[0]?.message?.content;\n    const parsed = typeof rawContent === 'string' ? JSON.parse(rawContent) : rawContent;\n    imageText = String(parsed?.imageText || '').trim();\n    if (!imageText) visualProblem = 'La lectura visual no devolvió texto';\n  } catch (error) {\n    visualProblem = 'La lectura visual no devolvió JSON válido';\n  }\n}\nreturn [{ json: { imageText, visualStatus: visualProblem ? 'failed' : 'extracted', visualProblem } }];"
+      },
+      "id": "dda498c5-e251-41e0-9b0c-f14490825b33",
+      "name": "Contexto visual",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -16448,
+        4880
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ (() => {\n  const transcript = $('Armar transcripción').item.json;\n  const instruction = 'Transcribe fielmente todo el texto legible de estas imágenes de una lista de mercado. Devuelve todos los renglones de productos en el orden visible. Conserva ortografía, cantidades, unidades, marcas, presentaciones, precios escritos y anotaciones; no normalices ni corrijas productos. Si una parte no es segura, márcala como [lectura dudosa: ...]. No inventes texto. Si hay varias imágenes, separa su contenido con IMAGEN 1, IMAGEN 2, etc.';\n  const content = [{ type: 'text', text: instruction }, ...transcript.imageUrls.map((url) => ({ type: 'image_url', image_url: { url, detail: 'high' } }))];\n  const responseSchema = { type: 'object', additionalProperties: false, required: ['imageText'], properties: { imageText: { type: 'string' } } };\n  return JSON.stringify({ model: $('Config').item.json.OPENAI_MODEL, messages: [{ role: 'user', content }], response_format: { type: 'json_schema', json_schema: { name: 'transcripcion_imagenes', strict: true, schema: responseSchema } } });\n})() }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "c00d92e3-427f-47ba-b074-7cdfc62dcbf8",
+      "name": "Extraer texto de imágenes",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -16656,
+        4848
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "93ca51a3-85f0-4ae7-bfaf-d156a0f8d50d",
+              "leftValue": "={{ $json.imageUrls.length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "88b0cbaf-133c-4391-9761-bc84df46ddab",
+      "name": "¿Hay imágenes?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -16864,
+        4864
+      ]
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"additionalProperties\": false,\n  \"required\": [\n    \"ok\",\n    \"error\",\n    \"action\",\n    \"customer\",\n    \"delivery\",\n    \"paymentMethod\",\n    \"rawOrderText\",\n    \"notes\"\n  ],\n  \"properties\": {\n    \"ok\": {\n      \"type\": \"boolean\"\n    },\n    \"error\": {\n      \"type\": [\n        \"string\",\n        \"null\"\n      ]\n    },\n    \"action\": {\n      \"type\": \"string\",\n      \"enum\": [\n        \"anexo\",\n        \"nuevo\"\n      ]\n    },\n    \"customer\": {\n      \"type\": \"object\",\n      \"additionalProperties\": false,\n      \"required\": [\n        \"name\",\n        \"phone\",\n        \"document\"\n      ],\n      \"properties\": {\n        \"name\": {\n          \"type\": [\n            \"string\",\n            \"null\"\n          ]\n        },\n        \"phone\": {\n          \"type\": [\n            \"string\",\n            \"null\"\n          ]\n        },\n        \"document\": {\n          \"type\": [\n            \"string\",\n            \"null\"\n          ]\n        }\n      }\n    },\n    \"delivery\": {\n      \"type\": \"object\",\n      \"additionalProperties\": false,\n      \"required\": [\n        \"type\",\n        \"address\"\n      ],\n      \"properties\": {\n        \"type\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"domicilio\",\n            \"recogida\"\n          ]\n        },\n        \"address\": {\n          \"type\": [\n            \"string\",\n            \"null\"\n          ]\n        }\n      }\n    },\n    \"paymentMethod\": {\n      \"type\": [\n        \"string\",\n        \"null\"\n      ]\n    },\n    \"rawOrderText\": {\n      \"type\": \"string\"\n    },\n    \"notes\": {\n      \"type\": [\n        \"string\",\n        \"null\"\n      ]\n    }\n  }\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        -16080,
+        5296
+      ],
+      "id": "e9b18e6b-aff0-479b-91b4-9d99f0d9a334",
+      "name": "Structured Output Parser"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4.1-mini",
+          "mode": "id",
+          "cachedResultName": "gpt-4.1-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        -16416,
+        5232
+      ],
+      "id": "e0902c54-60e7-4c68-95c9-843483b32bb4",
+      "name": "OpenAI Chat Model"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Día válido en America/Bogota: {{ $('Armar transcripción').item.json.bogotaDay }}\n\n{{ $('Armar transcripción').item.json.openOrder ? 'PEDIDO ACTUAL ' + $('Armar transcripción').item.json.openOrder.number + ($('Armar transcripción').item.json.openOrder.inPreparation ? ' (ya en preparación)' : '') + ':\\n' + $('Armar transcripción').item.json.openOrder.text : 'PEDIDO ACTUAL: ninguno, los mensajes nuevos forman un pedido nuevo' }}\n\nMENSAJES NUEVOS (de más antiguo a más reciente; las notas de voz ya vienen transcritas en su lugar):\n{{ $('Contexto de audio').item.json.transcript || '(sin mensajes nuevos)' }}\n\nTEXTO EXTRAÍDO DE IMÁGENES:\n{{ $('Contexto visual').item.json.imageText || '(no se recibieron imágenes)' }}\n\nDATOS DEL CRM (solo completan campos faltantes):\nNombre: {{ $('Normalizar entrada').item.json.contactName || 'sin registrar' }}\nTeléfono: {{ $('Normalizar entrada').item.json.contactPhone || 'sin registrar' }}\nCédula: {{ $('Normalizar entrada').item.json.contactDocument || 'sin registrar' }}\nDirección: {{ $('Normalizar entrada').item.json.contactAddress || 'sin registrar' }}",
+        "hasOutputParser": true,
+        "messages": {
+          "messageValues": [
+            {
+              "message": "=Eres el extractor de pedidos de Fénix J.A.. Recibes el PEDIDO ACTUAL del cliente (si tiene uno abierto) y solo los MENSAJES NUEVOS, es decir, los que aún no se han leído; cuando existen imágenes, también una transcripción visual hecha en un paso interno anterior.\n\nCASO A, hay PEDIDO ACTUAL: todo lo que el cliente pida en los mensajes nuevos es un anexo a ese pedido, aunque ya esté en preparación. Devuelve action=anexo y en rawOrderText el pedido COMPLETO actualizado: copia textualmente, sin reescribirlas, las líneas del pedido actual que no cambian, agrega las nuevas al final y aplica solo las correcciones o eliminaciones que el cliente pida. Devuelve action=nuevo únicamente si el cliente dice explícitamente que es otro pedido, un pedido aparte, por separado, para otra persona o para otra dirección; en ese caso rawOrderText contiene solo los productos de ese pedido nuevo.\n\nCASO B, no hay pedido actual: los mensajes nuevos forman un pedido nuevo. Devuelve action=nuevo solo con lo que el cliente pidió en estos mensajes. Nunca incluyas productos de pedidos anteriores aunque FÉNIX J.A. los mencione.\n\nSi en los mensajes nuevos el CLIENTE no pide, agrega, quita ni cambia productos (solo saluda, agradece, pregunta, conversa o consulta precios), responde ok=false.\n\nLas líneas [AUDIO n - nota de voz transcrita] son mensajes del cliente dictados por voz: trátalos igual que un mensaje escrito, en su posición cronológica, y extrae de ellos productos, adiciones, cambios, dirección o pago. La transcripción automática puede escribir mal nombres de productos; consérvalos como suenan. Si aparece una nota de voz que no se pudo transcribir, no inventes su contenido y menciónalo en notes.\n\nUna lista escrita, productos enviados por partes, una nota de voz o una imagen cuentan como pedido aunque falten cédula, dirección, pago o confirmación. Una pregunta de precio no agrega el producto: \"a cómo está el queso?\" es consulta. \"5 mil de papa\", \"$7.000 de queso\" o \"7000 de queso\" sí es una línea de compra y debe conservarse literalmente.\n\nrawOrderText es la fuente canónica del pedido. Escríbelo como un bloque de texto fiel con todas las líneas vigentes, una línea por producto, sin encabezados, totales ni viñetas inventadas. Conserva literalmente productos desconocidos, errores de escritura, cantidades, valores, marcas, presentaciones, tamaño, sabor, madurez, corte, preparación y empaque. En un anexo, el pedido actual y lo nuevo quedan juntos; aplica únicamente eliminaciones o reemplazos explícitos. No conviertas el texto a nombres oficiales ni lo resumas.\n\nUsa los datos CRM solo para completar nombre, teléfono, documento y dirección faltantes. No inventes datos. delivery.type es recogida solo si el cliente lo indicó; de lo contrario domicilio. Dirección, documento y pago pueden ser null.\n\nEl bloque TEXTO EXTRAÍDO DE IMÁGENES es parte de la conversación del cliente. Incorpora todos sus renglones al pedido y conserva los avisos de lectura dudosa en notes. No afirmes que viste la imagen directamente.\n\nEl nombre y el teléfono pueden ser null cuando GHL y la conversación no los tengan. Esto nunca invalida un pedido; no inventes esos datos."
+            }
+          ]
+        },
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        -16272,
+        4880
+      ],
+      "id": "a164c1f3-9217-4d5f-b392-24a99836f0e6",
+      "name": "Basic LLM Chain"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($('Resultado').item.json) }}",
+        "options": {
+          "responseCode": 502
+        }
+      },
+      "id": "2acf05af-9c71-4c44-9db2-e1a41d0d956e",
+      "name": "502 No registrado",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        -14576,
+        4720
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').item.json.APP_URL }}/api/webhooks/ghl/help-requests",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Config').item.json.APP_INGEST_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ locationId: $('Validar extracción').item.json.payload.locationId, contactId: $('Validar extracción').item.json.payload.contactId, conversationId: $('Validar extracción').item.json.conversationId || undefined, customer: { name: $('Validar extracción').item.json.payload.customer.name, phone: $('Validar extracción').item.json.payload.customer.phone }, reason: 'El panel no aceptó el pedido: ' + $json.error }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "71b16916-eb37-4389-8619-18539db1532f",
+      "name": "Pedir ayuda (app rechazó)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -14752,
+        4720
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($('Resultado').item.json) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "526c7445-1693-4d78-9fab-6283f5ff354c",
+      "name": "200 Registrado",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        -13744,
+        4560
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://services.leadconnectorhq.com/conversations/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Config').item.json.GHL_TOKEN }}"
+            },
+            {
+              "name": "Version",
+              "value": "2021-04-15"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ type: 'WhatsApp', contactId: $('Validar extracción').item.json.payload.contactId, message: $('Resultado').item.json.adjusted ? `✏️ Listo, ajustamos tu pedido ${$('Resultado').item.json.orderNumber}. Es el mismo pedido, no se creó uno nuevo. Te avisamos cuando salga.` : `✅ Recibimos tu pedido ${$('Resultado').item.json.orderNumber}. Ya lo estamos alistando; cuando esté listo te enviamos el total.` }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "081fdf80-e908-4651-af30-405b322ff359",
+      "name": "Confirmar al cliente",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -13952,
+        4464
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cc3400a9-cb8c-4e90-b387-54cdb799a68b",
+              "leftValue": "={{ $('Config').item.json.SEND_CONFIRMATION }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "32653ba3-8e50-44e4-bc9f-fc37ee7fbbee",
+      "name": "¿Enviar confirmación?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -14256,
+        4544
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "=https://services.leadconnectorhq.com/contacts/{{ $('Validar extracción').item.json.payload.contactId }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Config').item.json.GHL_TOKEN }}"
+            },
+            {
+              "name": "Version",
+              "value": "2021-07-28"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ (() => {\n  const cfg = $('Config').item.json;\n  const p = $('Validar extracción').item.json.payload;\n  const r = $('Resultado').item.json;\n  const fields = [\n    [cfg.CF_ULTIMO_PEDIDO_NUMERO, r.orderNumber],\n    [cfg.CF_ULTIMO_PEDIDO_ESTADO, 'nuevo'],\n    [cfg.CF_PEDIDO_RESUMEN, $('Validar extracción').item.json.summaryText],\n    [cfg.CF_CEDULA, p.customer.document],\n    [cfg.CF_METODO_PAGO, p.paymentMethod],\n    [cfg.CF_DIRECCION, p.delivery.type === 'domicilio' ? p.delivery.address : null],\n  ].filter(([key, value]) => key && value);\n  const body = { customFields: fields.map(([key, value]) => ({ key, field_value: value })) };\n  if (p.delivery.type === 'domicilio') body.address1 = p.delivery.address;\n  return JSON.stringify(body);\n})() }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "00ec4177-b8a9-40e6-927c-58323d1c49c0",
+      "name": "Guardar datos en el contacto GHL",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -14752,
+        4528
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "25377e9c-a2f9-45b7-a8b3-4fa06bc71b4b",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "8126ed87-e0c2-4baa-81e7-f19569261be2",
+      "name": "¿Registrado?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -14944,
+        4576
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = .first().json;\nconst status = response.statusCode;\nconst body = response.body || {};\nconst ok = status >= 200 && status < 300 && Boolean(body.order_number);\nreturn [{ json: {\n  ok,\n  status,\n  adjusted: ok && body.adjusted === true,\n  mode: body.adjusted ? 'updated' : 'created',\n  orderNumber: body.order_number || null,\n  duplicate: status === 409,\n  afterCutoff: false,\n  scheduledFor: null,\n  scheduledForLabel: null,\n  error: ok ? null : (body.error || `La app respondió `),\n} }];"
+      },
+      "id": "b58000d2-1604-461e-aeeb-63f7e610ae2f",
+      "name": "Resultado",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -15120,
+        4576
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ Config.item.json.APP_URL }}/api/webhooks/highlevel/retail-order/upsert",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Config').item.json.APP_INGEST_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ ...$('Validar extracción').item.json.payload, sourceEventId: $('Llave de idempotencia').item.json.sourceEventId }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "0bd17dc6-6320-4708-818e-64a856683593",
+      "name": "Crear pedido",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -15312,
+        4576
+      ]
+    },
+    {
+      "parameters": {
+        "type": "SHA256",
+        "value": "={{ $json.idempotencySeed }}",
+        "dataPropertyName": "sourceEventId"
+      },
+      "id": "a0ac8d75-b77a-4869-9c08-51960ea70771",
+      "name": "Llave de idempotencia",
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 1,
+      "position": [
+        -15536,
+        4576
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: false, error: 'extraction_failed', problem: $('Validar extracción').item.json.problem }) }}",
+        "options": {
+          "responseCode": 502
+        }
+      },
+      "id": "e2f22bde-71dc-49d5-948f-b6b3100660e6",
+      "name": "502 Extracción falló",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        -15184,
+        5040
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "03c839be-22f0-4115-9461-22766c27b57c",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "3135c0f8-97f2-4103-bbca-be7d5eda6ce7",
+      "name": "¿Pedido válido?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -15792,
+        4880
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $('Normalizar entrada').first().json;\nconst transcript = $('Contexto de audio').first().json;\nconst visual = $('Contexto visual').first().json;\nconst conversation = $('Buscar conversación GHL').first().json;\nconst conversationId = conversation?.body?.conversations?.[0]?.id || null;\n\nlet extracted = $input.first().json.output ?? null;\nlet problem = null;\nlet ignored = false;\nif (typeof extracted === 'string') {\n  try { extracted = JSON.parse(extracted); }\n  catch (error) { problem = 'El modelo principal no devolvió JSON válido'; }\n}\nif (transcript.readStatus !== 200) problem = `GHL respondió ${transcript.readStatus} al leer la conversación`;\n// Un nuevo llamado sin mensajes nuevos del cliente (repetido o de respaldo) no es un error.\nelse if (!transcript.inboundMessages) { problem = 'El cliente no ha escrito nada nuevo'; ignored = true; }\nif (!problem && transcript.imageUrls.length && visual.visualProblem) problem = visual.visualProblem;\nif (!problem && !extracted) problem = 'El modelo principal no devolvió un pedido válido';\nif (!problem && extracted && !extracted.ok) {\n  problem = extracted.error || 'La conversación de hoy no contiene un pedido';\n  // Con una nota de voz sin transcribir no se puede afirmar que no hay pedido: se pide ayuda.\n  if (transcript.audioProblem) problem = `${transcript.audioProblem}. ${problem}`;\n  else ignored = true;\n}\nconst rawOrderText = String(extracted?.rawOrderText || '').trim();\nconst numericValue = (value) => {\n  const compact = String(value).replace(/\\s/g, '');\n  if (/^\\d{1,3}(?:\\.\\d{3})+$/.test(compact)) return Number(compact.replace(/\\./g, ''));\n  if (/^\\d{1,3}(?:,\\d{3})+$/.test(compact)) return Number(compact.replace(/,/g, ''));\n  return Number(compact.replace(',', '.'));\n};\n// items es solo un índice operativo requerido por la app. El pedido real y completo es rawOrderText.\nconst items = rawOrderText.split(/\\r?\\n|;+/).map((line) => line.replace(/^\\s*(?:[-*•]|\\d+[.)])\\s*/, '').trim()).filter(Boolean).slice(0, 100).map((rawLine) => {\n  const rawText = rawLine.slice(0, 500);\n  const byAmount = rawLine.match(/^\\$?\\s*([\\d.,]+)\\s*(mil|k)?\\s*(?:pesos?)?\\s+de\\s+(.+)$/i);\n  if (byAmount) {\n    let amount = numericValue(byAmount[1]);\n    if (byAmount[2] && amount < 1000) amount *= 1000;\n    const monetary = Boolean(byAmount[2]) || amount >= 1000 || rawLine.startsWith('$');\n    if (monetary) return { name: byAmount[3].trim().slice(0, 160), quantity: amount, unit: 'COP', quantityKind: 'amount', rawText };\n  }\n  return { name: rawLine.slice(0, 160), quantity: 1, rawText };\n});\nif (!problem && !rawOrderText) problem = 'La extracción no produjo el texto completo del pedido';\nif (!problem && !items.length) problem = 'El texto del pedido no contiene líneas utilizables';\n\n// Con pedido abierto se anexa salvo que el cliente pida explícitamente otro pedido. Sin pedido\n// abierto siempre se crea uno nuevo. Si la app no respondió se conserva el ajuste anterior.\nconst orderAction = transcript.openOrder\n  ? (extracted?.action === 'nuevo' ? 'new' : 'update')\n  : (transcript.contextOk ? 'new' : 'update');\nconst notes = [extracted?.notes, transcript.audioProblem ? `⚠️ ${transcript.audioProblem}` : null]\n  .map((value) => String(value || '').trim()).filter(Boolean).join(' · ');\nconst name = String(extracted?.customer?.name || input.contactName || '').trim();\nconst phone = String(extracted?.customer?.phone || input.contactPhone || '').trim();\nconst address = String(extracted?.delivery?.address || input.contactAddress || '').trim();\nconst delivery = extracted?.delivery?.type === 'recogida' ? { type: 'recogida' } : { type: 'domicilio', ...(address ? { address } : {}) };\nreturn [{ json: {\n  valid: !problem,\n  ignored,\n  problem,\n  conversationId,\n  idempotencySeed: transcript.idempotencySeed,\n  summaryText: rawOrderText,\n  payload: {\n    locationId: input.locationId,\n    contactId: input.contactId,\n    conversationId: conversationId || undefined,\n    customer: { name: name || undefined, phone: phone || undefined, document: extracted?.customer?.document || input.contactDocument || undefined },\n    delivery,\n    paymentMethod: extracted?.paymentMethod || undefined,\n    items,\n    rawOrderText,\n    notes: notes || undefined,\n    orderAction,\n    contextUntil: transcript.contextUntil || undefined,\n  },\n} }];"
+      },
+      "id": "690544d4-b5c9-4e4f-ae81-aae3fafc1b3d",
+      "name": "Validar extracción",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -15984,
+        4880
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Solo se leen los mensajes NUEVOS: del día actual en America/Bogota y posteriores a `since`.\n// `since` lo calcula la app: con un pedido abierto hoy (sin despachar) es el último mensaje que ya\n// se leyó en ese pedido; sin pedido abierto, lo más reciente entre las 00:00 y el último despacho.\n// Así nada ya registrado o despachado se vuelve a leer ni a sumar.\n// Las notas de voz quedan como [AUDIO n] en su lugar cronológico y se transcriben después.\nconst input = $('Normalizar entrada').first().json;\nconst response = $input.first().json;\nconst context = $('Contexto del pedido').first().json;\n// Si la app no respondió se lee todo el día y se ajusta el pedido abierto, como antes.\nconst contextOk = context.statusCode >= 200 && context.statusCode < 300;\nconst openOrder = contextOk ? context.body?.openOrder || null : null;\nconst since = contextOk && context.body?.since ? new Date(context.body.since) : null;\nconst raw = response.body?.messages;\nconst messages = Array.isArray(raw) ? raw : Array.isArray(raw?.messages) ? raw.messages : [];\nconst timeZone = 'America/Bogota';\nconst dayKey = (date) => {\n  const parts = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(date);\n  const values = Object.fromEntries(parts.filter((part) => part.type !== 'literal').map((part) => [part.type, part.value]));\n  return `${values.year}-${values.month}-${values.day}`;\n};\nconst parseDate = (value) => {\n  if (value === undefined || value === null || value === '') return null;\n  const numeric = Number(value);\n  const date = Number.isFinite(numeric) ? new Date(numeric < 1e12 ? numeric * 1000 : numeric) : new Date(value);\n  return Number.isNaN(date.getTime()) ? null : date;\n};\nconst AUDIO_EXT = /\\.(?:ogg|oga|opus|mp3|mpga|mpeg|m4a|wav|webm|aac|amr)(?:$|[?#])/i;\nconst IMAGE_EXT = /\\.(?:jpe?g|png|gif|webp|heic)(?:$|[?#])/i;\nconst classify = (message) => {\n  const urls = Array.isArray(message.attachments) ? message.attachments.filter((value) => typeof value === 'string') : [];\n  const contentType = String(message.contentType || '').toLowerCase();\n  const kind = String(message.messageType || message.type || '').toLowerCase();\n  const audioMessage = contentType.startsWith('audio/') || /audio|voice|ptt/.test(kind);\n  const imageMessage = contentType.startsWith('image/') || /image|photo/.test(kind);\n  return urls.map((url) => ({\n    url,\n    kind: audioMessage || AUDIO_EXT.test(url) ? 'audio' : imageMessage || IMAGE_EXT.test(url) ? 'image' : 'other',\n  }));\n};\n\nconst today = dayKey(new Date());\nconst current = messages\n  .map((message) => ({ ...message, parsedDate: parseDate(message.dateAdded || message.createdAt || message.dateUpdated) }))\n  .filter((message) => message.parsedDate && dayKey(message.parsedDate) === today)\n  .filter((message) => !since || message.parsedDate > since)\n  .sort((a, b) => a.parsedDate - b.parsedDate);\nconst turns = [];\nconst images = [];\nconst audios = [];\nfor (const message of current) {\n  const role = message.direction === 'inbound' ? 'CLIENTE' : 'FÉNIX J.A.';\n  const inbound = message.direction === 'inbound';\n  const body = typeof message.body === 'string' ? message.body.trim() : '';\n  if (body) turns.push(`${role}: ${body}`);\n  for (const attachment of classify(message)) {\n    if (attachment.kind === 'image') {\n      turns.push(`${role}: [IMAGEN ADJUNTA]`);\n      if (inbound) images.push(attachment.url);\n    } else if (attachment.kind === 'audio' && inbound) {\n      const key = `AUDIO ${audios.length + 1}`;\n      audios.push({ key, url: attachment.url, messageId: message.id || null });\n      turns.push(`${role}: [${key}]`);\n    } else if (attachment.kind === 'audio') {\n      turns.push(`${role}: [NOTA DE VOZ DEL EQUIPO]`);\n    } else {\n      turns.push(`${role}: [ARCHIVO ADJUNTO]`);\n    }\n  }\n}\nconst inboundMessages = current.filter((message) => message.direction === 'inbound');\nconst lastInbound = inboundMessages.at(-1);\n\nreturn [{ json: {\n  transcript: turns.join('\\n'),\n  turns: turns.length,\n  messagesToday: current.length,\n  imageUrls: [...new Set(images)].slice(-10),\n  audios: audios.slice(-10),\n  readStatus: response.statusCode,\n  bogotaDay: today,\n  inboundMessages: inboundMessages.length,\n  contextOk,\n  openOrder,\n  // El siguiente llamado empieza después del último mensaje leído aquí.\n  contextUntil: current.at(-1)?.parsedDate?.toISOString() || null,\n  idempotencySeed: `${input.contactId}|${today}|${lastInbound?.id || lastInbound?.parsedDate?.toISOString() || \"sin-mensaje\"}`,\n} }];"
+      },
+      "id": "13b871bb-8d9b-419c-910c-74c1a0447149",
+      "name": "Armar transcripción",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -18144,
+        4864
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://services.leadconnectorhq.com/conversations/{{ $json.body?.conversations?.[0]?.id || 'sin-conversacion' }}/messages",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "limit",
+              "value": "={{ $('Config').item.json.MESSAGE_LIMIT }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Config').item.json.GHL_TOKEN }}"
+            },
+            {
+              "name": "Version",
+              "value": "2021-04-15"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "97160ac1-81e7-4a18-a62b-0f499f27ac56",
+      "name": "Leer últimos mensajes",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -18336,
+        4864
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://services.leadconnectorhq.com/conversations/search",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "locationId",
+              "value": "={{ $('Normalizar entrada').item.json.locationId }}"
+            },
+            {
+              "name": "contactId",
+              "value": "={{ $('Normalizar entrada').item.json.contactId }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Config').item.json.GHL_TOKEN }}"
+            },
+            {
+              "name": "Version",
+              "value": "2021-04-15"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "e8e8677c-fe65-4935-9eb5-011cbbdb8fc4",
+      "name": "Buscar conversación GHL",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -18560,
+        4864
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// La tool de GHL solo ordena procesar; crear o actualizar lo decide la app.\nconst webhook = $('Webhook').first().json;\nconst body = webhook.body || {};\nconst rawCustom = body.customData || body.custom_data || {};\nlet custom = rawCustom;\nif (typeof rawCustom === 'string') {\n  try { custom = JSON.parse(rawCustom); } catch (error) { custom = {}; }\n}\nconst clean = (value) => value === undefined || value === null ? '' : String(value).trim();\nconst pick = (...values) => values.map(clean).find(Boolean) || '';\nconst normalized = {};\nfor (const source of [body, custom]) {\n  if (!source || typeof source !== 'object') continue;\n  for (const [key, value] of Object.entries(source)) {\n    normalized[key.toLowerCase().replace(/[\\s_]+/g, ' ').trim()] = value;\n  }\n}\nconst field = (...names) => pick(...names.map((name) => normalized[name]));\n\nreturn [{\n  json: {\n    locationId: pick(body.locationId, custom.locationId, body.location?.id, body.location_id, custom.location_id),\n    contactId: pick(body.contactId, custom.contactId, body.contact_id, body.contact?.id, custom.contact_id),\n    contactName: pick(body.contactName, custom.contactName, body.full_name, custom.full_name, `${clean(body.first_name)} ${clean(body.last_name)}`),\n    contactPhone: pick(body.contactPhone, custom.contactPhone, body.phone, custom.phone),\n    contactDocument: pick(body.contactDocument, custom.contactDocument, field('documento de identidad', 'cedula', 'document')),\n    contactAddress: pick(body.contactAddress, custom.contactAddress, field('direccion de envio', 'address1'), body.full_address),\n  },\n}];"
+      },
+      "id": "6318b0b9-7f18-4ca9-9347-40df6f0d38c0",
+      "name": "Normalizar entrada",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -18912,
+        4864
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: false, error: \"unauthorized\" }) }}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "id": "465e44de-15b6-4a5d-90e4-77708ed72e63",
+      "name": "401 No autorizado",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        -18912,
+        5104
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "75f280d0-e66c-47f0-b9fb-608a4a4b4990",
+              "leftValue": "={{ Webhook.item.json.headers['x-fenix-secret'] }}",
+              "rightValue": "={{ $('Config').item.json.INBOUND_SECRET }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "fe100bf6-2492-4575-a837-25c69044a847",
+      "name": "¿Secreto válido?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -19136,
+        4880
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "fenix-minoristas-pedido",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "135d0a6d-a983-46ed-a4f2-e87b24351ce7",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -19584,
+        4880
+      ],
+      "webhookId": "cfe38ca3-c8e6-4f5a-a497-2604c32a02a4"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "8a818fe9-724e-4648-a586-4927da27a58f",
+              "leftValue": "={{ $('Resultado').item.json.afterCutoff }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "31808297-b81b-4a97-887a-33bf3ce16d75",
+      "name": "¿Para otro día?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -14560,
+        4528
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://services.leadconnectorhq.com/conversations/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Config').item.json.GHL_TOKEN }}"
+            },
+            {
+              "name": "Version",
+              "value": "2021-04-15"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ type: 'WhatsApp', contactId: $('Validar extracción').item.json.payload.contactId, message: `🌙 Recibimos tu pedido ${$('Resultado').item.json.orderNumber}. Como llegó después de nuestro horario de despacho, queda programado para el ${$('Resultado').item.json.scheduledForLabel}. Ese día te enviamos el total y te avisamos cuando salga` }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "49f8d22c-2eeb-4605-8d01-ba104a9b9795",
+      "name": "Avisar día de entrega",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -14128,
+        4272
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "4a9407fd-2c93-41f8-ae1f-568b35e49889",
+              "name": "INBOUND_SECRET",
+              "value": "REEMPLAZAR_CON_SECRETO_ENTRADA_N8N",
+              "type": "string"
+            },
+            {
+              "id": "164c37f8-f674-463c-a875-1d8dfcb7374a",
+              "name": "GHL_TOKEN",
+              "value": "REEMPLAZAR_CON_TOKEN_PRIVADO_GHL_FENIX",
+              "type": "string"
+            },
+            {
+              "id": "c6a518ef-3070-4b77-9e8c-afd860cba6d9",
+              "name": "APP_URL",
+              "value": "https://fenix-carniceria.vercel.app",
+              "type": "string"
+            },
+            {
+              "id": "90464881-e774-45db-90db-eb38ca48f935",
+              "name": "APP_INGEST_SECRET",
+              "value": "REEMPLAZAR_CON_ORDERS_INGEST_SECRET",
+              "type": "string"
+            },
+            {
+              "id": "74f61bc5-0003-4624-81e4-1d885e4bd63c",
+              "name": "SEND_CONFIRMATION",
+              "value": "false",
+              "type": "string"
+            },
+            {
+              "id": "9fe723bd-8bc5-44df-987e-ae6ccf01d4d2",
+              "name": "OPENAI_MODEL",
+              "value": "gpt-4.1-mini",
+              "type": "string"
+            },
+            {
+              "id": "5b0f6c3e-7a51-4c8e-9b7e-0d4f5a2c9e11",
+              "name": "OPENAI_TRANSCRIBE_MODEL",
+              "value": "gpt-4o-transcribe",
+              "type": "string"
+            },
+            {
+              "id": "728f93c8-317b-4c1c-be20-24c7152d95e6",
+              "name": "MESSAGE_LIMIT",
+              "value": "30",
+              "type": "string"
+            },
+            {
+              "id": "9d6d6676-8130-41ea-b52c-9e0bc0955715",
+              "name": "CF_CEDULA",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "af9049eb-2f2f-4d60-b5c5-7f8ad0bf974a",
+              "name": "CF_DIRECCION",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "1c92e647-badc-4414-b5a0-12e90a3843aa",
+              "name": "CF_METODO_PAGO",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "86958b5f-359c-4df5-ad45-1e26a94338cb",
+              "name": "CF_ULTIMO_PEDIDO_NUMERO",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "54f488aa-be45-4a88-a3a9-6403c8c87a3d",
+              "name": "CF_ULTIMO_PEDIDO_ESTADO",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "7fc7c78d-d789-4791-b2c0-411579d95b14",
+              "name": "CF_PEDIDO_RESUMEN",
+              "value": "",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "379a41d2-571b-48b2-8e33-30acb180fd8f",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -19376,
+        4880
+      ],
+      "notesInFlow": true,
+      "notes": "Completa estos valores antes de activar el workflow."
+    }
+  ],
+  "connections": {
+    "Contexto del pedido": {
+      "main": [
+        [
+          {
+            "node": "Buscar conversación GHL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pedir ayuda (extracción falló)": {
+      "main": [
+        [
+          {
+            "node": "502 Extracción falló",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Contexto de audio": {
+      "main": [
+        [
+          {
+            "node": "¿Hay imágenes?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transcribir audio": {
+      "main": [
+        [
+          {
+            "node": "Contexto de audio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Nombrar archivo de audio": {
+      "main": [
+        [
+          {
+            "node": "Transcribir audio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Descargar audio": {
+      "main": [
+        [
+          {
+            "node": "Nombrar archivo de audio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Separar audios": {
+      "main": [
+        [
+          {
+            "node": "Descargar audio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Hay audios?": {
+      "main": [
+        [
+          {
+            "node": "Separar audios",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Contexto de audio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Hay mensajes nuevos?": {
+      "main": [
+        [
+          {
+            "node": "¿Hay audios?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "200 Sin mensajes nuevos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Mensaje sin pedido?": {
+      "main": [
+        [
+          {
+            "node": "200 Sin pedido para registrar",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Pedir ayuda (extracción falló)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Contexto visual": {
+      "main": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extraer texto de imágenes": {
+      "main": [
+        [
+          {
+            "node": "Contexto visual",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Hay imágenes?": {
+      "main": [
+        [
+          {
+            "node": "Extraer texto de imágenes",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Contexto visual",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Basic LLM Chain": {
+      "main": [
+        [
+          {
+            "node": "Validar extracción",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pedir ayuda (app rechazó)": {
+      "main": [
+        [
+          {
+            "node": "502 No registrado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Confirmar al cliente": {
+      "main": [
+        [
+          {
+            "node": "200 Registrado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Enviar confirmación?": {
+      "main": [
+        [
+          {
+            "node": "Confirmar al cliente",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "200 Registrado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guardar datos en el contacto GHL": {
+      "main": [
+        [
+          {
+            "node": "¿Para otro día?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Registrado?": {
+      "main": [
+        [
+          {
+            "node": "Guardar datos en el contacto GHL",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Pedir ayuda (app rechazó)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resultado": {
+      "main": [
+        [
+          {
+            "node": "¿Registrado?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Crear pedido": {
+      "main": [
+        [
+          {
+            "node": "Resultado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Llave de idempotencia": {
+      "main": [
+        [
+          {
+            "node": "Crear pedido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Pedido válido?": {
+      "main": [
+        [
+          {
+            "node": "Llave de idempotencia",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "¿Mensaje sin pedido?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar extracción": {
+      "main": [
+        [
+          {
+            "node": "¿Pedido válido?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Armar transcripción": {
+      "main": [
+        [
+          {
+            "node": "¿Hay mensajes nuevos?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Leer últimos mensajes": {
+      "main": [
+        [
+          {
+            "node": "Armar transcripción",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar conversación GHL": {
+      "main": [
+        [
+          {
+            "node": "Leer últimos mensajes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalizar entrada": {
+      "main": [
+        [
+          {
+            "node": "Contexto del pedido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Secreto válido?": {
+      "main": [
+        [
+          {
+            "node": "Normalizar entrada",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "401 No autorizado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Para otro día?": {
+      "main": [
+        [
+          {
+            "node": "Avisar día de entrega",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "¿Enviar confirmación?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Avisar día de entrega": {
+      "main": [
+        [
+          {
+            "node": "200 Registrado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "¿Secreto válido?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "cf108f1de401626491bd79f9736f4ba080294f2ae3247d690d1d48c88c98a352"
+  },
+  "name": "Fénix · Minoristas · Pedido IA → Panel"
+}
