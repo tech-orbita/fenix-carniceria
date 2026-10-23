@@ -3,6 +3,7 @@ import { timingSafeEqual } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { syncRetailPipeline } from "@/lib/orders/highlevel-pipeline";
 
 type RetailAgentItem = {
   product_name?: string;
@@ -37,7 +38,16 @@ type RetailAgentPayload = {
   items?: RetailAgentItem[];
 };
 
-const OPEN_STATUSES = ["needs_review", "received", "quoted", "confirmed", "preparing"];
+type RetailHelpPayload = {
+  locationId?: string;
+  contactId?: string;
+  conversationId?: string;
+  sourceEventId?: string;
+  reason?: string;
+  customer?: { name?: string; phone?: string };
+};
+
+const OPEN_STATUSES = ["needs_review", "received", "quoted", "confirmed", "preparing", "incident"];
 
 export function authorizedRetail(request: NextRequest) {
   const configured = process.env.RETAIL_ORDERS_INGEST_SECRET || process.env.ORDERS_INGEST_SECRET;
@@ -178,7 +188,11 @@ export async function upsertRetailOrder(value: unknown) {
   if (customerError || !customer) return NextResponse.json({ error: "Could not save customer" }, { status: 500 });
 
   const openOrder = body.orderAction === "new" ? null : await findOpenOrder(customer.id);
+  const previousPayload = openOrder?.source_payload && typeof openOrder.source_payload === "object"
+    ? openOrder.source_payload as Record<string, unknown>
+    : {};
   const sourcePayload = {
+    ...previousPayload,
     source: "agent",
     locationId: body.locationId ?? null,
     contactId: body.contactId ?? null,
@@ -236,5 +250,65 @@ export async function upsertRetailOrder(value: unknown) {
     await supabase.from("orders").delete().eq("id", order.id);
     return NextResponse.json({ error: "Could not save order items" }, { status: 500 });
   }
-  return NextResponse.json({ ...order, adjusted: false }, { status: 201 });
+  const pipeline = await syncRetailPipeline(
+    { contactId: body.contactId, locationId: body.locationId, conversationId: body.conversationId },
+    "order_placed",
+    `${name} · ${order.order_number}`,
+    0,
+  );
+  return NextResponse.json({ ...order, adjusted: false, pipeline_synced: pipeline.ok, pipeline_message: pipeline.ok ? undefined : pipeline.message }, { status: 201 });
+}
+
+export async function flagRetailHelpRequest(value: unknown) {
+  if (!value || typeof value !== "object") return NextResponse.json({ error: "Invalid help payload" }, { status: 422 });
+  const body = value as RetailHelpPayload;
+  const phone = cleanPhone(body.customer?.phone);
+  const reason = String(body.reason ?? "El cliente requiere atención humana.").trim().slice(0, 2_000);
+  if (!phone || !reason) return NextResponse.json({ error: "Phone and reason are required" }, { status: 422 });
+
+  const supabase = createAdminClient();
+  const { data: customer, error: customerError } = await supabase.from("customers").upsert({
+    customer_type: "retail",
+    name: String(body.customer?.name ?? "Cliente WhatsApp").trim() || "Cliente WhatsApp",
+    phone,
+  }, { onConflict: "customer_type,phone" }).select("id,name").single();
+  if (customerError || !customer) return NextResponse.json({ error: "Could not save customer" }, { status: 500 });
+
+  const openOrder = await findOpenOrder(customer.id);
+  const sourcePayload = {
+    source: "agent",
+    locationId: body.locationId ?? null,
+    contactId: body.contactId ?? null,
+    conversationId: body.conversationId ?? null,
+    sourceEventId: body.sourceEventId ?? null,
+    helpReason: reason,
+  };
+  const result = openOrder
+    ? await supabase.from("orders").update({ status: "incident", notes: reason, source_payload: sourcePayload }).eq("id", openOrder.id).select("id,order_number").single()
+    : await supabase.from("orders").insert({
+        customer_type: "retail",
+        customer_id: customer.id,
+        source: "agent",
+        source_reference: body.sourceEventId ? `ghl:retail-help:${body.sourceEventId}` : null,
+        source_payload: sourcePayload,
+        status: "incident",
+        fulfillment_type: "delivery",
+        notes: reason,
+      }).select("id,order_number").single();
+  if (result.error || !result.data) return NextResponse.json({ error: "Could not register help request" }, { status: 500 });
+
+  const pipeline = await syncRetailPipeline(
+    { contactId: body.contactId, locationId: body.locationId, conversationId: body.conversationId },
+    "help",
+    `${customer.name} · ${result.data.order_number}`,
+    0,
+  );
+  return NextResponse.json({
+    ok: true,
+    id: result.data.id,
+    order_number: result.data.order_number,
+    adjusted: Boolean(openOrder),
+    pipeline_synced: pipeline.ok,
+    pipeline_message: pipeline.ok ? undefined : pipeline.message,
+  }, { status: openOrder ? 200 : 201 });
 }

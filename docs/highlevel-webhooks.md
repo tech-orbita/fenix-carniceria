@@ -51,3 +51,13 @@ El token privado debe incluir `opportunities.readonly`, `opportunities.write` y,
 - La pestaña **Cartera** sincroniza **Pendiente por Pago** y **Pago Realizado**.
 - Los fallos de HighLevel no revierten el pedido: quedan registrados en los logs para reintento/configuración.
 
+## Pipeline Minoristas
+
+La app busca el pipeline `Minoristas` y estas etapas por nombre: `Realizo Pedido`, `En Preparacion`, `Despachados`, `Requiere ayuda`, `Pendiente por Pago` y `Pago`. Los IDs se pueden fijar con `GHL_RETAIL_PIPELINE_ID` y las variables `GHL_RETAIL_STAGE_*_ID` de `.env.example`.
+
+- Cuando el agente registra un pedido nuevo, la oportunidad se crea o mueve a **Realizo Pedido**.
+- Los botones **En preparación**, **Despachados** y **Requiere ayuda** mueven la oportunidad a la etapa equivalente.
+- **Marcar como pagado** mueve a **Pago** y **Marcar pendiente** mueve a **Pendiente por Pago**.
+- Las solicitudes de atención del agente llegan a `/api/webhooks/ghl/help-requests`, aparecen en **Requiere ayuda** y mueven allí la oportunidad.
+- Si la actualización local se guarda pero HighLevel falla, el panel muestra la advertencia sin perder el cambio del pedido.
+

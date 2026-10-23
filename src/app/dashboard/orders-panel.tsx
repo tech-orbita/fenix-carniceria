@@ -416,7 +416,7 @@ export function OrdersPanel({ initialOrders, loadError, viewer }: { initialOrder
     const status = phaseStatus[phase]; setPendingId(order.id); setNotice(undefined);
     const result = await updateOrderStatus(order.id, status); if (!result.ok) { setNotice(result.message); setPendingId(undefined); return; }
     setOrders((current) => current.map((item) => item.id === order.id ? { ...item, status } : item));
-    setNotice(`${order.orderNumber} pasó a “${phaseLabels[phase]}”.`); setPendingId(undefined);
+    setNotice(result.message.includes("pipeline") ? result.message : `${order.orderNumber} pasó a “${phaseLabels[phase]}” y se sincronizó con el pipeline.`); setPendingId(undefined);
   };
 
   const saveOrder = async (order: Order, details: EditableOrderDetails) => {
@@ -442,7 +442,7 @@ export function OrdersPanel({ initialOrders, loadError, viewer }: { initialOrder
     const result = await updateOrderPaymentStatus(order.id, paymentStatus);
     if (!result.ok) { setNotice(result.message); setPendingId(undefined); return; }
     setOrders((current) => current.map((item) => item.id === order.id ? { ...item, paymentStatus } : item));
-    setNotice(`${order.orderNumber} quedó ${paymentStatus === "paid" ? "pagado" : "pendiente por pago"}.`);
+    setNotice(result.message);
     setPendingId(undefined);
   };
 

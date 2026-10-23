@@ -5,8 +5,8 @@ import { revalidatePath } from "next/cache";
 import { requireViewer } from "@/lib/auth/viewer";
 import { createClient } from "@/lib/supabase/server";
 import { catalogProductFor, normalizeProductName, toKilograms } from "@/lib/orders/product-parser";
-import { sendWholesalePaymentSummary, syncWholesalePipeline } from "@/lib/orders/highlevel-pipeline";
-import type { HighLevelContext, WholesalePipelineStage } from "@/lib/orders/highlevel-pipeline";
+import { sendWholesalePaymentSummary, syncOrderPipeline, syncWholesalePipeline } from "@/lib/orders/highlevel-pipeline";
+import type { HighLevelContext, OrderPipelineStage } from "@/lib/orders/highlevel-pipeline";
 
 import type { OrderStatus } from "./types";
 
@@ -23,7 +23,7 @@ function highLevelContext(sourcePayload: unknown): HighLevelContext {
   return { contactId: value("contact_id") ?? value("contactId"), locationId: value("location_id") ?? value("locationId"), conversationId: value("conversation_id") ?? value("conversationId") };
 }
 
-function pipelineStageFor(status: OrderStatus): WholesalePipelineStage | undefined {
+function pipelineStageFor(status: OrderStatus): OrderPipelineStage | undefined {
   if (["received", "quoted", "confirmed"].includes(status)) return "order_placed";
   if (["preparing", "ready"].includes(status)) return "preparing";
   if (["dispatched", "delivered"].includes(status)) return "dispatched";
@@ -61,19 +61,22 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus) {
     return { ok: false, message: "No se pudo actualizar el pedido." };
   }
 
-  const pipelineStage = data.customer_type === "wholesale" ? pipelineStageFor(status) : undefined;
+  const pipelineStage = pipelineStageFor(status);
+  let message = "Estado actualizado.";
   if (pipelineStage) {
     const customer = Array.isArray(data.customers) ? data.customers[0] : data.customers;
-    await syncWholesalePipeline(
+    const synced = await syncOrderPipeline(
       highLevelContext(data.source_payload),
+      data.customer_type,
       pipelineStage,
       `${customer?.business_name || customer?.name || "Cliente"} · ${data.order_number}`,
       Number(data.total),
     );
+    if (!synced.ok) message = `Estado actualizado, pero no se pudo mover el pipeline: ${synced.message}`;
   }
 
   revalidatePath("/dashboard");
-  return { ok: true, message: "Estado actualizado." };
+  return { ok: true, message };
 }
 
 export async function updateOrderPaymentStatus(
@@ -90,14 +93,29 @@ export async function updateOrderPaymentStatus(
     .update({ payment_status: paymentStatus })
     .eq("id", Number(orderId))
     .eq("customer_type", "retail")
-    .select("id");
+    .select("id,order_number,source_payload,total,customers(name,business_name)")
+    .maybeSingle();
 
-  if (error || !data?.length) {
+  if (error || !data) {
     return { ok: false, message: "No se pudo actualizar el estado de pago." };
   }
 
+  const customer = Array.isArray(data.customers) ? data.customers[0] : data.customers;
+  const synced = await syncOrderPipeline(
+    highLevelContext(data.source_payload),
+    "retail",
+    paymentStatus === "paid" ? "paid" : "payment_pending",
+    `${customer?.business_name || customer?.name || "Cliente"} · ${data.order_number}`,
+    Number(data.total),
+  );
+
   revalidatePath("/dashboard");
-  return { ok: true, message: "Estado de pago actualizado." };
+  return {
+    ok: true,
+    message: synced.ok
+      ? `Estado de pago actualizado y pipeline movido a ${paymentStatus === "paid" ? "Pago" : "Pendiente por Pago"}.`
+      : `Estado de pago actualizado, pero no se pudo mover el pipeline: ${synced.message}`,
+  };
 }
 
 export async function scheduleWholesaleOrder(orderId: string, deliveryDay: string) {

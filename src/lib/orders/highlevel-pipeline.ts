@@ -23,13 +23,16 @@ export type WholesalePipelineStage =
   | "payment_pending"
   | "paid";
 
+export type PipelineSegment = "wholesale" | "retail";
+export type OrderPipelineStage = WholesalePipelineStage;
+
 const stageNames: Record<WholesalePipelineStage, string[]> = {
   order_placed: ["realizo pedido", "pedido realizado"],
   preparing: ["en preparacion"],
   dispatched: ["despachados", "despachado"],
   help: ["requiere ayuda"],
   payment_pending: ["pendiente por pago"],
-  paid: ["pago realizado", "pagado"],
+  paid: ["pago realizado", "pagado", "pago"],
 };
 
 const pipelineCache = new Map<string, { pipeline: Pipeline; expiresAt: number }>();
@@ -62,9 +65,15 @@ async function ghlFetch<T>(path: string, token: string, init?: RequestInit): Pro
   return response.json() as Promise<T>;
 }
 
-async function wholesalePipeline(locationId: string, token: string) {
-  const configuredId = process.env.GHL_WHOLESALE_PIPELINE_ID?.trim();
-  const cacheKey = `${locationId}:${configuredId ?? "Mayoristas"}`;
+const pipelineNames: Record<PipelineSegment, string> = {
+  wholesale: "Mayoristas",
+  retail: "Minoristas",
+};
+
+async function orderPipeline(locationId: string, token: string, segment: PipelineSegment) {
+  const configuredId = process.env[segment === "wholesale" ? "GHL_WHOLESALE_PIPELINE_ID" : "GHL_RETAIL_PIPELINE_ID"]?.trim();
+  const expectedName = pipelineNames[segment];
+  const cacheKey = `${locationId}:${configuredId ?? expectedName}`;
   const cached = pipelineCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) return cached.pipeline;
 
@@ -74,8 +83,8 @@ async function wholesalePipeline(locationId: string, token: string) {
   );
   let pipeline = (result.pipelines ?? []).find((candidate) => configuredId
     ? candidate.id === configuredId
-    : normalize(candidate.name) === "mayoristas");
-  if (!pipeline) throw new Error("No se encontró el pipeline Mayoristas");
+    : normalize(candidate.name) === normalize(expectedName));
+  if (!pipeline) throw new Error(`No se encontró el pipeline ${expectedName}`);
   if (!pipeline.stages?.length) {
     pipeline = await ghlFetch<Pipeline>(`/opportunities/pipelines/${encodeURIComponent(pipeline.id)}`, token);
   }
@@ -83,7 +92,7 @@ async function wholesalePipeline(locationId: string, token: string) {
   return pipeline;
 }
 
-function configuredStageId(stage: WholesalePipelineStage) {
+function configuredStageId(segment: PipelineSegment, stage: OrderPipelineStage) {
   const keys: Record<WholesalePipelineStage, string> = {
     order_placed: "GHL_STAGE_ORDER_PLACED_ID",
     preparing: "GHL_STAGE_PREPARING_ID",
@@ -92,12 +101,21 @@ function configuredStageId(stage: WholesalePipelineStage) {
     payment_pending: "GHL_STAGE_PAYMENT_PENDING_ID",
     paid: "GHL_STAGE_PAID_ID",
   };
-  return process.env[keys[stage]]?.trim();
+  const retailKeys: Record<OrderPipelineStage, string> = {
+    order_placed: "GHL_RETAIL_STAGE_ORDER_PLACED_ID",
+    preparing: "GHL_RETAIL_STAGE_PREPARING_ID",
+    dispatched: "GHL_RETAIL_STAGE_DISPATCHED_ID",
+    help: "GHL_RETAIL_STAGE_HELP_ID",
+    payment_pending: "GHL_RETAIL_STAGE_PAYMENT_PENDING_ID",
+    paid: "GHL_RETAIL_STAGE_PAID_ID",
+  };
+  return process.env[segment === "wholesale" ? keys[stage] : retailKeys[stage]]?.trim();
 }
 
-export async function syncWholesalePipeline(
+export async function syncOrderPipeline(
   context: HighLevelContext,
-  stage: WholesalePipelineStage,
+  segment: PipelineSegment,
+  stage: OrderPipelineStage,
   opportunityName: string,
   monetaryValue?: number,
 ) {
@@ -105,8 +123,8 @@ export async function syncWholesalePipeline(
   if (!config) return { ok: false as const, skipped: true as const, message: "Integración de HighLevel sin configurar o sin contactId." };
 
   try {
-    const pipeline = await wholesalePipeline(config.locationId, config.token);
-    const stageId = configuredStageId(stage) ?? pipeline.stages?.find((candidate) =>
+    const pipeline = await orderPipeline(config.locationId, config.token, segment);
+    const stageId = configuredStageId(segment, stage) ?? pipeline.stages?.find((candidate) =>
       stageNames[stage].includes(normalize(candidate.name)),
     )?.id;
     if (!stageId) throw new Error(`No se encontró la etapa ${stageNames[stage][0]}`);
@@ -141,11 +159,30 @@ export async function syncWholesalePipeline(
     return { ok: true as const, skipped: false as const };
   } catch (error) {
     console.error("[highlevel-pipeline] No se pudo sincronizar", {
+      segment,
       stage,
       message: error instanceof Error ? error.message : "Error desconocido",
     });
     return { ok: false as const, skipped: false as const, message: error instanceof Error ? error.message : "No se pudo sincronizar HighLevel." };
   }
+}
+
+export function syncWholesalePipeline(
+  context: HighLevelContext,
+  stage: WholesalePipelineStage,
+  opportunityName: string,
+  monetaryValue?: number,
+) {
+  return syncOrderPipeline(context, "wholesale", stage, opportunityName, monetaryValue);
+}
+
+export function syncRetailPipeline(
+  context: HighLevelContext,
+  stage: OrderPipelineStage,
+  opportunityName: string,
+  monetaryValue?: number,
+) {
+  return syncOrderPipeline(context, "retail", stage, opportunityName, monetaryValue);
 }
 
 export async function sendWholesalePaymentSummary(context: HighLevelContext, customer: string, orderNumber: string, total: number) {
