@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 
+import { toKilograms } from "@/lib/orders/product-parser";
+
 import { addDays, bogotaDay, dateTime, dayLabel, Icon, isPaid, money, orderTotal, phaseForStatus, phaseLabels, phaseOrder, whatsappUrl } from "./panel-shared";
 import type { OperationalPhase } from "./panel-shared";
 import type { Order } from "./types";
@@ -202,13 +204,16 @@ function EditOrderForm({ order, saving, onCancel, onSave }: { order: Order; savi
     phone: order.phone,
     address: order.address,
     notes: order.notes ?? "",
-    items: order.items.map((item) => ({
-      id: item.id,
-      productName: item.productName,
-      quantity: itemQuantity(item),
-      unit: item.unit,
-      preparation: item.preparation ?? "",
-    })),
+    items: order.items.map((item) => {
+      const normalized = toKilograms(itemQuantity(item), item.unit);
+      return {
+        id: item.id,
+        productName: item.productName,
+        quantity: normalized.quantity,
+        unit: "kg",
+        preparation: item.preparation ?? "",
+      };
+    }),
   });
   const updateItem = (index: number, values: Partial<EditableOrderDetails["items"][number]>) => {
     setDetails((current) => ({ ...current, items: current.items.map((item, itemIndex) => itemIndex === index ? { ...item, ...values } : item) }));
@@ -228,7 +233,7 @@ function EditOrderForm({ order, saving, onCancel, onSave }: { order: Order; savi
         {details.items.map((item, index) => <div className="rt-edit-row" key={item.id}>
           <label>Producto<input onChange={(event) => updateItem(index, { productName: event.target.value })} required value={item.productName} /></label>
           <label>Cantidad<input min="0.001" onChange={(event) => updateItem(index, { quantity: Number(event.target.value) })} required step="0.001" type="number" value={item.quantity} /></label>
-          <label>Unidad<input onChange={(event) => updateItem(index, { unit: event.target.value })} required value={item.unit} /></label>
+          <label>Unidad<input aria-label="Unidad fija en kilogramos" readOnly value="kg" /></label>
           <label>Preparación<input onChange={(event) => updateItem(index, { preparation: event.target.value })} placeholder="Sin indicaciones" value={item.preparation} /></label>
         </div>)}
       </fieldset>

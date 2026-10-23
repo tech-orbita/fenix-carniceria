@@ -4,16 +4,10 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { syncRetailPipeline } from "@/lib/orders/highlevel-pipeline";
+import { normalizeRetailItems, requiresRetailHelp } from "@/lib/orders/retail-normalization";
+import type { RetailCatalogProduct, RetailInputItem } from "@/lib/orders/retail-normalization";
 
-type RetailAgentItem = {
-  product_name?: string;
-  name?: string;
-  quantity?: number;
-  unit?: string;
-  preparation?: string;
-  notes?: string;
-  rawText?: string;
-};
+type RetailAgentItem = RetailInputItem;
 
 type RetailAgentPayload = {
   locationId?: string;
@@ -82,27 +76,23 @@ function paymentMethod(value?: string): "cash" | "transfer" | "credit" | "other"
   return "other";
 }
 
-function normalizeItems(payload: RetailAgentPayload) {
-  const supplied = Array.isArray(payload.items) ? payload.items : [];
-  const fallback: RetailAgentItem[] = String(payload.rawOrderText ?? "")
-    .split(/\r?\n|;+/)
-    .map((line) => line.replace(/^\s*(?:[-*•]|\d+[.)])\s*/, "").trim())
-    .filter(Boolean)
-    .map((rawText) => ({ rawText }));
-
-  return (supplied.length ? supplied : fallback).slice(0, 100).map((item) => {
-    const rawText = String(item.rawText ?? "").trim();
-    const productName = String(item.product_name ?? item.name ?? rawText).trim().slice(0, 180);
-    const quantity = Number(item.quantity ?? 1);
-    return {
-      product_name: productName,
-      quantity: Number.isFinite(quantity) && quantity > 0 ? quantity : 1,
-      unit: String(item.unit ?? "solicitud").trim().slice(0, 40) || "solicitud",
-      preparation: String(item.preparation ?? "").trim().slice(0, 250) || null,
-      notes: String(item.notes ?? (rawText && rawText !== productName ? rawText : "")).trim().slice(0, 500) || null,
-      unit_price: 0,
-    };
-  }).filter((item) => item.product_name);
+async function retailCatalog(): Promise<RetailCatalogProduct[]> {
+  const supabase = createAdminClient();
+  const [{ data: products, error: productError }, { data: prices, error: priceError }] = await Promise.all([
+    supabase.from("products").select("id,name,catalog_key").eq("active", true),
+    supabase.from("product_prices").select("product_id,amount").eq("segment", "minorista").eq("unit", "kilo").is("valid_until", null),
+  ]);
+  if (productError || priceError) {
+    console.error("[retail-order] Could not load retail catalog", { productError, priceError });
+    return [];
+  }
+  const amounts = new Map((prices ?? []).map((price) => [String(price.product_id), Number(price.amount)]));
+  return (products ?? []).flatMap((product) => {
+    const pricePerKg = amounts.get(String(product.id));
+    return Number.isFinite(pricePerKg)
+      ? [{ id: String(product.id), name: String(product.name), catalogKey: String(product.catalog_key), pricePerKg: pricePerKg! }]
+      : [];
+  });
 }
 
 async function findCustomerId(phone: string) {
@@ -159,7 +149,11 @@ export async function upsertRetailOrder(value: unknown) {
   }
   const body = value as RetailAgentPayload;
   const phone = cleanPhone(body.customer?.phone);
-  const items = normalizeItems(body);
+  const items = normalizeRetailItems(
+    Array.isArray(body.items) ? body.items : [],
+    String(body.rawOrderText ?? ""),
+    await retailCatalog(),
+  );
   if (!phone || !items.length || !String(body.rawOrderText ?? "").trim()) {
     return NextResponse.json({ error: "Phone, order text and at least one item are required" }, { status: 422 });
   }
@@ -201,6 +195,7 @@ export async function upsertRetailOrder(value: unknown) {
     rawOrderText: String(body.rawOrderText).trim(),
     sourceEventId: body.sourceEventId ?? null,
   };
+  const subtotal = items.reduce((total, item) => total + item.quantity * item.unit_price, 0);
 
   if (openOrder) {
     const { error: updateError } = await supabase.from("orders").update({
@@ -210,6 +205,7 @@ export async function upsertRetailOrder(value: unknown) {
       delivery_address: address || null,
       payment_method: paymentMethod(body.paymentMethod),
       notes: String(body.notes ?? "").trim() || null,
+      subtotal,
     }).eq("id", openOrder.id);
     if (updateError) return NextResponse.json({ error: "Could not update order" }, { status: 500 });
 
@@ -229,10 +225,11 @@ export async function upsertRetailOrder(value: unknown) {
     source_reference: sourceReference,
     source_payload: sourcePayload,
     extraction_confidence: body.confidence ?? null,
-    status: body.confidence != null && body.confidence >= 0.9 ? "received" : "needs_review",
+    status: "received",
     fulfillment_type: body.delivery?.type === "recogida" ? "pickup" : "delivery",
     delivery_address: address || null,
     payment_method: paymentMethod(body.paymentMethod),
+    subtotal,
     notes: String(body.notes ?? "").trim() || null,
   }).select("id,order_number,status").single();
   if (orderError || !order) {
@@ -254,7 +251,7 @@ export async function upsertRetailOrder(value: unknown) {
     { contactId: body.contactId, locationId: body.locationId, conversationId: body.conversationId },
     "order_placed",
     `${name} · ${order.order_number}`,
-    0,
+    subtotal,
   );
   return NextResponse.json({ ...order, adjusted: false, pipeline_synced: pipeline.ok, pipeline_message: pipeline.ok ? undefined : pipeline.message }, { status: 201 });
 }
@@ -265,6 +262,11 @@ export async function flagRetailHelpRequest(value: unknown) {
   const phone = cleanPhone(body.customer?.phone);
   const reason = String(body.reason ?? "El cliente requiere atención humana.").trim().slice(0, 2_000);
   if (!phone || !reason) return NextResponse.json({ error: "Phone and reason are required" }, { status: 422 });
+  // Fallos de OCR, extracción o integración no son solicitudes del cliente y
+  // no deben sacar un pedido de Nuevos para enviarlo a Requiere ayuda.
+  if (!requiresRetailHelp(reason)) {
+    return NextResponse.json({ ok: true, ignored: true, reason: "No customer clarification or advisor request was detected." });
+  }
 
   const supabase = createAdminClient();
   const { data: customer, error: customerError } = await supabase.from("customers").upsert({

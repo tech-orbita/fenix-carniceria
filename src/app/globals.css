@@ -2899,12 +2899,23 @@ a {
 /* Minoristas: layout de pantalla completa con texto legible (mínimo 13px). */
 .orders-app .rt-panel {
   display: flex;
-  min-height: 0;
-  flex: 1 1 auto;
+  min-height: max(720px, calc(100dvh - 66px));
+  flex: 0 0 auto;
   flex-direction: column;
   gap: 12px;
   margin-top: 12px;
   font-size: 15px;
+}
+
+/*
+ * El panel se muestra dentro de un iframe en HighLevel. En pantallas con poca
+ * altura, el layout fijo comprimía la lista y el detalle en lugar de permitir
+ * recorrer la vista completa. El scroll principal deja siempre accesible todo
+ * el panel y reserva el espacio de la barra para que no tape contenido.
+ */
+.orders-app .dashboard-content:has(.rt-panel) {
+  overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 
 .orders-app .rt-kicker {
@@ -3901,6 +3912,10 @@ a {
 }
 
 @media (max-width: 1100px) {
+  .orders-app .rt-panel {
+    min-height: 0;
+  }
+
   .orders-app .rt-workspace {
     flex: 0 0 auto;
     grid-template-columns: 1fr;

@@ -51,7 +51,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ locationId: $('Validar extracción').item.json.payload.locationId, contactId: $('Validar extracción').item.json.payload.contactId, conversationId: $('Validar extracción').item.json.conversationId || undefined, customer: { name: $('Validar extracción').item.json.payload.customer.name, phone: $('Validar extracción').item.json.payload.customer.phone }, reason: 'No se pudo leer el pedido automáticamente: ' + $('Validar extracción').item.json.problem }) }}",
+        "jsonBody": "={{ JSON.stringify({ locationId: $('Validar extracción').item.json.payload.locationId, contactId: $('Validar extracción').item.json.payload.contactId, conversationId: $('Validar extracción').item.json.conversationId || undefined, customer: { name: $('Validar extracción').item.json.payload.customer.name, phone: $('Validar extracción').item.json.payload.customer.phone }, reason: 'El cliente solicita atención humana: ' + ($('Contexto de audio').item.json.transcript || $('Validar extracción').item.json.problem) }) }}",
         "options": {
           "response": {
             "response": {
@@ -299,7 +299,7 @@
           "conditions": [
             {
               "id": "e1611a1c-c2de-48aa-888c-58c9c3df3084",
-              "leftValue": "={{ $json.ignored }}",
+              "leftValue": "={{ !/(asesor|asesoria|humano|persona|aclar|aclaracion|duda|confirmar|confirmacion|no\\s+entiend|ayuda)/i.test($('Contexto de audio').item.json.transcript || '') }}",
               "rightValue": "",
               "operator": {
                 "type": "boolean",

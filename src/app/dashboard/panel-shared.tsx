@@ -38,9 +38,9 @@ export const phaseStatus: Record<OperationalPhase, OrderStatus> = {
 };
 
 export function phaseForStatus(status: OrderStatus): OperationalPhase {
-  if (["needs_review", "incident", "cancelled"].includes(status)) return "help";
+  if (status === "incident") return "help";
   if (["preparing", "ready"].includes(status)) return "preparing";
-  if (["dispatched", "delivered"].includes(status)) return "dispatched";
+  if (["dispatched", "delivered", "cancelled"].includes(status)) return "dispatched";
   return "new";
 }
 

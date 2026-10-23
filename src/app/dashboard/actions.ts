@@ -195,13 +195,14 @@ export async function updateOrderDetails(
   const phone = details.phone.trim();
   const address = details.address.trim();
   const notes = details.notes.trim();
+  const normalizedItems = details.items.map((item) => ({ ...item, ...toKilograms(item.quantity, item.unit) }));
 
   if (
     !customer ||
     !phone ||
     !address ||
     !details.items.length ||
-    details.items.some((item) =>
+    normalizedItems.some((item) =>
       !/^\d+$/.test(item.id) ||
       !item.productName.trim() ||
       !item.unit.trim() ||
@@ -232,13 +233,13 @@ export async function updateOrderDetails(
       .from("orders")
       .update({ delivery_address: address, notes: notes || null })
       .eq("id", Number(orderId)),
-    ...details.items.map((item) =>
+    ...normalizedItems.map((item) =>
       supabase
         .from("order_items")
         .update({
           product_name: item.productName.trim(),
           actual_quantity: item.quantity,
-          unit: item.unit.trim(),
+          unit: "kg",
           preparation: item.preparation.trim() || null,
         })
         .eq("id", Number(item.id))
