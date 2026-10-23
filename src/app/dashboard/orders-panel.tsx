@@ -24,16 +24,20 @@ const money = new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP
 function productAmounts(order: Order, product: WholesaleProduct, into = new Map<string, number>()) {
   order.items.forEach((item) => {
     const itemCatalog = catalogProductFor(item.productName);
-    const matches = itemCatalog
+    const matches = product.name === "Comodín"
+      ? itemCatalog?.name === "Comodín" || !itemCatalog
+      : itemCatalog
       ? itemCatalog.name === product.name
       : normalizeProductName(item.productName) === normalizeProductName(product.name);
     if (!matches) return;
     // La tabla mayorista trabaja todo en kilos: las libras se convierten a 0,5 kg.
     const { quantity, unit } = toKilograms(item.actualQuantity ?? item.quantity, item.unit);
-    const indicator = product.name === "Blanda" && /^[CLTB]$/i.test(item.preparation ?? "")
-      ? ` ${item.preparation!.toUpperCase()}`
-      : "";
-    const key = `${unit}${indicator}`;
+    const detail = product.name === "Blanda" && /^[CLTB]$/i.test(item.preparation ?? "")
+      ? item.preparation!.toUpperCase()
+      : product.name === "Comodín"
+        ? (itemCatalog?.name === "Comodín" ? item.preparation : item.productName) ?? "Producto sin clasificar"
+        : "";
+    const key = `${unit}|${detail}`;
     into.set(key, (into.get(key) ?? 0) + quantity);
   });
   return into;
@@ -41,10 +45,10 @@ function productAmounts(order: Order, product: WholesaleProduct, into = new Map<
 
 // Los kilos se muestran solo como número (la unidad va en el encabezado); otras unidades conservan su nombre.
 function formatAmounts(amounts: Map<string, number>) {
-  return [...amounts.entries()].map(([unitAndIndicator, quantity]) => {
-    const [unit, indicator] = unitAndIndicator.split(" ");
-    if (unit === "kg") return `${quantityFormat.format(quantity)}${indicator ? ` ${indicator}` : ""}`;
-    return `${quantityFormat.format(quantity)} ${unit}${indicator ? ` ${indicator}` : ""}`;
+  return [...amounts.entries()].map(([unitAndDetail, quantity]) => {
+    const [unit, detail] = unitAndDetail.split("|");
+    if (unit === "kg") return `${quantityFormat.format(quantity)}${detail ? ` ${detail}` : ""}`;
+    return `${quantityFormat.format(quantity)} ${unit}${detail ? ` ${detail}` : ""}`;
   }).join(" / ");
 }
 
@@ -84,14 +88,7 @@ function isClosed(order: Order) {
 }
 
 function highLevelConversationUrl(order: Order) {
-  const explicit = order.highLevel?.conversationUrl;
-  if (explicit) {
-    try { const url = new URL(explicit); if (["https:", "http:"].includes(url.protocol)) return url.href; } catch { /* URL no válida */ }
-  }
-  if (order.highLevel?.locationId && order.highLevel.conversationId) {
-    return `https://app.iaorbita.com/v2/location/${encodeURIComponent(order.highLevel.locationId)}/conversations/${encodeURIComponent(order.highLevel.conversationId)}`;
-  }
-  return undefined;
+  return `/api/highlevel/conversation/${encodeURIComponent(order.id)}`;
 }
 
 function FilterMenu({ label, options, selected, onChange }: { label: string; options: Array<{ value: string; label: string; count: number }>; selected: string[]; onChange: (values: string[]) => void }) {
@@ -128,16 +125,9 @@ function FilterMenu({ label, options, selected, onChange }: { label: string; opt
 
 function productsForOrders(orders: Order[]) {
   const products: WholesaleProduct[] = [...wholesaleProductCatalog];
-  const known = new Set(products.map((product) => normalizeProductName(product.name)));
-  for (const order of orders) {
-    for (const item of order.items) {
-      if (catalogProductFor(item.productName)) continue;
-      const normalized = normalizeProductName(item.productName);
-      if (!normalized || known.has(normalized)) continue;
-      known.add(normalized);
-      products.push({ category: "Otros productos", name: item.productName, aliases: [item.productName] });
-    }
-  }
+  // Todo producto sin columna canónica se muestra dentro de Comodín con su nombre original.
+  // Nunca se crea una columna nueva automáticamente para un producto desconocido.
+  void orders;
   return products;
 }
 
@@ -172,7 +162,7 @@ async function downloadWholesaleOrders(orders: Order[], products: WholesaleProdu
     ...Object.fromEntries(products.map((product, index) => {
       const amounts = productAmounts(order, product);
       // Celdas numéricas cuando todo está en kilos, para poder sumar en Excel.
-      return [`product${index}`, amounts.size === 1 && amounts.has("kg") ? amounts.get("kg") : formatAmounts(amounts)];
+      return [`product${index}`, amounts.size === 1 && amounts.has("kg|") ? amounts.get("kg|") : formatAmounts(amounts)];
     })),
   }));
   worksheet.getRow(1).font = { bold: true, color: { argb: "FFFFFFFF" } };
@@ -194,11 +184,15 @@ type TableFilter = "zones" | "cuts" | "query";
 function WholesaleWallet({ orders }: { orders: Order[] }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
+  const [dayOffset, setDayOffset] = useState(0);
   const [values, setValues] = useState<Record<string, string>>(() => Object.fromEntries(orders.map((order) => [order.id, String(order.total || "")])));
   const [pendingId, setPendingId] = useState<string>();
   const [notice, setNotice] = useState<string>();
   const terms = searchText(query).split(/\s+/).filter(Boolean);
-  const shown = orders.filter((order) => order.status !== "cancelled" && matchesSearch(order, terms));
+  const today = bogotaDay.format(new Date());
+  const selectedDay = addDays(today, dayOffset);
+  const shown = orders.filter((order) => order.status !== "cancelled" && serviceDay(order) === selectedDay && matchesSearch(order, terms));
+  const countForDay = (offset: number) => orders.filter((order) => order.status !== "cancelled" && serviceDay(order) === addDays(today, offset)).length;
   const save = async (order: Order, paymentStatus: "pending" | "paid", sendSummary = false) => {
     const total = Number((values[order.id] ?? "").replace(/\./g, "").replace(",", "."));
     if (!Number.isFinite(total) || total < 0) { setNotice("Escribe un valor válido para el pedido."); return; }
@@ -211,7 +205,7 @@ function WholesaleWallet({ orders }: { orders: Order[] }) {
   };
   return <section className="wholesale-wallet">
     <div className="section-toolbar">
-      <label className="table-search"><Icon name="search" /><span className="sr-only">Buscar en cartera</span><input onChange={(event) => setQuery(event.target.value)} placeholder="Buscar cliente, teléfono o pedido" value={query} /></label>
+      <div className="table-filters"><div aria-label="Día de cartera" className="day-navigator" role="group"><button aria-label="Día anterior" onClick={() => setDayOffset((current) => current - 1)} title={`${countForDay(dayOffset - 1)} pedidos`} type="button">‹</button><span><strong>{serviceDayName(selectedDay, today) || "Cartera"}</strong>{dayLabel.format(new Date(`${selectedDay}T12:00:00Z`))}</span><button aria-label="Día siguiente" onClick={() => setDayOffset((current) => current + 1)} title={`${countForDay(dayOffset + 1)} pedidos`} type="button">›</button>{dayOffset !== 0 && <button className="day-today" onClick={() => setDayOffset(0)} type="button">Hoy</button>}</div><label className="table-search"><Icon name="search" /><span className="sr-only">Buscar en cartera</span><input onChange={(event) => setQuery(event.target.value)} placeholder="Buscar cliente, teléfono o pedido" value={query} /></label></div>
       <p className="wallet-scope">Control por pedido · no reemplaza el libro contable ni Siigo</p>
     </div>
     {notice && <div className="table-edit-notice" role="status">{notice}</div>}
@@ -370,7 +364,7 @@ function WholesaleOrdersTable({ orders: allOrders, pendingId, onStatusChange }: 
           </thead>
           <tbody>
             {visibleOrders.map((order) => <tr className={isClosed(order) ? "is-dispatched" : undefined} key={order.id}>
-              <th scope="row"><div className="matrix-client"><span><strong>{order.businessName ?? order.customer}</strong><small>{order.orderNumber}</small>{["needs_review", "incident"].includes(order.status) && <><em className="help-badge">Requiere ayuda</em>{highLevelConversationUrl(order) && <a className="conversation-link" href={highLevelConversationUrl(order)} rel="noreferrer" target="_blank">Abrir chat</a>}</>}</span>{isClosed(order)
+              <th scope="row"><div className="matrix-client"><span><strong>{order.businessName ?? order.customer}</strong><small>{order.orderNumber}</small>{["needs_review", "incident"].includes(order.status) && <><em className="help-badge">Requiere ayuda</em><a className="conversation-link" href={highLevelConversationUrl(order)} rel="noreferrer" target="_blank">Abrir chat</a></>}</span>{isClosed(order)
                 ? <button className="dispatch-action is-done" disabled={pendingId === order.id || editing} onClick={() => onStatusChange(order, "new")} title="Volver a pendiente" type="button">{pendingId === order.id ? "…" : "Deshacer"}</button>
                 : <><button className="dispatch-action" disabled={pendingId === order.id || editing} onClick={() => onStatusChange(order, "dispatched")} title="Confirmar que el pedido salió" type="button">{pendingId === order.id ? "Guardando…" : "✓ Despachado"}</button>{dayOffset === 1 && <button className="advance-action" disabled={saving || editing} onClick={() => void advanceOrder(order)} title="Autorizar este pedido para despacho hoy" type="button">Adelantar a hoy</button>}</>}</div></th>
               <td>{order.phone}</td>
@@ -379,7 +373,9 @@ function WholesaleOrdersTable({ orders: allOrders, pendingId, onStatusChange }: 
               <td className="matrix-comment-cell">{editing ? <textarea aria-label={`Comentario para ${order.orderNumber}`} onChange={(event) => updateDraft(order.id, "notes", event.target.value)} placeholder="Añade un comentario" rows={2} value={draftRows[order.id]?.notes ?? ""} /> : order.notes || "—"}</td>
               {visibleProducts.map((product) => {
                 const value = productQuantity(order, product);
-                return <td className={editing ? "matrix-quantity-cell is-editing" : value ? "matrix-quantity-cell has-value" : "matrix-quantity-cell"} key={product.name}>{editing ? <input aria-label={`${product.name} de ${order.orderNumber}`} onChange={(event) => updateDraft(order.id, product.name, event.target.value)} placeholder={product.name === "Blanda" ? "kg C/L/T/B" : "kg"} title={product.name === "Blanda" ? "Usa C=capón, L=lomo, T=tetafula y B=calavera. Ejemplo: 5 C / 2 L." : "Cantidad en kg. También puedes escribir “2 lb” y se guarda como 1 kg."} value={draftRows[order.id]?.quantities[product.name] ?? ""} /> : value || ""}</td>;
+                const placeholder = product.name === "Blanda" ? "kg C/L/T/B" : product.name === "Comodín" ? "kg producto" : "kg";
+                const title = product.name === "Blanda" ? "Usa C=capón, L=lomo, T=tetafula y B=calavera. Ejemplo: 5 C / 2 L." : product.name === "Comodín" ? "Escribe cantidad y nombre del producto sin columna. Ejemplo: 2 kg producto especial." : "Cantidad en kg. También puedes escribir “2 lb” y se guarda como 1 kg.";
+                return <td className={editing ? "matrix-quantity-cell is-editing" : value ? "matrix-quantity-cell has-value" : "matrix-quantity-cell"} key={product.name}>{editing ? <input aria-label={`${product.name} de ${order.orderNumber}`} onChange={(event) => updateDraft(order.id, product.name, event.target.value)} placeholder={placeholder} title={title} value={draftRows[order.id]?.quantities[product.name] ?? ""} /> : value || ""}</td>;
               })}
             </tr>)}
             {!visibleOrders.length && <tr><td className="matrix-empty" colSpan={visibleProducts.length + 5}>{hasFilters ? "Ningún pedido coincide con los filtros." : "No hay pedidos pendientes para este día."}</td></tr>}

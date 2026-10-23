@@ -39,3 +39,8 @@ test("conserva los identificadores de HighLevel para pipeline y conversación", 
   assert.equal(order.form_data.location_id, "location-1");
   assert.equal(order.form_data.conversation_id, "conversation-1");
 });
+
+test("envía productos sin columna al comodín conservando su nombre", () => {
+  const order = mapHighLevelForm({ ...base, "Coloca tu Pedido": "3 kg de osobuco especial" }, "mayorista-cliente");
+  assert.deepEqual(order.items, [{ product_name: "Comodín", quantity: 3, unit: "kg", preparation: "Osobuco especial" }]);
+});

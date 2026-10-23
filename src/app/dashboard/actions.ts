@@ -252,7 +252,21 @@ function parseQuantity(value: string) {
 }
 
 function parseWholesaleCell(productName: string, value: string) {
-  if (normalizeProductName(productName) !== "blanda") {
+  const normalizedProduct = normalizeProductName(productName);
+  if (normalizedProduct === "comodin") {
+    const parts = value.split("/").map((part) => part.trim()).filter(Boolean);
+    if (!parts.length) return null;
+    const parsed = parts.map((part) => {
+      const match = part.match(/^(\d+(?:[.,]\d+)?)\s*(kg|kgs|kilo|kilos|lb|lbs|libra|libras)?\s+(.+)$/i);
+      if (!match) return null;
+      const quantity = Number(match[1].replace(",", "."));
+      const preparation = match[3].trim();
+      if (!Number.isFinite(quantity) || quantity <= 0 || !preparation) return null;
+      return { ...toKilograms(quantity, match[2] ?? "kg"), preparation: preparation.slice(0, 250) };
+    });
+    return parsed.every(Boolean) ? parsed as Array<{ quantity: number; unit: string; preparation: string }> : null;
+  }
+  if (normalizedProduct !== "blanda") {
     const parsed = parseQuantity(value);
     return parsed ? [{ ...parsed, preparation: null as string | null }] : null;
   }
@@ -271,6 +285,9 @@ function parseWholesaleCell(productName: string, value: string) {
 function sameProduct(left: string, right: string) {
   const leftCatalog = catalogProductFor(left)?.name;
   const rightCatalog = catalogProductFor(right)?.name;
+  if (normalizeProductName(rightCatalog ?? right) === "comodin") {
+    return !leftCatalog || normalizeProductName(leftCatalog) === "comodin";
+  }
   return normalizeProductName(leftCatalog ?? left) === normalizeProductName(rightCatalog ?? right);
 }
 
@@ -333,7 +350,7 @@ export async function updateWholesaleTable(rows: WholesaleTableRowInput[]) {
         continue;
       }
 
-      if (!parsedValues) return { ok: false, message: "Usa cantidades como “1,5”, “2 kg” o, para Blanda, “5 C / 2 L”." };
+      if (!parsedValues) return { ok: false, message: "Usa cantidades como “1,5”, para Blanda “5 C / 2 L” y para Comodín “2 kg producto”." };
       const canonicalName = catalogProductFor(entry.productName)?.name ?? entry.productName.trim();
 
       if (matching.length) {

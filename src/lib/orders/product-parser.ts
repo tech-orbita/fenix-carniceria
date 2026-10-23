@@ -122,7 +122,7 @@ export function parseOrderText(text: string) {
     `(\\d+(?:[.,]\\d+)?)\\s*(${unit})\\b\\s*(?:de\\s+)?(.+?)(?=(?:[,;\\n.]|\\s+y\\s+\\d+(?:[.,]\\d+)?\\s*${unit}|$))`,
     "gi",
   );
-  const items: Array<{ product_name: string; quantity: number; unit: string; preparation?: BlandaIndicator }> = [];
+  const items: Array<{ product_name: string; quantity: number; unit: string; preparation?: string }> = [];
 
   for (const match of normalized.matchAll(expression)) {
     const quantity = Number(match[1].replace(",", "."));
@@ -130,12 +130,12 @@ export function parseOrderText(text: string) {
     const catalogProduct = catalogProductFor(requestedName);
     if (!Number.isFinite(quantity) || quantity <= 0 || !requestedName) continue;
     items.push({
-      product_name: catalogProduct?.name ?? requestedName,
+      product_name: catalogProduct?.name ?? "Comodín",
       quantity,
       unit: normalizeUnit(match[2]),
       ...(catalogProduct?.name === "Blanda" && blandaIndicatorFor(requestedName)
         ? { preparation: blandaIndicatorFor(requestedName) }
-        : {}),
+        : !catalogProduct ? { preparation: requestedName } : {}),
     });
   }
 
