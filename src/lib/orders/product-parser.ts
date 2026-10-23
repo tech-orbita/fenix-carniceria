@@ -5,20 +5,66 @@ export type WholesaleProduct = {
 };
 
 export const wholesaleProductCatalog: readonly WholesaleProduct[] = [
-  { category: "Carne de res", name: "Carne blanda", aliases: ["carne blanda", "blanda"] },
-  { category: "Carne de res", name: "Espaldilla", aliases: ["espaldilla", "espaldi"] },
-  { category: "Carne de res", name: "Molida especial", aliases: ["molida especial", "carne molida", "molida"] },
-  { category: "Carne de res", name: "Atravesado", aliases: ["pollo atravesado", "atravesado"] },
-  { category: "Carne de res", name: "Costilla", aliases: ["costilla de res", "costilla res", "costilla"] },
-  { category: "Carne de res", name: "Hueso carnudo", aliases: ["hueso carnudo", "hueso"] },
-  { category: "Carne de cerdo", name: "Costilla de cerdo", aliases: ["costilla de cerdo", "costilla cerdo"] },
-  { category: "Carne de cerdo", name: "Pulpa de cerdo", aliases: ["pulpa de cerdo", "pulpa cerdo"] },
-  { category: "Carne de cerdo", name: "Panceta", aliases: ["panceta"] },
-  { category: "Aves", name: "Filete de pechuga", aliases: ["filete de pechuga", "filete pechuga", "pechuga"] },
-  { category: "Aves", name: "Pechuga congelada", aliases: ["pechuga congelada"] },
-  { category: "Aves", name: "Pernil mixto (contramuslo)", aliases: ["pernil mixto", "contramuslo"] },
-  { category: "Aves", name: "Muslo", aliases: ["muslo"] },
+  { category: "Res · cortes", name: "Blanda", aliases: ["carne blanda", "blanda", "capon", "capón", "lomo", "tetafulla", "tetafula", "calavera"] },
+  { category: "Res · cortes", name: "Molida especial", aliases: ["molida especial"] },
+  { category: "Res · cortes", name: "Espaldilla", aliases: ["espaldilla", "espaldi"] },
+  { category: "Res · cortes", name: "Atravesado", aliases: ["pollo atravesado", "atravesado"] },
+  { category: "Res · cortes", name: "Bollo", aliases: ["bollo"] },
+  { category: "Res · cortes", name: "Costilla", aliases: ["costilla de res", "costilla res", "costilla"] },
+  { category: "Res · cortes", name: "Hueso", aliases: ["hueso de res", "hueso res", "hueso"] },
+  { category: "Res · vísceras", name: "Hígado", aliases: ["higado", "hígado"] },
+  { category: "Res · vísceras", name: "Corazón", aliases: ["corazon", "corazón"] },
+  { category: "Res · vísceras", name: "Panza", aliases: ["panza"] },
+  { category: "Res · vísceras", name: "Bofe", aliases: ["bofe"] },
+  { category: "Res · cortes", name: "Filete", aliases: ["filete"] },
+  { category: "Res · cortes", name: "Semi blanda", aliases: ["semiblanda", "semi blanda"] },
+  { category: "Res · cortes", name: "Falda", aliases: ["falda"] },
+  { category: "Res · cortes", name: "Punta gorda", aliases: ["punta gorda"] },
+  { category: "Cerdo", name: "Pulpa cerdo", aliases: ["pulpa de cerdo", "pulpa cerdo"] },
+  { category: "Cerdo", name: "Costilla cerdo", aliases: ["costilla de cerdo", "costilla cerdo"] },
+  { category: "Cerdo", name: "Chuleta", aliases: ["chuleta"] },
+  { category: "Res · cortes", name: "Asado de Tira", aliases: ["asado de tira"] },
+  { category: "Res · cortes", name: "Jarreton", aliases: ["jarreton", "jarretón"] },
+  { category: "Res · cortes", name: "Jarrete", aliases: ["jarrete"] },
+  { category: "Res · cortes", name: "Hueso paleta", aliases: ["hueso de paleta", "hueso paleta"] },
+  { category: "Res · cortes", name: "Molida corriente", aliases: ["molida corriente", "carne molida corriente"] },
+  { category: "Res · cortes", name: "Sobrebarriga", aliases: ["sobrebarriga"] },
+  { category: "Res · vísceras", name: "Pata", aliases: ["pata de res", "pata res", "pata"] },
+  { category: "Cerdo", name: "Pezuña cerdo", aliases: ["pezuña de cerdo", "pezuna de cerdo", "pezuña cerdo", "pezuna cerdo"] },
+  { category: "Pollo", name: "Contramuslo", aliases: ["pernil mixto", "contramuslo"] },
+  { category: "Res · vísceras", name: "Lenguas", aliases: ["lengua de res", "lenguas", "lengua"] },
+  { category: "Res · cortes", name: "Chocosuela", aliases: ["chocosuela"] },
+  { category: "Pollo", name: "Hueso pollo", aliases: ["hueso de pollo", "hueso pollo"] },
+  { category: "Pollo", name: "Pata pollo", aliases: ["pata de pollo", "pata pollo"] },
+  { category: "Res · vísceras", name: "Rabo res", aliases: ["rabo de res", "rabo res", "rabo"] },
+  { category: "Cerdo", name: "Costillita", aliases: ["costillita"] },
+  { category: "Res · cortes", name: "Hueso blanco", aliases: ["hueso blanco"] },
+  { category: "Pollo", name: "Muslo colombina", aliases: ["muslo colombina", "colombina"] },
+  { category: "Pollo", name: "Pechuga congela", aliases: ["pechuga congelada", "pechuga congela"] },
+  { category: "Pollo", name: "Pollo entero", aliases: ["pollo entero"] },
+  { category: "Res · vísceras", name: "Pajarilla", aliases: ["pajarilla"] },
+  { category: "Res · vísceras", name: "Ubre", aliases: ["ubre"] },
+  { category: "Res · vísceras", name: "Chinchurria", aliases: ["chinchurria", "chinchulín", "chinchulin"] },
+  { category: "Res · vísceras", name: "Cuajo", aliases: ["cuajo"] },
+  { category: "Res · vísceras", name: "3 tela", aliases: ["tres tela", "3 tela"] },
+  { category: "Res · cortes", name: "Lomo pinga", aliases: ["lomo pinga"] },
+  { category: "Res · cortes", name: "Tira tira", aliases: ["tira tira"] },
+  { category: "Res · cortes", name: "Lomo fino", aliases: ["lomo fino"] },
+  { category: "Procesados", name: "Ahumada", aliases: ["ahumada"] },
+  { category: "Procesados", name: "Salchicha XL", aliases: ["salchicha xl"] },
+  { category: "Otros productos", name: "Comodín", aliases: ["comodin", "comodín", "otro producto"] },
 ] as const;
+
+export type BlandaIndicator = "C" | "L" | "T" | "B";
+
+export function blandaIndicatorFor(value: string): BlandaIndicator | undefined {
+  const normalized = normalizeProductName(value);
+  if (/(?:^| )capon(?: |$)/.test(normalized)) return "C";
+  if (/(?:^| )lomo(?: |$)/.test(normalized) && !/(?:fino|pinga)/.test(normalized)) return "L";
+  if (/(?:^| )(?:tetafulla|tetafula)(?: |$)/.test(normalized)) return "T";
+  if (/(?:^| )calavera(?: |$)/.test(normalized)) return "B";
+  return undefined;
+}
 
 export function normalizeProductName(value: string) {
   return value
@@ -76,7 +122,7 @@ export function parseOrderText(text: string) {
     `(\\d+(?:[.,]\\d+)?)\\s*(${unit})\\b\\s*(?:de\\s+)?(.+?)(?=(?:[,;\\n.]|\\s+y\\s+\\d+(?:[.,]\\d+)?\\s*${unit}|$))`,
     "gi",
   );
-  const items: Array<{ product_name: string; quantity: number; unit: string }> = [];
+  const items: Array<{ product_name: string; quantity: number; unit: string; preparation?: BlandaIndicator }> = [];
 
   for (const match of normalized.matchAll(expression)) {
     const quantity = Number(match[1].replace(",", "."));
@@ -87,6 +133,9 @@ export function parseOrderText(text: string) {
       product_name: catalogProduct?.name ?? requestedName,
       quantity,
       unit: normalizeUnit(match[2]),
+      ...(catalogProduct?.name === "Blanda" && blandaIndicatorFor(requestedName)
+        ? { preparation: blandaIndicatorFor(requestedName) }
+        : {}),
     });
   }
 

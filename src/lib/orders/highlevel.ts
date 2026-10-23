@@ -1,4 +1,4 @@
-import { parseOrderText } from "./product-parser";
+import { parseOrderText } from "./product-parser.ts";
 
 export type WholesaleForm = "mayorista-cliente" | "nuevo-mayorista";
 
@@ -60,6 +60,10 @@ export function mapHighLevelForm(value: unknown, form: WholesaleForm) {
       maps_url: get("maps_url", "Ubicación de Maps"),
       receiver_phone: get("receiver_phone", "Número de Quien Recibe"),
       payment_proof: get("payment_proof", "Aqui puedes subir tu comprobante de Pago"),
+      contact_id: get("contactId", "contact_id"),
+      location_id: get("locationId", "location_id"),
+      conversation_id: get("conversationId", "conversation_id"),
+      conversation_url: get("conversationUrl", "conversation_url"),
       original_payload: payload,
     },
   };

@@ -2,10 +2,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mapHighLevelForm } from "../src/lib/orders/highlevel.ts";
 const base = { "Nombre Completo": "Ana", "Teléfono": "+57 300 123 4567", "Coloca tu Pedido": "2 kg de costilla\nMolida por confirmar", "¿Es a Domicilio o Recoges en Tienda?": "Domicilio" };
-test("cliente: preserva pedido libre y no inventa partidas", () => {
+test("cliente: preserva pedido libre y solo clasifica partidas inequívocas", () => {
   const order = mapHighLevelForm(base, "mayorista-cliente");
   assert.equal(order.form_data.order_text, base["Coloca tu Pedido"]);
-  assert.deepEqual(order.items, []);
+  assert.deepEqual(order.items, [{ product_name: "Costilla", quantity: 2, unit: "kg" }]);
   assert.equal(order.customer.phone, "+573001234567");
 });
 test("nuevo: mapea campos personalizados y datos de entrega", () => {
@@ -19,4 +19,23 @@ test("rechaza payload incompleto y variables sin sustituir", () => {
   assert.throws(() => mapHighLevelForm({}, "mayorista-cliente"));
   assert.throws(() => mapHighLevelForm({ ...base, "Teléfono": "{{contact.phone}}" }, "mayorista-cliente"));
   assert.throws(() => mapHighLevelForm(base, "nuevo-mayorista"));
+});
+
+test("clasifica el catálogo mayorista y conserva indicadores de blanda", () => {
+  const order = mapHighLevelForm({
+    ...base,
+    "Coloca tu Pedido": "10 libras de capón; 4 kg de lomo fino; 2 kg de pezuña de cerdo",
+  }, "mayorista-cliente");
+  assert.deepEqual(order.items, [
+    { product_name: "Blanda", quantity: 10, unit: "lb", preparation: "C" },
+    { product_name: "Lomo fino", quantity: 4, unit: "kg" },
+    { product_name: "Pezuña cerdo", quantity: 2, unit: "kg" },
+  ]);
+});
+
+test("conserva los identificadores de HighLevel para pipeline y conversación", () => {
+  const order = mapHighLevelForm({ ...base, contactId: "contact-1", locationId: "location-1", conversationId: "conversation-1" }, "mayorista-cliente");
+  assert.equal(order.form_data.contact_id, "contact-1");
+  assert.equal(order.form_data.location_id, "location-1");
+  assert.equal(order.form_data.conversation_id, "conversation-1");
 });

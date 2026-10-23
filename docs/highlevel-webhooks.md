@@ -27,6 +27,10 @@ El cuerpo puede incluir los campos con sus etiquetas originales o los siguientes
 | observations | Observaciones Adicionales |
 | payment_proof | URL del comprobante de Pago |
 | submission_id | Identificador único de ESTE envío (si está disponible) |
+| contactId | ID del contacto de HighLevel |
+| locationId | ID de la subcuenta de HighLevel |
+| conversationId | ID de la conversación, si está disponible |
+| conversationUrl | URL directa de la conversación, si está disponible |
 
 Nombre o negocio, teléfono, modalidad y texto del pedido son obligatorios. El formulario nuevo requiere negocio. Los campos no presentes en el formulario cliente se omiten; se conservan los datos registrados de ese teléfono. Usar el mismo formato internacional de teléfono en ambos formularios.
 
@@ -37,4 +41,13 @@ El texto libre queda íntegro en el detalle y la comanda, sin inventar productos
 Verificación local: node --test --test-isolation=none tests/highlevel.test.mjs; npm run lint; npm run build.
 
 Pendiente para activar: despliegue de Pamela, variables del servidor y prueba con un envío real de cada formulario. Los IDs opacos de customFields requieren mapearse mediante Custom Data con las claves de esta tabla.
+
+## Pipeline Mayoristas
+
+El token privado debe incluir `opportunities.readonly`, `opportunities.write` y, si se usará **Enviar resumen**, `conversations/message.write`. La app busca el pipeline `Mayoristas` y estas etapas por nombre: `Realizo Pedido`, `En Preparacion`, `Despachados`, `Requiere ayuda`, `Pendiente por Pago` y `Pago Realizado`. También se pueden fijar sus IDs con las variables `GHL_WHOLESALE_PIPELINE_ID` y `GHL_STAGE_*_ID` de `.env.example`.
+
+- Un formulario aceptado crea o mueve la oportunidad a **Realizo Pedido**.
+- Los cambios operativos del panel sincronizan **En Preparacion**, **Despachados** o **Requiere ayuda**.
+- La pestaña **Cartera** sincroniza **Pendiente por Pago** y **Pago Realizado**.
+- Los fallos de HighLevel no revierten el pedido: quedan registrados en los logs para reintento/configuración.
 

@@ -4,13 +4,14 @@ import { createClient } from "@/lib/supabase/server";
 
 import "../auth.css";
 import { OrdersPanel } from "./orders-panel";
+import { demoOrders } from "./demo-orders";
 import type { Order } from "./types";
 
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
   if (!hasSupabaseEnvironment()) {
-    return <OrdersPanel initialOrders={[]} loadError="El panel no está conectado a la base de datos." />;
+    return <OrdersPanel initialOrders={demoOrders()} loadError="Modo demostración: configura Supabase para usar pedidos reales." />;
   }
 
   const viewer = await requireViewer();
@@ -33,6 +34,7 @@ export default async function DashboardPage() {
       payment_status,
       delivery_fee,
       adjustments,
+      total,
       notes,
       received_at,
       customers (name, business_name, phone),
@@ -57,6 +59,8 @@ export default async function DashboardPage() {
         const customer = Array.isArray(row.customers) ? row.customers[0] : row.customers;
         const route = Array.isArray(row.routes) ? row.routes[0] : row.routes;
 
+        const sourcePayload = row.source_payload && typeof row.source_payload === "object" ? row.source_payload : {};
+        const formData = sourcePayload.form_data && typeof sourcePayload.form_data === "object" ? sourcePayload.form_data : undefined;
         return {
           id: String(row.id),
           orderNumber: row.order_number,
@@ -74,6 +78,7 @@ export default async function DashboardPage() {
           paymentStatus: row.payment_status,
           deliveryFee: Number(row.delivery_fee),
           adjustments: Number(row.adjustments),
+          total: Number(row.total),
           status: row.status,
           items: (row.order_items ?? []).map((item) => ({
             id: String(item.id),
@@ -84,7 +89,13 @@ export default async function DashboardPage() {
             preparation: item.preparation ?? undefined,
             unitPrice: Number(item.unit_price),
           })),
-          formData: row.source_payload?.form_data ?? undefined,
+          formData,
+          highLevel: {
+            contactId: formData?.contact_id ?? sourcePayload.contactId,
+            locationId: formData?.location_id ?? sourcePayload.locationId,
+            conversationId: formData?.conversation_id ?? sourcePayload.conversationId,
+            conversationUrl: formData?.conversation_url ?? sourcePayload.conversationUrl,
+          },
           notes: row.notes ?? undefined,
         };
       });

@@ -5,6 +5,8 @@ import { revalidatePath } from "next/cache";
 import { requireViewer } from "@/lib/auth/viewer";
 import { createClient } from "@/lib/supabase/server";
 import { catalogProductFor, normalizeProductName, toKilograms } from "@/lib/orders/product-parser";
+import { sendWholesalePaymentSummary, syncWholesalePipeline } from "@/lib/orders/highlevel-pipeline";
+import type { HighLevelContext, WholesalePipelineStage } from "@/lib/orders/highlevel-pipeline";
 
 import type { OrderStatus } from "./types";
 
@@ -12,6 +14,21 @@ import type { OrderStatus } from "./types";
 async function sessionClient() {
   await requireViewer();
   return createClient();
+}
+
+function highLevelContext(sourcePayload: unknown): HighLevelContext {
+  const payload = sourcePayload && typeof sourcePayload === "object" ? sourcePayload as Record<string, unknown> : {};
+  const form = payload.form_data && typeof payload.form_data === "object" ? payload.form_data as Record<string, unknown> : {};
+  const value = (key: string) => typeof form[key] === "string" ? form[key] as string : typeof payload[key] === "string" ? payload[key] as string : undefined;
+  return { contactId: value("contact_id") ?? value("contactId"), locationId: value("location_id") ?? value("locationId"), conversationId: value("conversation_id") ?? value("conversationId") };
+}
+
+function pipelineStageFor(status: OrderStatus): WholesalePipelineStage | undefined {
+  if (["received", "quoted", "confirmed"].includes(status)) return "order_placed";
+  if (["preparing", "ready"].includes(status)) return "preparing";
+  if (["dispatched", "delivered"].includes(status)) return "dispatched";
+  if (["needs_review", "incident"].includes(status)) return "help";
+  return undefined;
 }
 
 const allowedStatuses: OrderStatus[] = [
@@ -37,10 +54,22 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus) {
     .from("orders")
     .update({ status })
     .eq("id", Number(orderId))
-    .select("id");
+    .select("id,order_number,customer_type,source_payload,total,customers(name,business_name)")
+    .maybeSingle();
 
-  if (error || !data?.length) {
+  if (error || !data) {
     return { ok: false, message: "No se pudo actualizar el pedido." };
+  }
+
+  const pipelineStage = data.customer_type === "wholesale" ? pipelineStageFor(status) : undefined;
+  if (pipelineStage) {
+    const customer = Array.isArray(data.customers) ? data.customers[0] : data.customers;
+    await syncWholesalePipeline(
+      highLevelContext(data.source_payload),
+      pipelineStage,
+      `${customer?.business_name || customer?.name || "Cliente"} · ${data.order_number}`,
+      Number(data.total),
+    );
   }
 
   revalidatePath("/dashboard");
@@ -69,6 +98,57 @@ export async function updateOrderPaymentStatus(
 
   revalidatePath("/dashboard");
   return { ok: true, message: "Estado de pago actualizado." };
+}
+
+export async function scheduleWholesaleOrder(orderId: string, deliveryDay: string) {
+  if (!/^\d+$/.test(orderId) || !/^\d{4}-\d{2}-\d{2}$/.test(deliveryDay)) {
+    return { ok: false, message: "Pedido o fecha inválida." };
+  }
+  const parsed = new Date(`${deliveryDay}T12:00:00-05:00`);
+  if (Number.isNaN(parsed.getTime())) return { ok: false, message: "Fecha inválida." };
+  const supabase = await sessionClient();
+  const { data, error } = await supabase.from("orders")
+    .update({ requested_delivery_at: parsed.toISOString() })
+    .eq("id", Number(orderId))
+    .eq("customer_type", "wholesale")
+    .select("id")
+    .maybeSingle();
+  if (error || !data) return { ok: false, message: "No se pudo adelantar el pedido." };
+  revalidatePath("/dashboard");
+  return { ok: true, message: "Pedido autorizado para despacho hoy." };
+}
+
+export async function updateWholesalePayment(
+  orderId: string,
+  total: number,
+  paymentStatus: "pending" | "paid",
+  sendSummary = false,
+) {
+  if (!/^\d+$/.test(orderId) || !Number.isFinite(total) || total < 0 || total > 999_999_999 || !["pending", "paid"].includes(paymentStatus)) {
+    return { ok: false, message: "Revisa el valor y el estado de pago." };
+  }
+  const supabase = await sessionClient();
+  const { data, error } = await supabase.from("orders")
+    .update({ subtotal: total, delivery_fee: 0, adjustments: 0, payment_status: paymentStatus })
+    .eq("id", Number(orderId))
+    .eq("customer_type", "wholesale")
+    .select("id,order_number,source_payload,customers(name,business_name)")
+    .maybeSingle();
+  if (error || !data) return { ok: false, message: "No se pudo actualizar la cartera del pedido." };
+  const customer = Array.isArray(data.customers) ? data.customers[0] : data.customers;
+  const context = highLevelContext(data.source_payload);
+  await syncWholesalePipeline(
+    context,
+    paymentStatus === "paid" ? "paid" : "payment_pending",
+    `${customer?.business_name || customer?.name || "Cliente"} · ${data.order_number}`,
+    total,
+  );
+  if (sendSummary) {
+    const sent = await sendWholesalePaymentSummary(context, customer?.business_name || customer?.name || "cliente", data.order_number, total);
+    if (!sent.ok) return { ok: false, message: `Se guardó la cartera, pero ${sent.message}` };
+  }
+  revalidatePath("/dashboard");
+  return { ok: true, message: sendSummary ? "Cartera actualizada y resumen enviado." : "Cartera actualizada." };
 }
 
 type OrderDetailsInput = {
@@ -171,6 +251,23 @@ function parseQuantity(value: string) {
   return toKilograms(quantity, match[2] ?? "kg");
 }
 
+function parseWholesaleCell(productName: string, value: string) {
+  if (normalizeProductName(productName) !== "blanda") {
+    const parsed = parseQuantity(value);
+    return parsed ? [{ ...parsed, preparation: null as string | null }] : null;
+  }
+  const parts = value.split("/").map((part) => part.trim()).filter(Boolean);
+  if (!parts.length) return null;
+  const parsed = parts.map((part) => {
+    const match = part.match(/^(\d+(?:[.,]\d+)?)\s*(kg|kgs|kilo|kilos|lb|lbs|libra|libras)?\s*([CLTB])?$/i);
+    if (!match) return null;
+    const quantity = Number(match[1].replace(",", "."));
+    if (!Number.isFinite(quantity) || quantity <= 0) return null;
+    return { ...toKilograms(quantity, match[2] ?? "kg"), preparation: match[3]?.toUpperCase() ?? null };
+  });
+  return parsed.every(Boolean) ? parsed as Array<{ quantity: number; unit: string; preparation: string | null }> : null;
+}
+
 function sameProduct(left: string, right: string) {
   const leftCatalog = catalogProductFor(left)?.name;
   const rightCatalog = catalogProductFor(right)?.name;
@@ -190,7 +287,7 @@ export async function updateWholesaleTable(rows: WholesaleTableRowInput[]) {
       !Array.isArray(row.quantities) ||
       row.quantities.length > 100 ||
       row.quantities.some(({ productName, value }) =>
-        !productName.trim() || productName.length > 120 || value.length > 40 || (value.trim() && !parseQuantity(value)),
+        !productName.trim() || productName.length > 120 || value.length > 80 || (value.trim() && !parseWholesaleCell(productName, value)),
       )
     ) {
       return { ok: false, message: "Revisa las cantidades. Usa valores en kg como “1,5” o “2 kg”." };
@@ -226,7 +323,7 @@ export async function updateWholesaleTable(rows: WholesaleTableRowInput[]) {
 
     for (const entry of row.quantities) {
       const matching = (existingItems ?? []).filter((item) => sameProduct(item.product_name, entry.productName));
-      const parsed = entry.value.trim() ? parseQuantity(entry.value) : null;
+      const parsedValues = entry.value.trim() ? parseWholesaleCell(entry.productName, entry.value) : null;
 
       if (!entry.value.trim()) {
         if (matching.length) {
@@ -236,29 +333,24 @@ export async function updateWholesaleTable(rows: WholesaleTableRowInput[]) {
         continue;
       }
 
-      if (!parsed) return { ok: false, message: "Usa cantidades en kg como “1,5” o “2 kg”." };
+      if (!parsedValues) return { ok: false, message: "Usa cantidades como “1,5”, “2 kg” o, para Blanda, “5 C / 2 L”." };
       const canonicalName = catalogProductFor(entry.productName)?.name ?? entry.productName.trim();
 
-      if (matching[0]) {
-        const { error } = await supabase.from("order_items").update({
-          product_name: canonicalName,
-          actual_quantity: parsed.quantity,
-          unit: parsed.unit,
-        }).eq("id", matching[0].id).eq("order_id", orderId);
+      if (matching.length) {
+        const { error } = await supabase.from("order_items").delete().in("id", matching.map((item) => item.id));
         if (error) return { ok: false, message: "No se pudo actualizar una cantidad." };
-        if (matching.length > 1) await supabase.from("order_items").delete().in("id", matching.slice(1).map((item) => item.id));
-      } else {
-        const { error } = await supabase.from("order_items").insert({
+      }
+      const { error } = await supabase.from("order_items").insert(parsedValues.map((parsed, index) => ({
           order_id: orderId,
           product_name: canonicalName,
           quantity: parsed.quantity,
           actual_quantity: parsed.quantity,
           unit: parsed.unit,
+          preparation: parsed.preparation,
           unit_price: 0,
-          sort_order: existingItems?.length ?? 0,
-        });
-        if (error) return { ok: false, message: "No se pudo agregar una cantidad." };
-      }
+          sort_order: (existingItems?.length ?? 0) + index,
+        })));
+      if (error) return { ok: false, message: "No se pudo agregar una cantidad." };
     }
   }
 
