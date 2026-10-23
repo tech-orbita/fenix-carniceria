@@ -226,6 +226,13 @@ export async function upsertRetailOrder(value: unknown) {
   }
   const { error: itemsError } = await supabase.from("order_items").insert(items.map((item, sort_order) => ({ ...item, order_id: order.id, sort_order })));
   if (itemsError) {
+    console.error("[retail-order] Could not save order items", {
+      code: itemsError.code,
+      message: itemsError.message,
+      details: itemsError.details,
+      hint: itemsError.hint,
+      orderId: order.id,
+    });
     await supabase.from("orders").delete().eq("id", order.id);
     return NextResponse.json({ error: "Could not save order items" }, { status: 500 });
   }
