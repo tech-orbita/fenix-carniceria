@@ -54,5 +54,26 @@ export function demoOrders(): Order[] {
       ],
       formData: { form: "mayorista-cliente", order_text: "7 kg lomo fino y 2 kg de corte especial", billing: "Electrónica" },
     },
+    {
+      id: "9401", orderNumber: "DEMO-MIN-001", customerType: "retail", customer: "Laura Martínez", phone: "+57 300 555 0101",
+      receivedAt: `${today}T09:20:00-05:00`, deliveryDate: today, fulfillment: "delivery", address: "Barrio El Prado, Barranquilla", route: "Norte",
+      source: "agent", paymentMethod: "transfer", paymentStatus: "pending", deliveryFee: 5_000, adjustments: 0, total: 47_000, status: "received",
+      highLevel: { contactId: "demo-contact-1", locationId: "demo-location", conversationId: "demo-conversation-1" },
+      notes: "Domi para después de las 3 p. m.",
+      items: [
+        { id: "94011", productName: "Pulpa", quantity: 1, unit: "kg", unitPrice: 22_000 },
+        { id: "94012", productName: "Pechuga congelada", quantity: 1.5, unit: "kg", unitPrice: 14_000 },
+      ],
+    },
+    {
+      id: "9402", orderNumber: "DEMO-MIN-002", customerType: "retail", customer: "Andrés Ruiz", phone: "+57 301 555 0202",
+      receivedAt: `${today}T10:05:00-05:00`, deliveryDate: today, fulfillment: "delivery", address: "Barrio Boston, Barranquilla", route: "Centro",
+      source: "agent", paymentMethod: "cash", paymentStatus: "pending", deliveryFee: 0, adjustments: 0, total: 20_000, status: "incident",
+      highLevel: { contactId: "demo-contact-2", locationId: "demo-location", conversationId: "demo-conversation-2" },
+      notes: "El cliente pidió ayuda para corregir la dirección.",
+      items: [
+        { id: "94021", productName: "Costilla de cerdo", quantity: 1, unit: "kg", unitPrice: 20_000 },
+      ],
+    },
   ];
 }

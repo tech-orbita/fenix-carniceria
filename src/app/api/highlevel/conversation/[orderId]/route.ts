@@ -51,7 +51,6 @@ export async function GET(_request: Request, context: { params: Promise<{ orderI
     .from("orders")
     .select("source_payload,customer_type")
     .eq("id", Number(orderId))
-    .eq("customer_type", "wholesale")
     .maybeSingle();
   if (error || !order) {
     return NextResponse.json({ error: "No se encontró el pedido o no tienes acceso." }, { status: 404 });

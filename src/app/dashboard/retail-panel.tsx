@@ -4,8 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 
 import { toKilograms } from "@/lib/orders/product-parser";
+import { retailBillMessage } from "@/lib/orders/retail-bill";
 
-import { addDays, bogotaDay, dateTime, dayLabel, Icon, isPaid, money, orderTotal, phaseForStatus, phaseLabels, phaseOrder, whatsappUrl } from "./panel-shared";
+import { addDays, bogotaDay, dateTime, dayLabel, Icon, isPaid, money, orderTotal, phaseForStatus, phaseLabels, phaseOrder } from "./panel-shared";
 import type { OperationalPhase } from "./panel-shared";
 import type { Order } from "./types";
 
@@ -74,23 +75,6 @@ function isQuote(order: Order) {
 
 function initials(name: string) {
   return name.split(/\s+/).filter((part) => /^\p{L}/u.test(part)).map((part) => part[0]).slice(0, 2).join("").toLocaleUpperCase("es");
-}
-
-// Cuenta de cobro en texto: se acordó enviarla como mensaje escrito en vez de imagen.
-function billMessage(order: Order) {
-  const lines = order.items.map((item) => `• ${item.productName}: ${quantityFormat.format(itemQuantity(item))} ${item.unit} × ${money.format(item.unitPrice)} = ${money.format(itemQuantity(item) * item.unitPrice)}`);
-  return [
-    `Hola ${order.customer}, te compartimos la cuenta de tu pedido ${order.orderNumber} en Fénix J.A. (${dateTime.format(new Date(order.receivedAt))}):`,
-    "",
-    ...lines,
-    "",
-    `Subtotal: ${money.format(itemsSubtotal(order))}`,
-    ...(order.deliveryFee > 0 ? [`Domicilio: ${money.format(order.deliveryFee)}`] : []),
-    ...(order.adjustments !== 0 ? [`Ajustes: ${money.format(order.adjustments)}`] : []),
-    `*Total a pagar: ${money.format(orderTotal(order))}*`,
-    "",
-    isPaid(order) ? "Este pedido ya figura como pagado. ¡Gracias por tu compra!" : "Quedamos atentos a tu pago y al comprobante. ¡Gracias por tu compra!",
-  ].join("\n");
 }
 
 async function downloadRetailOrders(orders: Order[], range: DateRange) {
@@ -263,21 +247,18 @@ function FormDetails({ order }: { order: Order }) {
   </div>;
 }
 
-function OrderDetail({ order, pending, logo, onMove, onPaymentChange, onSave }: { order: Order; pending: boolean; logo: boolean; onMove: (order: Order, phase: OperationalPhase) => void; onPaymentChange: (order: Order, status: "paid" | "pending") => void; onSave: (order: Order, details: EditableOrderDetails) => Promise<boolean> }) {
+function OrderDetail({ order, pending, logo, onMove, onPaymentChange, onResolveHelp, onSave, onSendBill }: { order: Order; pending: boolean; logo: boolean; onMove: (order: Order, phase: OperationalPhase) => void; onPaymentChange: (order: Order, status: "paid" | "pending") => void; onResolveHelp: (order: Order) => void; onSave: (order: Order, details: EditableOrderDetails) => Promise<boolean>; onSendBill: (order: Order) => void }) {
   const [editing, setEditing] = useState(false);
   const [copied, setCopied] = useState(false);
   const phase = phaseForStatus(order.status);
-  const phaseIndex = phaseOrder.indexOf(phase);
-  const previousPhase = phaseIndex > 0 ? phaseOrder[phaseIndex - 1] : undefined;
-  const nextPhase = phaseIndex >= 0 && phaseIndex < phaseOrder.length - 1 ? phaseOrder[phaseIndex + 1] : undefined;
   const paid = isPaid(order);
   const canBill = order.items.length > 0;
   const copyBill = async () => {
     try {
-      await navigator.clipboard.writeText(billMessage(order));
+      await navigator.clipboard.writeText(retailBillMessage(order));
       setCopied(true);
       window.setTimeout(() => setCopied(false), 2000);
-    } catch { /* El navegador puede bloquear el portapapeles; el botón de WhatsApp sigue disponible. */ }
+    } catch { /* El navegador puede bloquear el portapapeles; el envío directo por GHL sigue disponible. */ }
   };
   if (editing) return <EditOrderForm key={order.id} onCancel={() => setEditing(false)} onSave={(details) => onSave(order, details)} order={order} saving={pending} />;
   return (
@@ -297,8 +278,8 @@ function OrderDetail({ order, pending, logo, onMove, onPaymentChange, onSave }: 
           <span className="rt-chip">{order.fulfillment === "delivery" ? <Icon name="truck" /> : <Icon name="shop" />}{order.fulfillment === "delivery" ? order.route : "Recoge"}</span>
         </section>
         <div className="rt-contact">
-          <a className="rt-button is-chat" href={whatsappUrl(order.phone, `Hola ${order.customer}, te escribimos sobre tu pedido ${order.orderNumber}.`)} rel="noreferrer" target="_blank"><Icon name="chat" /> Abrir conversación</a>
-          {canBill && <a className="rt-button is-bill" href={whatsappUrl(order.phone, billMessage(order))} rel="noreferrer" target="_blank" title="Envía al cliente el detalle de la factura con el total por pagar"><Icon name="receipt" /> Enviar cuenta de cobro</a>}
+          <a className="rt-button is-chat" href={`/api/highlevel/conversation/${encodeURIComponent(order.id)}`} rel="noreferrer" target="_blank"><Icon name="chat" /> Abrir conversación</a>
+          {canBill && <button className="rt-button is-bill" disabled={pending} onClick={() => onSendBill(order)} title="Envía el resumen directamente por la conversación de HighLevel" type="button"><Icon name="receipt" /> {pending ? "Enviando…" : "Enviar cuenta de cobro"}</button>}
           {canBill && <button className="rt-button" onClick={() => void copyBill()} title="Copia el resumen para pegarlo en otra conversación" type="button"><Icon name={copied ? "check" : "copy"} /> {copied ? "Copiado" : "Copiar resumen"}</button>}
           <button className="rt-button" onClick={() => setEditing(true)} type="button"><Icon name="edit" /> Editar pedido</button>
         </div>
@@ -330,20 +311,18 @@ function OrderDetail({ order, pending, logo, onMove, onPaymentChange, onSave }: 
         <button className="rt-button" onClick={() => window.print()} type="button"><Icon name="print" /> Imprimir</button>
         <button className={paid ? "rt-button is-paid" : "rt-button is-pay"} disabled={pending} onClick={() => onPaymentChange(order, paid ? "pending" : "paid")} type="button">{pending ? "Guardando…" : paid ? "Marcar pendiente" : "Marcar como pagado"}</button>
         <span className="rt-actionbar-spacer" />
-        {phase !== "help" && <button className="rt-button is-help" disabled={pending} onClick={() => onMove(order, "help")} type="button"><Icon name="help" /> Requiere ayuda</button>}
-        {phase === "help"
-          ? <button className="rt-button is-primary" disabled={pending} onClick={() => onMove(order, "new")} type="button">Enviar a Nuevos</button>
-          : <>
-            {previousPhase && <button className="rt-button" disabled={pending} onClick={() => onMove(order, previousPhase)} type="button">← {phaseLabels[previousPhase]}</button>}
-            {nextPhase && <button className="rt-button is-primary" disabled={pending} onClick={() => onMove(order, nextPhase)} type="button">{pending ? "Guardando…" : `Mover a ${phaseLabels[nextPhase]}`} →</button>}
-          </>}
+        <div aria-label="Cambiar etapa" className="rt-stage-actions" role="group">
+          {phaseOrder.map((option) => <button aria-pressed={phase === option} className={phase === option ? "rt-button is-current" : "rt-button"} disabled={pending || phase === option} key={option} onClick={() => onMove(order, option)} type="button">{phaseLabels[option]}</button>)}
+          {phase !== "help" && <button className="rt-button is-help" disabled={pending} onClick={() => onMove(order, "help")} type="button"><Icon name="help" /> Requiere ayuda</button>}
+          {phase === "help" && <button className="rt-button is-paid" disabled={pending} onClick={() => onResolveHelp(order)} type="button"><Icon name="check" /> {pending ? "Guardando…" : "Solucionado"}</button>}
+        </div>
       </footer>
       <ThermalTicket logo={logo} order={order} />
     </div>
   );
 }
 
-export function RetailPanel({ orders, pendingId, onMove, onPaymentChange, onSave }: { orders: Order[]; pendingId?: string; onMove: (order: Order, phase: OperationalPhase) => void; onPaymentChange: (order: Order, status: "paid" | "pending") => void; onSave: (order: Order, details: EditableOrderDetails) => Promise<boolean> }) {
+export function RetailPanel({ orders, pendingId, onMove, onPaymentChange, onResolveHelp, onSave, onSendBill }: { orders: Order[]; pendingId?: string; onMove: (order: Order, phase: OperationalPhase) => void; onPaymentChange: (order: Order, status: "paid" | "pending") => void; onResolveHelp: (order: Order) => void; onSave: (order: Order, details: EditableOrderDetails) => Promise<boolean>; onSendBill: (order: Order) => void }) {
   // "Hoy" se recalcula en cada refresco para que el periodo avance solo al cambiar el día.
   const today = bogotaDay.format(new Date());
   const [preset, setPreset] = useState<RangePreset>("today");
@@ -426,7 +405,7 @@ export function RetailPanel({ orders, pendingId, onMove, onPaymentChange, onSave
           </div>
         </aside>
         <div className="rt-detail-panel">{selected
-          ? <OrderDetail key={selected.id} logo={logo} onMove={onMove} onPaymentChange={onPaymentChange} onSave={onSave} order={selected} pending={pendingId === selected.id} />
+          ? <OrderDetail key={selected.id} logo={logo} onMove={onMove} onPaymentChange={onPaymentChange} onResolveHelp={onResolveHelp} onSave={onSave} onSendBill={onSendBill} order={selected} pending={pendingId === selected.id} />
           : <div className="rt-empty is-detail"><strong>Selecciona un pedido</strong><span>Cambia el periodo, la fase o el filtro de pago para ver otros pedidos.</span></div>}</div>
       </div>
     </section>

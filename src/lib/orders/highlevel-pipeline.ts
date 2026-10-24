@@ -185,21 +185,24 @@ export function syncRetailPipeline(
   return syncOrderPipeline(context, "retail", stage, opportunityName, monetaryValue);
 }
 
-export async function sendWholesalePaymentSummary(context: HighLevelContext, customer: string, orderNumber: string, total: number) {
+export async function sendHighLevelMessage(context: HighLevelContext, message: string) {
   const config = configuration(context);
   if (!config) return { ok: false as const, message: "El pedido no tiene un contacto de HighLevel asociado." };
   try {
     await ghlFetch("/conversations/messages", config.token, {
       method: "POST",
       headers: { Version: "2021-04-15" },
-      body: JSON.stringify({
-        type: "WhatsApp",
-        contactId: config.contactId,
-        message: `Hola ${customer}. El valor de tu pedido ${orderNumber} es ${new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(total)}. Por favor envíanos el comprobante cuando realices el pago.`,
-      }),
+      body: JSON.stringify({ type: "WhatsApp", contactId: config.contactId, message }),
     });
     return { ok: true as const };
   } catch (error) {
-    return { ok: false as const, message: error instanceof Error ? error.message : "No se pudo enviar el resumen." };
+    return { ok: false as const, message: error instanceof Error ? error.message : "No se pudo enviar el mensaje." };
   }
+}
+
+export async function sendWholesalePaymentSummary(context: HighLevelContext, customer: string, orderNumber: string, total: number) {
+  return sendHighLevelMessage(
+    context,
+    `Hola ${customer}. El valor de tu pedido ${orderNumber} es ${new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(total)}. Por favor envíanos el comprobante cuando realices el pago.`,
+  );
 }

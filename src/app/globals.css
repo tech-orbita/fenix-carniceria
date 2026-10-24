@@ -3789,6 +3789,19 @@ a {
   flex: 1 1 auto;
 }
 
+.orders-app .rt-stage-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+.orders-app .rt-button.is-current {
+  background: #eef2f7;
+  border-color: #cbd5e1;
+  color: #64748b;
+}
+
 /* Edición del pedido */
 .orders-app .rt-edit {
   min-height: 0;

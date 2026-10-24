@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { catalogProductFor, normalizeProductName, toKilograms, wholesaleProductCatalog } from "@/lib/orders/product-parser";
 import type { WholesaleProduct } from "@/lib/orders/product-parser";
 
-import { scheduleWholesaleOrder, updateOrderDetails, updateOrderPaymentStatus, updateOrderStatus, updateWholesalePayment, updateWholesaleTable } from "./actions";
+import { resolveOrderHelp, scheduleWholesaleOrder, sendRetailPaymentSummary, updateOrderDetails, updateOrderPaymentStatus, updateOrderStatus, updateWholesalePayment, updateWholesaleTable } from "./actions";
 import { addDays, bogotaDay, dateTime, dayLabel, DAY_MS, Icon, phaseLabels, phaseStatus } from "./panel-shared";
 import type { OperationalPhase } from "./panel-shared";
 import { RetailPanel } from "./retail-panel";
@@ -446,6 +446,20 @@ export function OrdersPanel({ initialOrders, loadError, viewer }: { initialOrder
     setPendingId(undefined);
   };
 
+  const resolveHelp = async (order: Order) => {
+    setPendingId(order.id); setNotice(undefined);
+    const result = await resolveOrderHelp(order.id);
+    if (!result.ok) { setNotice(result.message); setPendingId(undefined); return; }
+    setOrders((current) => current.map((item) => item.id === order.id ? { ...item, status: result.status } : item));
+    setNotice(result.message); setPendingId(undefined);
+  };
+
+  const sendBill = async (order: Order) => {
+    setPendingId(order.id); setNotice(undefined);
+    const result = await sendRetailPaymentSummary(order.id);
+    setNotice(result.message); setPendingId(undefined);
+  };
+
   return (
     <div className="orders-app"><main className="dashboard-content">
       <div className="dashboard-topbar">
@@ -457,7 +471,7 @@ export function OrdersPanel({ initialOrders, loadError, viewer }: { initialOrder
         </div>}
       </div>
       {notice && <div className="operation-notice" role="status">{notice}</div>}
-      {activeType === "wholesale" ? <WholesaleOrdersTable onStatusChange={(order, phase) => void moveOrder(order, phase)} orders={wholesale} pendingId={pendingId} /> : <RetailPanel onMove={(order, phase) => void moveOrder(order, phase)} onPaymentChange={(order, status) => void changePaymentStatus(order, status)} onSave={saveOrder} orders={retail} pendingId={pendingId} />}
+      {activeType === "wholesale" ? <WholesaleOrdersTable onStatusChange={(order, phase) => void moveOrder(order, phase)} orders={wholesale} pendingId={pendingId} /> : <RetailPanel onMove={(order, phase) => void moveOrder(order, phase)} onPaymentChange={(order, status) => void changePaymentStatus(order, status)} onResolveHelp={(order) => void resolveHelp(order)} onSave={saveOrder} onSendBill={(order) => void sendBill(order)} orders={retail} pendingId={pendingId} />}
     </main></div>
   );
 }

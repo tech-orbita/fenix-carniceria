@@ -1,7 +1,7 @@
 import { afterEach, test } from "node:test";
 import assert from "node:assert/strict";
 
-import { syncRetailPipeline } from "../src/lib/orders/highlevel-pipeline.ts";
+import { sendHighLevelMessage, syncRetailPipeline } from "../src/lib/orders/highlevel-pipeline.ts";
 
 const originalFetch = globalThis.fetch;
 const originalEnv = { ...process.env };
@@ -90,4 +90,24 @@ test("reconoce todas las etapas visibles del pipeline Minoristas", async () => {
     assert.equal(result.ok, true);
     assert.equal(updatedBody.pipelineStageId, stageId);
   }
+});
+
+test("envía un mensaje de WhatsApp al contacto por HighLevel", async () => {
+  configure();
+  let request;
+  globalThis.fetch = async (input, init = {}) => {
+    request = { url: String(input), init };
+    return Response.json({ messageId: "message-1" });
+  };
+
+  const result = await sendHighLevelMessage({ locationId: "location-message", contactId: "contact-1" }, "Resumen del pedido");
+
+  assert.equal(result.ok, true);
+  assert.equal(request.url, "https://services.leadconnectorhq.com/conversations/messages");
+  assert.equal(request.init.method, "POST");
+  assert.deepEqual(JSON.parse(String(request.init.body)), {
+    type: "WhatsApp",
+    contactId: "contact-1",
+    message: "Resumen del pedido",
+  });
 });

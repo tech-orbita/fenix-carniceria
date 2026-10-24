@@ -5,7 +5,8 @@ import { revalidatePath } from "next/cache";
 import { requireViewer } from "@/lib/auth/viewer";
 import { createClient } from "@/lib/supabase/server";
 import { catalogProductFor, normalizeProductName, toKilograms } from "@/lib/orders/product-parser";
-import { sendWholesalePaymentSummary, syncOrderPipeline, syncWholesalePipeline } from "@/lib/orders/highlevel-pipeline";
+import { retailBillMessage } from "@/lib/orders/retail-bill";
+import { sendHighLevelMessage, sendWholesalePaymentSummary, syncOrderPipeline, syncWholesalePipeline } from "@/lib/orders/highlevel-pipeline";
 import type { HighLevelContext, OrderPipelineStage } from "@/lib/orders/highlevel-pipeline";
 
 import type { OrderStatus } from "./types";
@@ -77,6 +78,88 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus) {
 
   revalidatePath("/dashboard");
   return { ok: true, message };
+}
+
+export async function resolveOrderHelp(orderId: string) {
+  if (!/^\d+$/.test(orderId)) return { ok: false as const, message: "Pedido inválido." };
+
+  const supabase = await sessionClient();
+  const { data: current, error: currentError } = await supabase
+    .from("orders")
+    .select("id,status,order_number,customer_type,source_payload,total,customers(name,business_name)")
+    .eq("id", Number(orderId))
+    .maybeSingle();
+  if (currentError || !current || !["incident", "needs_review"].includes(current.status)) {
+    return { ok: false as const, message: "El pedido ya no está en Requiere ayuda." };
+  }
+
+  const { data: history } = await supabase
+    .from("order_status_history")
+    .select("previous_status")
+    .eq("order_id", Number(orderId))
+    .in("new_status", ["incident", "needs_review"])
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const candidate = history?.previous_status as OrderStatus | null | undefined;
+  const status: OrderStatus = candidate && allowedStatuses.includes(candidate) && !["incident", "needs_review", "cancelled"].includes(candidate)
+    ? candidate
+    : "received";
+
+  const { data: updated, error: updateError } = await supabase
+    .from("orders")
+    .update({ status })
+    .eq("id", Number(orderId))
+    .eq("status", current.status)
+    .select("id")
+    .maybeSingle();
+  if (updateError || !updated) return { ok: false as const, message: "No se pudo marcar el caso como solucionado." };
+
+  const customer = Array.isArray(current.customers) ? current.customers[0] : current.customers;
+  const synced = await syncOrderPipeline(
+    highLevelContext(current.source_payload),
+    current.customer_type,
+    pipelineStageFor(status)!,
+    `${customer?.business_name || customer?.name || "Cliente"} · ${current.order_number}`,
+    Number(current.total),
+  );
+  revalidatePath("/dashboard");
+  return {
+    ok: true as const,
+    status,
+    message: synced.ok ? "Caso solucionado y devuelto a su estado anterior." : `Caso solucionado, pero no se pudo mover el pipeline: ${synced.message}`,
+  };
+}
+
+export async function sendRetailPaymentSummary(orderId: string) {
+  if (!/^\d+$/.test(orderId)) return { ok: false as const, message: "Pedido inválido." };
+
+  const supabase = await sessionClient();
+  const { data, error } = await supabase
+    .from("orders")
+    .select("order_number,received_at,payment_status,delivery_fee,adjustments,source_payload,customers(name),order_items(product_name,quantity,actual_quantity,unit,unit_price)")
+    .eq("id", Number(orderId))
+    .eq("customer_type", "retail")
+    .maybeSingle();
+  if (error || !data || !data.order_items?.length) return { ok: false as const, message: "No se encontró una cuenta de cobro para enviar." };
+
+  const customer = Array.isArray(data.customers) ? data.customers[0] : data.customers;
+  const sent = await sendHighLevelMessage(highLevelContext(data.source_payload), retailBillMessage({
+    orderNumber: data.order_number,
+    customer: customer?.name || "cliente",
+    receivedAt: data.received_at,
+    paymentStatus: data.payment_status,
+    deliveryFee: Number(data.delivery_fee),
+    adjustments: Number(data.adjustments),
+    items: data.order_items.map((item) => ({
+      productName: item.product_name,
+      quantity: Number(item.quantity),
+      actualQuantity: item.actual_quantity == null ? undefined : Number(item.actual_quantity),
+      unit: item.unit,
+      unitPrice: Number(item.unit_price),
+    })),
+  }));
+  return sent.ok ? { ok: true as const, message: "Cuenta de cobro enviada por la conversación de HighLevel." } : sent;
 }
 
 export async function updateOrderPaymentStatus(
