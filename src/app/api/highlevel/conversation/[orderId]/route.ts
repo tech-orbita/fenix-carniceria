@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { requireViewer } from "@/lib/auth/viewer";
+import { highLevelConversationUrl, safeHighLevelConversationUrl } from "@/lib/orders/highlevel-conversation-url";
 import { createClient } from "@/lib/supabase/server";
 
 type Payload = Record<string, unknown>;
@@ -11,32 +12,6 @@ function objectValue(value: unknown): Payload {
 
 function textValue(...values: unknown[]) {
   return values.find((value): value is string => typeof value === "string" && value.trim().length > 0)?.trim();
-}
-
-function appBaseUrl() {
-  const configured = process.env.GHL_APP_BASE_URL?.trim() || "https://app.iaorbita.com";
-  try {
-    const url = new URL(configured);
-    return url.protocol === "https:" ? url.origin : "https://app.iaorbita.com";
-  } catch {
-    return "https://app.iaorbita.com";
-  }
-}
-
-function conversationUrl(locationId: string, conversationId: string) {
-  return `${appBaseUrl()}/v2/location/${encodeURIComponent(locationId)}/conversations/conversation/${encodeURIComponent(conversationId)}`;
-}
-
-function safeExplicitUrl(value: string | undefined) {
-  if (!value) return undefined;
-  try {
-    const url = new URL(value);
-    const allowedHost = new URL(appBaseUrl()).hostname;
-    if (url.protocol === "https:" && url.hostname === allowedHost) return url;
-  } catch {
-    // El enlace se reconstruirá con los IDs o se buscará por contacto.
-  }
-  return undefined;
 }
 
 export async function GET(_request: Request, context: { params: Promise<{ orderId: string }> }) {
@@ -61,10 +36,10 @@ export async function GET(_request: Request, context: { params: Promise<{ orderI
   const locationId = textValue(form.location_id, form.locationId, payload.location_id, payload.locationId, process.env.GHL_LOCATION_ID);
   const conversationId = textValue(form.conversation_id, form.conversationId, payload.conversation_id, payload.conversationId);
   const contactId = textValue(form.contact_id, form.contactId, payload.contact_id, payload.contactId);
-  const explicitUrl = safeExplicitUrl(textValue(form.conversation_url, form.conversationUrl, payload.conversation_url, payload.conversationUrl));
+  const explicitUrl = safeHighLevelConversationUrl(textValue(form.conversation_url, form.conversationUrl, payload.conversation_url, payload.conversationUrl));
 
   if (explicitUrl) return NextResponse.redirect(explicitUrl);
-  if (locationId && conversationId) return NextResponse.redirect(conversationUrl(locationId, conversationId));
+  if (locationId && conversationId) return NextResponse.redirect(highLevelConversationUrl(locationId, conversationId));
   if (!locationId || !contactId) {
     return NextResponse.json({ error: "El pedido no tiene una conversación de HighLevel asociada." }, { status: 404 });
   }
@@ -93,5 +68,5 @@ export async function GET(_request: Request, context: { params: Promise<{ orderI
     return NextResponse.json({ error: "Este cliente todavía no tiene una conversación en HighLevel." }, { status: 404 });
   }
 
-  return NextResponse.redirect(conversationUrl(locationId, foundId));
+  return NextResponse.redirect(highLevelConversationUrl(locationId, foundId));
 }
