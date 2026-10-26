@@ -33,8 +33,12 @@ const unitPattern = "(?:kg|kgs|kilo|kilos|kilogramo|kilogramos|lb|lbs|lib|libra|
 const retailAliases: Record<string, string> = {
   "carne molida especial": "molida super especial",
   "molida especial": "molida super especial",
+  "muslo colombia": "muslo colombina",
+  "muslos colombia": "muslo colombina",
   "pechuga completa": "pechuga congelada",
   pechuga: "pechuga congelada",
+  sobrebarriga: "sobre barriga delgada",
+  "sobre barriga": "sobre barriga delgada",
   churrasco: "lomo ancho",
 };
 
@@ -111,11 +115,38 @@ function parsedLine(item: RetailInputItem) {
     };
   }
 
+  // El agente conserva el pedido literalmente, por lo que es común recibir
+  // "punta gorda 2 kilos" en vez de "2 kilos de punta gorda".
+  const trailingWeight = rawText.match(new RegExp(`^(.+?)\\s+(\\d+(?:[.,]\\d+)?)\\s*(${unitPattern})\\b(?:\\s+.*)?$`, "i"));
+  if (trailingWeight) {
+    return {
+      rawText,
+      productText: trailingWeight[1].trim(),
+      quantity: numericValue(trailingWeight[2]),
+      unit: trailingWeight[3],
+      amount: null,
+    };
+  }
+
   const byAmount = rawText.match(/^\$?\s*([\d.,]+)\s*(mil|k)?\s*(?:pesos?)?\s+de\s+(.+)$/i);
   if (byAmount && (byAmount[2] || numericValue(byAmount[1]) >= 1_000 || rawText.startsWith("$"))) {
     let amount = numericValue(byAmount[1]);
     if (byAmount[2] && amount < 1_000) amount *= 1_000;
     return { rawText, productText: byAmount[3].trim(), quantity: null, unit: "COP", amount };
+  }
+
+  // Cantidades por pieza no tienen equivalencia segura a kilos. Se usa 1 kg
+  // provisional para aplicar el precio del catálogo y se conserva la línea
+  // original en notes para que el operario defina el peso real en el panel.
+  const counted = rawText.match(/^(.+?)\s+(\d+(?:[.,]\d+)?)\s*(?:(?:unidades?|unds?|piezas?|alas?|muslos?|colombinas?))?$/i);
+  if (counted) {
+    return {
+      rawText,
+      productText: counted[1].trim(),
+      quantity: 1,
+      unit: "kg",
+      amount: null,
+    };
   }
 
   const plainQuantity = rawText.match(/^(\d+(?:[.,]\d+)?)\s+(?:de\s+)?(.+)$/i);

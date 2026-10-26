@@ -46,6 +46,7 @@ export default async function DashboardPage() {
         unit,
         actual_quantity,
         preparation,
+        notes,
         unit_price
       )
     `)
@@ -87,6 +88,7 @@ export default async function DashboardPage() {
             unit: item.unit,
             actualQuantity: item.actual_quantity == null ? undefined : Number(item.actual_quantity),
             preparation: item.preparation ?? undefined,
+            notes: item.notes ?? undefined,
             unitPrice: Number(item.unit_price),
           })),
           formData,

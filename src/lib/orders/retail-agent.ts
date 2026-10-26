@@ -6,6 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { syncRetailPipeline } from "@/lib/orders/highlevel-pipeline";
 import { normalizeRetailItems, requiresRetailHelp } from "@/lib/orders/retail-normalization";
 import type { RetailCatalogProduct, RetailInputItem } from "@/lib/orders/retail-normalization";
+import { retailOrderWindowStart } from "@/lib/orders/retail-order-window";
 
 type RetailAgentItem = RetailInputItem;
 
@@ -41,8 +42,6 @@ type RetailHelpPayload = {
   customer?: { name?: string; phone?: string };
 };
 
-const OPEN_STATUSES = ["needs_review", "received", "quoted", "confirmed", "preparing", "incident"];
-
 export function authorizedRetail(request: NextRequest) {
   const configured = process.env.RETAIL_ORDERS_INGEST_SECRET || process.env.ORDERS_INGEST_SECRET;
   const supplied = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
@@ -50,17 +49,6 @@ export function authorizedRetail(request: NextRequest) {
   const left = Buffer.from(configured);
   const right = Buffer.from(supplied);
   return left.length === right.length && timingSafeEqual(left, right);
-}
-
-function bogotaDayStart() {
-  const formatter = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Bogota",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  });
-  const day = formatter.format(new Date());
-  return new Date(`${day}T00:00:00-05:00`).toISOString();
 }
 
 function cleanPhone(value?: string) {
@@ -107,19 +95,22 @@ async function findCustomerId(phone: string) {
   return data?.id ?? null;
 }
 
-async function findOpenOrder(customerId: number) {
+async function findLatestOrder(customerId: number, from?: string) {
   const supabase = createAdminClient();
-  const { data } = await supabase
+  let query = supabase
     .from("orders")
     .select("id,order_number,status,source_payload,received_at")
     .eq("customer_type", "retail")
     .eq("customer_id", customerId)
-    .in("status", OPEN_STATUSES)
-    .gte("received_at", bogotaDayStart())
     .order("received_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .limit(1);
+  if (from) query = query.gte("received_at", from);
+  const { data } = await query.maybeSingle();
   return data;
+}
+
+function findCurrentOrder(customerId: number) {
+  return findLatestOrder(customerId, retailOrderWindowStart());
 }
 
 export async function retailOrderContext(value: unknown) {
@@ -128,18 +119,26 @@ export async function retailOrderContext(value: unknown) {
   const customerId = await findCustomerId(phone);
   if (!customerId) return NextResponse.json({ openOrder: null, since: null });
 
-  const openOrder = await findOpenOrder(customerId);
-  if (!openOrder) return NextResponse.json({ openOrder: null, since: null });
-  const source = (openOrder.source_payload ?? {}) as Record<string, unknown>;
+  const [currentOrder, latestOrder] = await Promise.all([
+    findCurrentOrder(customerId),
+    findLatestOrder(customerId),
+  ]);
+  const currentSource = (currentOrder?.source_payload ?? {}) as Record<string, unknown>;
+  const latestSource = (latestOrder?.source_payload ?? {}) as Record<string, unknown>;
   return NextResponse.json({
-    openOrder: {
-      id: openOrder.id,
-      number: openOrder.order_number,
-      status: openOrder.status,
-      inPreparation: openOrder.status === "preparing",
-      text: typeof source.rawOrderText === "string" ? source.rawOrderText : "",
-    },
-    since: typeof source.contextUntil === "string" ? source.contextUntil : null,
+    openOrder: currentOrder ? {
+      id: currentOrder.id,
+      number: currentOrder.order_number,
+      status: currentOrder.status,
+      inPreparation: currentOrder.status === "preparing",
+      text: typeof currentSource.rawOrderText === "string" ? currentSource.rawOrderText : "",
+    } : null,
+    // Aunque el pedido anterior esté cerrado o sea de otra ventana, n8n debe
+    // empezar después del último mensaje ya procesado para no copiarlo al nuevo.
+    since: typeof currentSource.contextUntil === "string"
+      ? currentSource.contextUntil
+      : typeof latestSource.contextUntil === "string" ? latestSource.contextUntil : null,
+    cutoff: retailOrderWindowStart(),
   });
 }
 
@@ -181,7 +180,9 @@ export async function upsertRetailOrder(value: unknown) {
     .single();
   if (customerError || !customer) return NextResponse.json({ error: "Could not save customer" }, { status: 500 });
 
-  const openOrder = body.orderAction === "new" ? null : await findOpenOrder(customer.id);
+  // "new" siempre crea otro pedido. "update" solo puede tocar el pedido de la
+  // ventana operativa vigente; después de las 2 p. m. se inicia otra ventana.
+  const openOrder = body.orderAction === "new" ? null : await findCurrentOrder(customer.id);
   const previousPayload = openOrder?.source_payload && typeof openOrder.source_payload === "object"
     ? openOrder.source_payload as Record<string, unknown>
     : {};
@@ -194,6 +195,8 @@ export async function upsertRetailOrder(value: unknown) {
     contextUntil: body.contextUntil ?? null,
     rawOrderText: String(body.rawOrderText).trim(),
     sourceEventId: body.sourceEventId ?? null,
+    orderAction: body.orderAction ?? null,
+    orderWindowStart: retailOrderWindowStart(),
   };
   const subtotal = items.reduce((total, item) => total + item.quantity * item.unit_price, 0);
 
@@ -276,7 +279,7 @@ export async function flagRetailHelpRequest(value: unknown) {
   }, { onConflict: "customer_type,phone" }).select("id,name").single();
   if (customerError || !customer) return NextResponse.json({ error: "Could not save customer" }, { status: 500 });
 
-  const openOrder = await findOpenOrder(customer.id);
+  const openOrder = await findCurrentOrder(customer.id);
   const sourcePayload = {
     source: "agent",
     locationId: body.locationId ?? null,

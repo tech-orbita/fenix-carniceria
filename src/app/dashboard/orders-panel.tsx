@@ -431,7 +431,7 @@ export function OrdersPanel({ initialOrders, loadError, viewer }: { initialOrder
       notes: details.notes || undefined,
       items: item.items.map((orderItem) => {
         const edited = details.items.find((candidate) => candidate.id === orderItem.id);
-        return edited ? { ...orderItem, productName: edited.productName, actualQuantity: edited.quantity, unit: edited.unit, preparation: edited.preparation || undefined } : orderItem;
+        return edited ? { ...orderItem, productName: edited.productName, actualQuantity: edited.quantity, unit: edited.unit, unitPrice: edited.unitPrice, preparation: edited.preparation || undefined } : orderItem;
       }),
     } : item));
     setNotice(`Los datos de ${order.orderNumber} fueron actualizados.`); setPendingId(undefined); return true;

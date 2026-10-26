@@ -262,6 +262,7 @@ type OrderDetailsInput = {
     productName: string;
     quantity: number;
     unit: string;
+    unitPrice: number;
     preparation: string;
   }>;
 };
@@ -290,7 +291,10 @@ export async function updateOrderDetails(
       !item.productName.trim() ||
       !item.unit.trim() ||
       !Number.isFinite(item.quantity) ||
-      item.quantity <= 0,
+      item.quantity <= 0 ||
+      !Number.isFinite(item.unitPrice) ||
+      item.unitPrice < 0 ||
+      item.unitPrice > 999_999_999,
     )
   ) {
     return { ok: false, message: "Revisa los datos del cliente y las cantidades del pedido." };
@@ -314,7 +318,11 @@ export async function updateOrderDetails(
       .eq("id", Number(order.customer_id)),
     supabase
       .from("orders")
-      .update({ delivery_address: address, notes: notes || null })
+      .update({
+        delivery_address: address,
+        notes: notes || null,
+        subtotal: normalizedItems.reduce((total, item) => total + item.quantity * item.unitPrice, 0),
+      })
       .eq("id", Number(orderId)),
     ...normalizedItems.map((item) =>
       supabase
@@ -323,6 +331,7 @@ export async function updateOrderDetails(
           product_name: item.productName.trim(),
           actual_quantity: item.quantity,
           unit: "kg",
+          unit_price: item.unitPrice,
           preparation: item.preparation.trim() || null,
         })
         .eq("id", Number(item.id))

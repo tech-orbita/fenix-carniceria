@@ -19,6 +19,7 @@ export type OrderItem = {
   unit: string;
   actualQuantity?: number;
   preparation?: string;
+  notes?: string;
   unitPrice: number;
 };
 

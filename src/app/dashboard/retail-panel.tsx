@@ -17,6 +17,7 @@ export type EditableOrderDetails = Pick<Order, "customer" | "phone" | "address">
     productName: string;
     quantity: number;
     unit: string;
+    unitPrice: number;
     preparation: string;
   }>;
 };
@@ -195,6 +196,7 @@ function EditOrderForm({ order, saving, onCancel, onSave }: { order: Order; savi
         productName: item.productName,
         quantity: normalized.quantity,
         unit: "kg",
+        unitPrice: item.unitPrice,
         preparation: item.preparation ?? "",
       };
     }),
@@ -213,11 +215,12 @@ function EditOrderForm({ order, saving, onCancel, onSave }: { order: Order; savi
         <label className="rt-wide">Indicaciones<textarea onChange={(event) => setDetails((current) => ({ ...current, notes: event.target.value }))} rows={3} value={details.notes} /></label>
       </div>
       <fieldset className="rt-edit-items">
-        <legend>Productos · ajusta el gramaje real despachado</legend>
+        <legend>Productos · ajusta el gramaje y el precio real</legend>
         {details.items.map((item, index) => <div className="rt-edit-row" key={item.id}>
-          <label>Producto<input onChange={(event) => updateItem(index, { productName: event.target.value })} required value={item.productName} /></label>
+          <label>Producto<input onChange={(event) => updateItem(index, { productName: event.target.value })} required value={item.productName} />{order.items[index]?.notes && <small>Pedido: {order.items[index].notes}</small>}</label>
           <label>Cantidad<input min="0.001" onChange={(event) => updateItem(index, { quantity: Number(event.target.value) })} required step="0.001" type="number" value={item.quantity} /></label>
           <label>Unidad<input aria-label="Unidad fija en kilogramos" readOnly value="kg" /></label>
+          <label>Precio por kg<input min="0" onChange={(event) => updateItem(index, { unitPrice: Number(event.target.value) })} required step="100" type="number" value={item.unitPrice} /></label>
           <label>Preparación<input onChange={(event) => updateItem(index, { preparation: event.target.value })} placeholder="Sin indicaciones" value={item.preparation} /></label>
         </div>)}
       </fieldset>
@@ -277,17 +280,39 @@ function OrderDetail({ order, pending, logo, onMove, onPaymentChange, onResolveH
           </div>
           <span className="rt-chip">{order.fulfillment === "delivery" ? <Icon name="truck" /> : <Icon name="shop" />}{order.fulfillment === "delivery" ? order.route : "Recoge"}</span>
         </section>
-        <div className="rt-contact">
-          <a className="rt-button is-chat" href={`/api/highlevel/conversation/${encodeURIComponent(order.id)}`} rel="noreferrer" target="_blank"><Icon name="chat" /> Abrir conversación</a>
-          {canBill && <button className="rt-button is-bill" disabled={pending} onClick={() => onSendBill(order)} title="Envía el resumen directamente por la conversación de HighLevel" type="button"><Icon name="receipt" /> {pending ? "Enviando…" : "Enviar cuenta de cobro"}</button>}
-          {canBill && <button className="rt-button" onClick={() => void copyBill()} title="Copia el resumen para pegarlo en otra conversación" type="button"><Icon name={copied ? "check" : "copy"} /> {copied ? "Copiado" : "Copiar resumen"}</button>}
-          <button className="rt-button" onClick={() => setEditing(true)} type="button"><Icon name="edit" /> Editar pedido</button>
+        <div className="rt-control-panel">
+          <div className="rt-control-row">
+            <div className="rt-control-section">
+              <span className="rt-control-label">Comunicación</span>
+              <div className="rt-control-actions">
+                <a className="rt-button is-chat" href={`/api/highlevel/conversation/${encodeURIComponent(order.id)}`} rel="noreferrer" target="_blank"><Icon name="chat" /> Abrir conversación</a>
+                {canBill && <button className="rt-button is-bill" disabled={pending} onClick={() => onSendBill(order)} title="Envía el resumen directamente por la conversación de HighLevel" type="button"><Icon name="receipt" /> {pending ? "Enviando…" : "Enviar cobro"}</button>}
+              </div>
+            </div>
+            <div className="rt-control-section is-order">
+              <span className="rt-control-label">Pedido</span>
+              <div className="rt-control-actions">
+                {canBill && <button className="rt-button is-quiet" onClick={() => void copyBill()} title="Copia el resumen para pegarlo en otra conversación" type="button"><Icon name={copied ? "check" : "copy"} /> {copied ? "Copiado" : "Copiar"}</button>}
+                <button className="rt-button is-quiet" onClick={() => setEditing(true)} type="button"><Icon name="edit" /> Editar</button>
+                <button className="rt-button is-quiet" onClick={() => window.print()} type="button"><Icon name="print" /> Imprimir</button>
+              </div>
+            </div>
+            <button className={paid ? "rt-button rt-payment-action is-paid" : "rt-button rt-payment-action is-pay"} disabled={pending} onClick={() => onPaymentChange(order, paid ? "pending" : "paid")} type="button">{pending ? "Guardando…" : paid ? "Marcar pendiente" : "Marcar como pagado"}</button>
+          </div>
+          <div className="rt-stage-row">
+            <span className="rt-control-label">Etapa del pedido</span>
+            <div aria-label="Cambiar etapa" className="rt-stage-actions" role="group">
+              {phaseOrder.map((option) => <button aria-pressed={phase === option} className={phase === option ? "rt-button is-current" : "rt-button"} disabled={pending || phase === option} key={option} onClick={() => onMove(order, option)} type="button">{phaseLabels[option]}</button>)}
+              {phase !== "help" && <button className="rt-button is-help" disabled={pending} onClick={() => onMove(order, "help")} type="button"><Icon name="help" /> Requiere ayuda</button>}
+              {phase === "help" && <button className="rt-button is-paid" disabled={pending} onClick={() => onResolveHelp(order)} type="button"><Icon name="check" /> {pending ? "Guardando…" : "Solucionado"}</button>}
+            </div>
+          </div>
         </div>
         <FormDetails order={order} />
         {order.items.length > 0 && <table className="rt-lines">
           <thead><tr><th scope="col">Producto</th><th scope="col">Cantidad</th><th scope="col">Precio</th><th scope="col">Subtotal</th></tr></thead>
           <tbody>{order.items.map((item) => <tr key={item.id}>
-            <th scope="row">{item.productName}{item.preparation && <small>{item.preparation}</small>}</th>
+            <th scope="row">{item.productName}{item.notes && <small>Pedido: {item.notes}</small>}{item.preparation && <small>Preparación: {item.preparation}</small>}</th>
             <td>{quantityFormat.format(itemQuantity(item))} {item.unit}</td>
             <td>{money.format(item.unitPrice)}<small>por {item.unit}</small></td>
             <td>{money.format(itemQuantity(item) * item.unitPrice)}</td>
@@ -307,16 +332,6 @@ function OrderDetail({ order, pending, logo, onMove, onPaymentChange, onResolveH
           </dl>
         </section>
       </div>
-      <footer className="rt-actionbar">
-        <button className="rt-button" onClick={() => window.print()} type="button"><Icon name="print" /> Imprimir</button>
-        <button className={paid ? "rt-button is-paid" : "rt-button is-pay"} disabled={pending} onClick={() => onPaymentChange(order, paid ? "pending" : "paid")} type="button">{pending ? "Guardando…" : paid ? "Marcar pendiente" : "Marcar como pagado"}</button>
-        <span className="rt-actionbar-spacer" />
-        <div aria-label="Cambiar etapa" className="rt-stage-actions" role="group">
-          {phaseOrder.map((option) => <button aria-pressed={phase === option} className={phase === option ? "rt-button is-current" : "rt-button"} disabled={pending || phase === option} key={option} onClick={() => onMove(order, option)} type="button">{phaseLabels[option]}</button>)}
-          {phase !== "help" && <button className="rt-button is-help" disabled={pending} onClick={() => onMove(order, "help")} type="button"><Icon name="help" /> Requiere ayuda</button>}
-          {phase === "help" && <button className="rt-button is-paid" disabled={pending} onClick={() => onResolveHelp(order)} type="button"><Icon name="check" /> {pending ? "Guardando…" : "Solucionado"}</button>}
-        </div>
-      </footer>
       <ThermalTicket logo={logo} order={order} />
     </div>
   );

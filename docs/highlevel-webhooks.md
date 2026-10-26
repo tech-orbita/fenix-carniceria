@@ -61,3 +61,5 @@ La app busca el pipeline `Minoristas` y estas etapas por nombre: `Realizo Pedido
 - Las solicitudes de atención del agente llegan a `/api/webhooks/ghl/help-requests`, aparecen en **Requiere ayuda** y mueven allí la oportunidad.
 - Si la actualización local se guarda pero HighLevel falla, el panel muestra la advertencia sin perder el cambio del pedido.
 
+La personalidad, el registro único del cliente y el workflow que marca `Registro Minorista Completo` están documentados en [agente-minorista.md](agente-minorista.md). Mantener `SEND_CONFIRMATION=false` en n8n evita que el agente y el flujo envíen dos confirmaciones por el mismo cambio.
+

@@ -542,7 +542,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ type: 'WhatsApp', contactId: $('Validar extracción').item.json.payload.contactId, message: $('Resultado').item.json.adjusted ? `✏️ Listo, ajustamos tu pedido ${$('Resultado').item.json.orderNumber}. Es el mismo pedido, no se creó uno nuevo. Te avisamos cuando salga.` : `✅ Recibimos tu pedido ${$('Resultado').item.json.orderNumber}. Ya lo estamos alistando; cuando esté listo te enviamos el total.` }) }}",
+        "jsonBody": "={{ JSON.stringify({ type: 'WhatsApp', contactId: $('Validar extracción').item.json.payload.contactId, message: $('Resultado').item.json.adjusted ? `Listo, agregué el cambio al pedido ${$('Resultado').item.json.orderNumber}.` : `Pedido ${$('Resultado').item.json.orderNumber} registrado. Te confirmaremos el total.` }) }}",
         "options": {
           "response": {
             "response": {
@@ -674,7 +674,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const response = .first().json;\nconst status = response.statusCode;\nconst body = response.body || {};\nconst ok = status >= 200 && status < 300 && Boolean(body.order_number);\nreturn [{ json: {\n  ok,\n  status,\n  adjusted: ok && body.adjusted === true,\n  mode: body.adjusted ? 'updated' : 'created',\n  orderNumber: body.order_number || null,\n  duplicate: status === 409,\n  afterCutoff: false,\n  scheduledFor: null,\n  scheduledForLabel: null,\n  error: ok ? null : (body.error || `La app respondió `),\n} }];"
+        "jsCode": "const response = $input.first().json;\nconst status = response.statusCode;\nconst body = response.body || {};\nconst ok = status >= 200 && status < 300 && Boolean(body.order_number);\nreturn [{ json: {\n  ok,\n  status,\n  adjusted: ok && body.adjusted === true,\n  mode: body.adjusted ? 'updated' : 'created',\n  orderNumber: body.order_number || null,\n  duplicate: status === 409,\n  afterCutoff: false,\n  scheduledFor: null,\n  scheduledForLabel: null,\n  error: ok ? null : (body.error || `La app respondió ${status || 'sin estado'}`),\n} }];"
       },
       "id": "b58000d2-1604-461e-aeeb-63f7e610ae2f",
       "name": "Resultado",
@@ -1046,7 +1046,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ type: 'WhatsApp', contactId: $('Validar extracción').item.json.payload.contactId, message: `🌙 Recibimos tu pedido ${$('Resultado').item.json.orderNumber}. Como llegó después de nuestro horario de despacho, queda programado para el ${$('Resultado').item.json.scheduledForLabel}. Ese día te enviamos el total y te avisamos cuando salga` }) }}",
+        "jsonBody": "={{ JSON.stringify({ type: 'WhatsApp', contactId: $('Validar extracción').item.json.payload.contactId, message: `Pedido ${$('Resultado').item.json.orderNumber} registrado para el ${$('Resultado').item.json.scheduledForLabel}. Te confirmaremos el total.` }) }}",
         "options": {
           "response": {
             "response": {

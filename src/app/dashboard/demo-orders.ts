@@ -57,12 +57,13 @@ export function demoOrders(): Order[] {
     {
       id: "9401", orderNumber: "DEMO-MIN-001", customerType: "retail", customer: "Laura Martínez", phone: "+57 300 555 0101",
       receivedAt: `${today}T09:20:00-05:00`, deliveryDate: today, fulfillment: "delivery", address: "Barrio El Prado, Barranquilla", route: "Norte",
-      source: "agent", paymentMethod: "transfer", paymentStatus: "pending", deliveryFee: 5_000, adjustments: 0, total: 47_000, status: "received",
+      source: "agent", paymentMethod: "transfer", paymentStatus: "pending", deliveryFee: 0, adjustments: 0, total: 128_000, status: "received",
       highLevel: { contactId: "demo-contact-1", locationId: "demo-location", conversationId: "demo-conversation-1" },
-      notes: "Domi para después de las 3 p. m.",
       items: [
-        { id: "94011", productName: "Pulpa", quantity: 1, unit: "kg", unitPrice: 22_000 },
-        { id: "94012", productName: "Pechuga congelada", quantity: 1.5, unit: "kg", unitPrice: 14_000 },
+        { id: "94011", productName: "Punta gorda", quantity: 2, unit: "kg", unitPrice: 39_000, notes: "punta gorda 2 kilos" },
+        { id: "94012", productName: "Sobre barriga delgada", quantity: 1, unit: "kg", unitPrice: 29_000, notes: "sobrebarriga 2 libras" },
+        { id: "94013", productName: "Muslo Colombina", quantity: 1, unit: "kg", unitPrice: 10_000, notes: "muslo colombia 4" },
+        { id: "94014", productName: "Ala especial", quantity: 1, unit: "kg", unitPrice: 11_000, notes: "ala especial 5 alas" },
       ],
     },
     {

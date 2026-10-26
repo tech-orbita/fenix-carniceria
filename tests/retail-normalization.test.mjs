@@ -32,6 +32,31 @@ test("normaliza las líneas operativas que envía n8n", () => {
   ]);
 });
 
+test("entiende pesos después del producto y conserva cantidades por unidad", () => {
+  const extendedCatalog = [
+    ...catalog,
+    { id: "punta", name: "Punta gorda", catalogKey: "res:punta gorda", pricePerKg: 39_000 },
+    { id: "sobrebarriga", name: "Sobre barriga delgada", catalogKey: "res:sobre barriga delgada", pricePerKg: 29_000 },
+    { id: "muslo", name: "Muslo Colombina", catalogKey: "pollo:muslo colombina", pricePerKg: 10_000 },
+    { id: "ala", name: "Ala especial", catalogKey: "pollo:ala especial", pricePerKg: 11_000 },
+  ];
+  const items = normalizeRetailItems([], [
+    "punta gorda 2 kilos",
+    "sobrebarriga 2 libras",
+    "4 libras de pulpa",
+    "muslo colombia 4",
+    "ala especial 5 alas",
+  ].join("\n"), extendedCatalog);
+
+  assert.deepEqual(items.map(({ product_name, quantity, unit_price, notes }) => ({ product_name, quantity, unit_price, notes })), [
+    { product_name: "Punta gorda", quantity: 2, unit_price: 39_000, notes: "punta gorda 2 kilos" },
+    { product_name: "Sobre barriga delgada", quantity: 1, unit_price: 29_000, notes: "sobrebarriga 2 libras" },
+    { product_name: "Pulpa", quantity: 2, unit_price: 22_000, notes: "4 libras de pulpa" },
+    { product_name: "Muslo Colombina", quantity: 1, unit_price: 10_000, notes: "muslo colombia 4" },
+    { product_name: "Ala especial", quantity: 1, unit_price: 11_000, notes: "ala especial 5 alas" },
+  ]);
+});
+
 test("calcula kilos cuando el cliente compra por valor", () => {
   const [item] = normalizeRetailItems([], "$11.000 de pulpa", catalog);
   assert.equal(item.quantity, 0.5);

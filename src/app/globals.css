@@ -3645,11 +3645,80 @@ a {
   height: 18px;
 }
 
-.orders-app .rt-contact {
+.orders-app .rt-control-panel {
+  margin-top: 12px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fbfcfe;
+}
+
+.orders-app .rt-control-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 12px;
+  align-items: flex-end;
+  gap: 14px;
+  padding: 10px 12px;
+}
+
+.orders-app .rt-control-section {
+  display: grid;
+  gap: 5px;
+}
+
+.orders-app .rt-control-section.is-order {
+  padding-left: 14px;
+  border-left: 1px solid var(--line);
+}
+
+.orders-app .rt-control-label {
+  color: var(--subtle);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.orders-app .rt-control-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.orders-app .rt-control-panel .rt-button {
+  min-height: 36px;
+  padding: 7px 11px;
+  font-size: 13px;
+}
+
+.orders-app .rt-control-panel .rt-button svg {
+  width: 17px;
+  height: 17px;
+}
+
+.orders-app .rt-button.is-quiet {
+  border-color: transparent;
+  background: transparent;
+  color: #334155;
+}
+
+.orders-app .rt-button.is-quiet:hover {
+  border-color: var(--line);
+  background: #fff;
+}
+
+.orders-app .rt-payment-action {
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.orders-app .rt-stage-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-top: 1px solid var(--line);
+  padding: 8px 12px;
+  background: #f6f8fb;
 }
 
 .orders-app .rt-lines {
@@ -3791,9 +3860,34 @@ a {
 
 .orders-app .rt-stage-actions {
   display: flex;
+  flex: 1 1 auto;
   flex-wrap: wrap;
-  gap: 0.5rem;
-  justify-content: flex-end;
+  gap: 4px;
+}
+
+.orders-app .rt-control-panel .rt-stage-actions .rt-button {
+  min-height: 32px;
+  border-color: transparent;
+  padding: 5px 10px;
+  background: transparent;
+}
+
+.orders-app .rt-control-panel .rt-stage-actions .rt-button:not(:disabled):hover {
+  border-color: var(--line);
+  background: #fff;
+}
+
+.orders-app .rt-control-panel .rt-stage-actions .rt-button.is-current {
+  border-color: #cbd5e1;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+  color: var(--ink);
+}
+
+.orders-app .rt-control-panel .rt-stage-actions .rt-button.is-help {
+  margin-left: auto;
+  border-color: #efb0b4;
+  background: #fff7f7;
 }
 
 .orders-app .rt-button.is-current {
@@ -3889,7 +3983,7 @@ a {
 
 .orders-app .rt-edit-row {
   display: grid;
-  grid-template-columns: minmax(150px, 1.5fr) minmax(90px, 0.6fr) minmax(80px, 0.5fr) minmax(150px, 1.4fr);
+  grid-template-columns: minmax(180px, 1.5fr) minmax(90px, 0.55fr) minmax(70px, 0.4fr) minmax(110px, 0.65fr) minmax(150px, 1.2fr);
   gap: 10px;
   border-top: 1px solid var(--line);
   padding: 12px 0;
@@ -3954,6 +4048,7 @@ a {
     bottom: 0;
     border-radius: 0 0 16px 16px;
   }
+
 }
 
 @media (max-width: 900px) {
@@ -4045,6 +4140,29 @@ a {
 
   .orders-app .rt-actionbar-spacer {
     display: none;
+  }
+
+  .orders-app .rt-control-row,
+  .orders-app .rt-stage-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .orders-app .rt-control-section.is-order {
+    padding-top: 8px;
+    padding-left: 0;
+    border-top: 1px solid var(--line);
+    border-left: 0;
+  }
+
+  .orders-app .rt-control-panel .rt-button,
+  .orders-app .rt-payment-action {
+    flex: 1 1 auto;
+    margin-left: 0;
+  }
+
+  .orders-app .rt-control-panel .rt-stage-actions .rt-button.is-help {
+    margin-left: 0;
   }
 }
 
