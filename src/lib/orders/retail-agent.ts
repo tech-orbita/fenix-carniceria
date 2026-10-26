@@ -109,6 +109,21 @@ async function findLatestOrder(customerId: number, from?: string) {
   return data;
 }
 
+async function findLatestOrderByContactId(contactId: string, from?: string) {
+  if (!contactId) return null;
+  const supabase = createAdminClient();
+  let query = supabase
+    .from("orders")
+    .select("id,order_number,status,source_payload,received_at")
+    .eq("customer_type", "retail")
+    .eq("source_payload->>contactId", contactId)
+    .order("received_at", { ascending: false })
+    .limit(1);
+  if (from) query = query.gte("received_at", from);
+  const { data } = await query.maybeSingle();
+  return data;
+}
+
 function findCurrentOrder(customerId: number) {
   return findLatestOrder(customerId, retailOrderWindowStart());
 }
@@ -117,11 +132,13 @@ export async function retailOrderContext(value: unknown) {
   const body = value && typeof value === "object" ? value as RetailAgentPayload : {};
   const phone = cleanPhone(body.customer?.phone);
   const customerId = await findCustomerId(phone);
-  if (!customerId) return NextResponse.json({ openOrder: null, since: null });
-
+  const cutoff = retailOrderWindowStart();
+  const [currentByCustomer, latestByCustomer] = customerId
+    ? await Promise.all([findLatestOrder(customerId, cutoff), findLatestOrder(customerId)])
+    : [null, null];
   const [currentOrder, latestOrder] = await Promise.all([
-    findCurrentOrder(customerId),
-    findLatestOrder(customerId),
+    currentByCustomer ?? findLatestOrderByContactId(String(body.contactId ?? "").trim(), cutoff),
+    latestByCustomer ?? findLatestOrderByContactId(String(body.contactId ?? "").trim()),
   ]);
   const currentSource = (currentOrder?.source_payload ?? {}) as Record<string, unknown>;
   const latestSource = (latestOrder?.source_payload ?? {}) as Record<string, unknown>;
@@ -138,7 +155,7 @@ export async function retailOrderContext(value: unknown) {
     since: typeof currentSource.contextUntil === "string"
       ? currentSource.contextUntil
       : typeof latestSource.contextUntil === "string" ? latestSource.contextUntil : null,
-    cutoff: retailOrderWindowStart(),
+    cutoff,
   });
 }
 
@@ -236,7 +253,18 @@ export async function upsertRetailOrder(value: unknown) {
     notes: String(body.notes ?? "").trim() || null,
   }).select("id,order_number,status").single();
   if (orderError || !order) {
-    return NextResponse.json({ error: orderError?.code === "23505" ? "Order already received" : "Could not save order" }, { status: orderError?.code === "23505" ? 409 : 500 });
+    if (orderError?.code === "23505" && sourceReference) {
+      const { data: existingOrder } = await supabase
+        .from("orders")
+        .select("id,order_number,status")
+        .eq("source", "agent")
+        .eq("source_reference", sourceReference)
+        .maybeSingle();
+      if (existingOrder) {
+        return NextResponse.json({ ...existingOrder, adjusted: false, duplicate: true });
+      }
+    }
+    return NextResponse.json({ error: "Could not save order" }, { status: 500 });
   }
   const { error: itemsError } = await supabase.from("order_items").insert(items.map((item, sort_order) => ({ ...item, order_id: order.id, sort_order })));
   if (itemsError) {
@@ -256,7 +284,7 @@ export async function upsertRetailOrder(value: unknown) {
     `${name} · ${order.order_number}`,
     subtotal,
   );
-  return NextResponse.json({ ...order, adjusted: false, pipeline_synced: pipeline.ok, pipeline_message: pipeline.ok ? undefined : pipeline.message }, { status: 201 });
+  return NextResponse.json({ ...order, adjusted: false, duplicate: false, pipeline_synced: pipeline.ok, pipeline_message: pipeline.ok ? undefined : pipeline.message }, { status: 201 });
 }
 
 export async function flagRetailHelpRequest(value: unknown) {
