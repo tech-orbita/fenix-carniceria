@@ -75,3 +75,7 @@ Las rutas `/api/webhooks/highlevel/mayorista-cliente` y
 Requieren `Authorization: Bearer <ORDERS_INGEST_SECRET>`.
 Consulta [la configuración y el mapeo de campos](docs/highlevel-webhooks.md).
 El texto original aparece en el detalle y la comanda como pedido por cotizar.
+
+Los mayoristas que solicitan atención sin enviar formulario ingresan por
+`/api/webhooks/ghl/wholesale-help-requests`. Se registran sin productos en
+**Mayoristas → Requiere ayuda** y no pasan por el webhook minorista.

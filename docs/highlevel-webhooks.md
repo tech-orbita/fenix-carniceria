@@ -50,6 +50,28 @@ El token privado debe incluir `opportunities.readonly`, `opportunities.write` y,
 - Los cambios operativos del panel sincronizan **En Preparacion**, **Despachados** o **Requiere ayuda**.
 - La pestaña **Cartera** sincroniza **Pendiente por Pago** y **Pago Realizado**.
 - Los fallos de HighLevel no revierten el pedido: quedan registrados en los logs para reintento/configuración.
+- Las solicitudes de atención de un mayorista que todavía no envió formulario llegan a `POST /api/webhooks/ghl/wholesale-help-requests`. El webhook crea un registro sin productos en **Mayoristas → Requiere ayuda**, conserva los datos de conversación y evita duplicados mediante `sourceEventId`.
+- El workflow n8n separado recibe el evento en `/webhook/fenix-mayoristas-ayuda`, exige el encabezado `x-fenix-secret` y reenvía la solicitud al webhook de la aplicación usando `Authorization: Bearer <ORDERS_INGEST_SECRET>`.
+
+Ejemplo de cuerpo para ayuda mayorista:
+
+```json
+{
+  "locationId": "location-id",
+  "contactId": "contact-id",
+  "conversationId": "conversation-id",
+  "sourceEventId": "message-or-event-id",
+  "reason": "El cliente solicita atención humana.",
+  "customer": {
+    "name": "Nombre del contacto",
+    "businessName": "Nombre del negocio",
+    "phone": "+573001234567",
+    "address": "Dirección del cliente",
+    "neighborhood": "Barrio",
+    "city": "Barranquilla"
+  }
+}
+```
 
 ## Pipeline Minoristas
 

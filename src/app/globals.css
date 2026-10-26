@@ -2707,6 +2707,7 @@ a {
 }
 
 .orders-app .advance-action,
+.orders-app .orders-filter,
 .orders-app .help-filter,
 .orders-app .conversation-link {
   border: 1px solid #d3dce9;
@@ -2733,22 +2734,86 @@ a {
   color: #a32626;
 }
 
+.orders-app .request-mode-filters {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.orders-app .request-mode-filters > button {
+  min-height: 38px;
+}
+
+.orders-app .orders-filter.is-active {
+  border-color: #8db8f6;
+  background: #edf5ff;
+  color: #135ebd;
+}
+
 .orders-app .help-badge {
   display: inline-flex;
   width: max-content;
   margin-top: 4px;
+  border: 0;
   border-radius: 999px;
   padding: 3px 7px;
+  cursor: pointer;
+  font: inherit;
   font-size: 11px;
-  font-style: normal;
   font-weight: 800;
+}
+
+.orders-app .help-badge:hover {
+  background: #ffdede;
+  text-decoration: underline;
 }
 
 .orders-app .conversation-link {
   display: inline-flex;
-  width: max-content;
-  margin-top: 4px;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
   color: var(--wine);
+}
+
+.orders-app .conversation-link:hover {
+  border-color: var(--wine);
+  background: #fff4f4;
+}
+
+.orders-app .conversation-link.is-disabled {
+  cursor: not-allowed;
+  color: #9aa7b8;
+  opacity: 0.55;
+}
+
+.orders-app .conversation-link.is-disabled:hover {
+  border-color: #d3dce9;
+  background: #fff;
+}
+
+.orders-app .conversation-link svg {
+  width: 16px;
+  height: 16px;
+}
+
+.orders-app .client-name,
+.orders-app .wallet-client {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.orders-app .wallet-client {
+  justify-content: space-between;
+}
+
+.orders-app .wallet-client > span {
+  min-width: 0;
 }
 
 .orders-app .wholesale-wallet {
@@ -2829,9 +2894,36 @@ a {
 
 .orders-app .matrix-client {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: space-between;
   gap: 12px;
+}
+
+.orders-app .matrix-row-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.orders-app .matrix-client .client-address {
+  max-width: 150px;
+  line-height: 1.25;
+}
+
+.orders-app .no-order-badge {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  border: 1px solid #e2b56b;
+  border-radius: 8px;
+  padding: 0 9px;
+  background: #fff7e8;
+  color: #805400;
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
 }
 
 .orders-app .wholesale-matrix th:first-child {
@@ -2894,6 +2986,73 @@ a {
   font-weight: 500;
   opacity: 0.65;
   text-transform: none;
+}
+
+/* Mayoristas: un punto más de lectura sin perder la densidad de la planilla. */
+.orders-app .wholesale-tabs button {
+  font-size: 14px;
+}
+
+.orders-app .wholesale-workspace,
+.orders-app .wholesale-wallet {
+  font-size: 14px;
+}
+
+.orders-app .wholesale-workspace .toolbar-actions > *,
+.orders-app .wholesale-workspace .toolbar-actions select,
+.orders-app .wholesale-workspace .toolbar-actions .primary-action,
+.orders-app .table-filters > *,
+.orders-app .filter-menu > .outline-action,
+.orders-app .day-navigator {
+  min-height: 38px;
+}
+
+.orders-app .toolbar-actions select,
+.orders-app .outline-action,
+.orders-app .wholesale-workspace .primary-action,
+.orders-app .table-search input,
+.orders-app .dispatched-toggle,
+.orders-app .advance-action,
+.orders-app .orders-filter,
+.orders-app .help-filter,
+.orders-app .conversation-link,
+.orders-app .wallet-actions button,
+.orders-app .wallet-status {
+  font-size: 13px;
+}
+
+.orders-app .day-navigator > span,
+.orders-app .wallet-scope {
+  font-size: 14px;
+}
+
+.orders-app .day-navigator > span strong {
+  font-size: 15px;
+}
+
+.orders-app .wholesale-matrix,
+.orders-app .wallet-table {
+  font-size: 14px;
+}
+
+.orders-app .wholesale-matrix thead th,
+.orders-app .wallet-table thead th {
+  font-size: 12px;
+}
+
+.orders-app .wholesale-matrix .category-row th,
+.orders-app .wholesale-matrix thead th .unit-label {
+  font-size: 11px;
+}
+
+.orders-app .wholesale-matrix tbody th strong,
+.orders-app .wallet-table tbody th strong {
+  font-size: 14px;
+}
+
+.orders-app .wholesale-matrix tbody th small,
+.orders-app .wallet-table tbody th small {
+  font-size: 12px;
 }
 
 /* Minoristas: layout de pantalla completa con texto legible (mínimo 13px). */

@@ -358,7 +358,6 @@ function parseQuantity(value: string) {
   if (!match) return null;
   const quantity = Number(match[1].replace(",", "."));
   if (!Number.isFinite(quantity) || quantity <= 0) return null;
-  // La tabla trabaja en kilos: un número solo es kg y las libras se guardan convertidas (1 lb = 0,5 kg).
   return toKilograms(quantity, match[2] ?? "kg");
 }
 
@@ -393,13 +392,17 @@ function parseWholesaleCell(productName: string, value: string) {
   return parsed.every(Boolean) ? parsed as Array<{ quantity: number; unit: string; preparation: string | null }> : null;
 }
 
-function sameProduct(left: string, right: string) {
-  const leftCatalog = catalogProductFor(left)?.name;
+function sameProduct(left: { product_name: string; preparation?: string | null }, right: string) {
+  const leftCatalog = catalogProductFor(left.product_name)?.name;
   const rightCatalog = catalogProductFor(right)?.name;
+  if (!rightCatalog) {
+    const leftName = leftCatalog === "Comodín" && left.preparation ? left.preparation : left.product_name;
+    return normalizeProductName(leftName) === normalizeProductName(right);
+  }
   if (normalizeProductName(rightCatalog ?? right) === "comodin") {
     return !leftCatalog || normalizeProductName(leftCatalog) === "comodin";
   }
-  return normalizeProductName(leftCatalog ?? left) === normalizeProductName(rightCatalog ?? right);
+  return normalizeProductName(leftCatalog ?? left.product_name) === normalizeProductName(rightCatalog ?? right);
 }
 
 export async function updateWholesaleTable(rows: WholesaleTableRowInput[]) {
@@ -437,7 +440,7 @@ export async function updateWholesaleTable(rows: WholesaleTableRowInput[]) {
 
     const { data: existingItems, error: lookupError } = await supabase
       .from("order_items")
-      .select("id,product_name,unit")
+      .select("id,product_name,unit,preparation")
       .eq("order_id", orderId);
 
     if (lookupError) return { ok: false, message: "No se pudo consultar el pedido para editarlo." };
@@ -450,7 +453,7 @@ export async function updateWholesaleTable(rows: WholesaleTableRowInput[]) {
     if (noteError) return { ok: false, message: "No se pudo guardar el comentario." };
 
     for (const entry of row.quantities) {
-      const matching = (existingItems ?? []).filter((item) => sameProduct(item.product_name, entry.productName));
+      const matching = (existingItems ?? []).filter((item) => sameProduct(item, entry.productName));
       const parsedValues = entry.value.trim() ? parseWholesaleCell(entry.productName, entry.value) : null;
 
       if (!entry.value.trim()) {

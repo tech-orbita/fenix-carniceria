@@ -98,7 +98,7 @@ function readableProductName(value: string) {
     .join(" ");
 }
 
-function normalizeUnit(value: string) {
+export function normalizeWholesaleUnit(value: string) {
   const unit = normalizeProductName(value);
   if (["kg", "kgs", "kilo", "kilos", "kilogramo", "kilogramos"].includes(unit)) return "kg";
   if (["lb", "lbs", "lib", "libra", "libras"].includes(unit)) return "lb";
@@ -110,7 +110,7 @@ export const KG_PER_LB = 0.5;
 
 // Lleva cualquier cantidad en libras o kilos a kilos; otras unidades (und, paquete…) se dejan igual.
 export function toKilograms(quantity: number, unit: string) {
-  const normalized = normalizeUnit(unit);
+  const normalized = normalizeWholesaleUnit(unit);
   if (normalized === "lb") return { quantity: Math.round(quantity * KG_PER_LB * 1000) / 1000, unit: "kg" };
   return { quantity, unit: normalized };
 }
@@ -132,7 +132,7 @@ export function parseOrderText(text: string) {
     items.push({
       product_name: catalogProduct?.name ?? "Comodín",
       quantity,
-      unit: normalizeUnit(match[2]),
+      unit: normalizeWholesaleUnit(match[2]),
       ...(catalogProduct?.name === "Blanda" && blandaIndicatorFor(requestedName)
         ? { preparation: blandaIndicatorFor(requestedName) }
         : !catalogProduct ? { preparation: requestedName } : {}),

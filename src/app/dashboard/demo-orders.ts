@@ -55,6 +55,13 @@ export function demoOrders(): Order[] {
       formData: { form: "mayorista-cliente", order_text: "7 kg lomo fino y 2 kg de corte especial", billing: "Electrónica" },
     },
     {
+      ...base,
+      id: "9004", orderNumber: "DEMO-AYUDA-001", customer: "Luis Mendoza", businessName: "Distribuidora San José", phone: "+57 300 888 2211",
+      receivedAt: `${today}T10:30:00-05:00`, address: "Calle 45 # 18-20, Barranquilla", route: "Sin clasificar", source: "agent", status: "incident", total: 0,
+      notes: "El cliente solicita ayuda para realizar su primer pedido mayorista.",
+      items: [],
+    },
+    {
       id: "9401", orderNumber: "DEMO-MIN-001", customerType: "retail", customer: "Laura Martínez", phone: "+57 300 555 0101",
       receivedAt: `${today}T09:20:00-05:00`, deliveryDate: today, fulfillment: "delivery", address: "Barrio El Prado, Barranquilla", route: "Norte",
       source: "agent", paymentMethod: "transfer", paymentStatus: "pending", deliveryFee: 0, adjustments: 0, total: 128_000, status: "received",
