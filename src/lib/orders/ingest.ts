@@ -3,7 +3,7 @@ import { timingSafeEqual } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
-import { syncWholesalePipeline } from "@/lib/orders/highlevel-pipeline";
+import { syncHighLevelOrderFields, syncWholesalePipeline } from "@/lib/orders/highlevel-pipeline";
 
 type IngestItem = {
   product_name: string;
@@ -170,19 +170,24 @@ export async function ingestOrder(body: IngestBody) {
     return NextResponse.json({ error: "Could not save order items" }, { status: 500 });
   }
 
-  const pipeline = body.customer_type === "wholesale" && body.form_data
-    ? await syncWholesalePipeline(
-        { contactId: body.form_data.contact_id, locationId: body.form_data.location_id, conversationId: body.form_data.conversation_id },
-        "order_placed",
-        `${body.customer.business_name || body.customer.name} · ${order.order_number}`,
-        subtotal,
-      )
-    : { ok: false as const, skipped: true as const };
+  const highLevelContext = { contactId: body.form_data?.contact_id, locationId: body.form_data?.location_id, conversationId: body.form_data?.conversation_id };
+  const [pipeline, orderFields] = body.customer_type === "wholesale" && body.form_data
+    ? await Promise.all([
+        syncWholesalePipeline(
+          highLevelContext,
+          "order_placed",
+          `${body.customer.business_name || body.customer.name} · ${order.order_number}`,
+          subtotal,
+        ),
+        syncHighLevelOrderFields(highLevelContext, { orderNumber: order.order_number, total: subtotal }),
+      ])
+    : [{ ok: false as const, skipped: true as const }, { ok: false as const, skipped: true as const }];
 
   return NextResponse.json({
     id: order.id,
     order_number: order.order_number,
     status: order.status,
     pipeline_synced: pipeline.ok,
+    order_field_synced: orderFields.ok,
   }, { status: 201 });
 }

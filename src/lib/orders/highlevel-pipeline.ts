@@ -9,6 +9,12 @@ type Pipeline = {
   stages?: PipelineStage[];
 };
 
+type CustomField = {
+  id: string;
+  name?: string;
+  fieldKey?: string;
+};
+
 export type HighLevelContext = {
   locationId?: string;
   contactId?: string;
@@ -36,6 +42,7 @@ const stageNames: Record<WholesalePipelineStage, string[]> = {
 };
 
 const pipelineCache = new Map<string, { pipeline: Pipeline; expiresAt: number }>();
+const customFieldsCache = new Map<string, { fields: CustomField[]; expiresAt: number }>();
 
 function normalize(value: string) {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("es").trim();
@@ -63,6 +70,56 @@ async function ghlFetch<T>(path: string, token: string, init?: RequestInit): Pro
   });
   if (!response.ok) throw new Error(`HighLevel respondió ${response.status}`);
   return response.json() as Promise<T>;
+}
+
+async function contactCustomFields(locationId: string, token: string) {
+  const cached = customFieldsCache.get(locationId);
+  if (cached && cached.expiresAt > Date.now()) return cached.fields;
+  const result = await ghlFetch<{ customFields?: CustomField[] }>(
+    `/locations/${encodeURIComponent(locationId)}/customFields?model=contact`,
+    token,
+    { headers: { Version: "2021-07-28" } },
+  );
+  const fields = result.customFields ?? [];
+  customFieldsCache.set(locationId, { fields, expiresAt: Date.now() + 5 * 60_000 });
+  return fields;
+}
+
+function matchingField(fields: CustomField[], configuredId: string | undefined, names: string[]) {
+  if (configuredId) return configuredId;
+  return fields.find((field) => {
+    const candidates = [field.name, field.fieldKey].filter((value): value is string => Boolean(value)).map(normalize);
+    return candidates.some((candidate) => names.includes(candidate) || names.some((name) => candidate.endsWith(`.${name}`)));
+  })?.id;
+}
+
+export async function syncHighLevelOrderFields(
+  context: HighLevelContext,
+  values: { orderNumber: string; total?: number },
+) {
+  const config = configuration(context);
+  if (!config) return { ok: false as const, skipped: true as const, message: "Integración de HighLevel sin configurar o sin contactId." };
+  try {
+    const fields = await contactCustomFields(config.locationId, config.token);
+    const orderFieldId = matchingField(fields, process.env.GHL_ORDER_CUSTOM_FIELD_ID?.trim(), ["orden", "numero de orden", "numero del pedido", "pedido"]);
+    if (!orderFieldId) throw new Error("No se encontró el campo personalizado Orden");
+    const updates: Array<{ id: string; field_value: string | number }> = [{ id: orderFieldId, field_value: values.orderNumber }];
+    if (Number.isFinite(values.total)) {
+      const totalFieldId = matchingField(fields, process.env.GHL_ORDER_TOTAL_CUSTOM_FIELD_ID?.trim(), ["valor del pedido", "valor pedido", "total del pedido", "total pedido"]);
+      if (totalFieldId) updates.push({ id: totalFieldId, field_value: Number(values.total) });
+    }
+    await ghlFetch(`/contacts/${encodeURIComponent(config.contactId)}`, config.token, {
+      method: "PUT",
+      headers: { Version: "2021-07-28" },
+      body: JSON.stringify({ customFields: updates }),
+    });
+    return { ok: true as const, skipped: false as const };
+  } catch (error) {
+    console.error("[highlevel-fields] No se pudieron actualizar los campos del pedido", {
+      message: error instanceof Error ? error.message : "Error desconocido",
+    });
+    return { ok: false as const, skipped: false as const, message: error instanceof Error ? error.message : "No se pudieron actualizar los campos de HighLevel." };
+  }
 }
 
 const pipelineNames: Record<PipelineSegment, string> = {

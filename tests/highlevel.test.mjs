@@ -40,6 +40,25 @@ test("conserva los identificadores de HighLevel para pipeline y conversación", 
   assert.equal(order.form_data.conversation_id, "conversation-1");
 });
 
+test("acepta el payload anidado que envía un workflow de HighLevel", () => {
+  const order = mapHighLevelForm({
+    contact: { id: "contact-nested", name: "Restaurante Pamela", phone: "+57 301 555 0101" },
+    location: { id: "location-nested" },
+    conversation: { id: "conversation-nested" },
+    customData: [
+      { fieldKey: "Nombre del Negocio", value: "Restaurante Pamela" },
+      { fieldKey: "Coloca tu Pedido", value: "5 kg de costilla" },
+      { fieldKey: "Domicilio o Tienda", value: "Recoges en tienda" },
+    ],
+    formSubmissionId: "submission-nested",
+  }, "nuevo-mayorista");
+  assert.equal(order.form_data.contact_id, "contact-nested");
+  assert.equal(order.form_data.location_id, "location-nested");
+  assert.equal(order.form_data.conversation_id, "conversation-nested");
+  assert.equal(order.fulfillment_type, "pickup");
+  assert.equal(order.source_reference, "ghl:nuevo-mayorista:submission-nested");
+});
+
 test("envía productos sin columna al comodín conservando su nombre", () => {
   const order = mapHighLevelForm({ ...base, "Coloca tu Pedido": "3 kg de osobuco especial" }, "mayorista-cliente");
   assert.deepEqual(order.items, [{ product_name: "Comodín", quantity: 3, unit: "kg", preparation: "Osobuco especial" }]);
