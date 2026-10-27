@@ -1,6 +1,6 @@
 # Webhooks de HighLevel
 
-Implementación en la rama Pamela. Requiere desplegar esta rama antes de usar las rutas públicas.
+Implementación desplegada desde `main`. Las rutas públicas están disponibles en producción.
 
 - Formulario Mayorista Cliente: POST https://fenix-carniceria.vercel.app/api/webhooks/highlevel/mayorista-cliente
 - Formulario Nuevo Mayorista: POST https://fenix-carniceria.vercel.app/api/webhooks/highlevel/nuevo-mayorista
@@ -40,7 +40,7 @@ El texto libre queda íntegro en el detalle y la comanda, sin inventar productos
 
 Verificación local: node --test --test-isolation=none tests/highlevel.test.mjs; npm run lint; npm run build.
 
-Pendiente para activar: despliegue de Pamela, variables del servidor y prueba con un envío real de cada formulario. Los IDs opacos de customFields requieren mapearse mediante Custom Data con las claves de esta tabla.
+Las variables del servidor y el despliegue de producción están activos. Queda realizar una prueba con un envío real de cada formulario. Los IDs opacos de customFields requieren mapearse mediante Custom Data con las claves de esta tabla.
 
 ## Pipeline Mayoristas
 
