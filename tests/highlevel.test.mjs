@@ -18,7 +18,12 @@ test("nuevo: mapea campos personalizados y datos de entrega", () => {
 test("rechaza payload incompleto y variables sin sustituir", () => {
   assert.throws(() => mapHighLevelForm({}, "mayorista-cliente"));
   assert.throws(() => mapHighLevelForm({ ...base, "Teléfono": "{{contact.phone}}" }, "mayorista-cliente"));
-  assert.throws(() => mapHighLevelForm(base, "nuevo-mayorista"));
+});
+
+test("nuevo: usa el nombre completo si GHL no llena Company Name", () => {
+  const order = mapHighLevelForm(base, "nuevo-mayorista");
+  assert.equal(order.customer.name, "Ana");
+  assert.equal(order.customer.business_name, "Ana");
 });
 
 test("clasifica el catálogo mayorista y conserva indicadores de blanda", () => {

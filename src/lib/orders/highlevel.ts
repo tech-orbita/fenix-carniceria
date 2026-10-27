@@ -46,7 +46,8 @@ export function mapHighLevelForm(value: unknown, form: WholesaleForm) {
     return undefined;
   };
   const name = get("customer_name", "Nombre Completo", "full_name", "contact.name", "name") ?? [get("first_name", "contact.first_name"), get("last_name", "contact.last_name")].filter(Boolean).join(" ");
-  const business = get("business_name", "Nombre del Negocio", "company_name", "contact.company_name", "companyName");
+  const business = get("business_name", "Nombre del Negocio", "company_name", "contact.company_name", "companyName")
+    ?? (form === "nuevo-mayorista" ? name : undefined);
   const phone = get("phone", "Teléfono", "contact.phone");
   const text = get("order_text", "Coloca tu Pedido", "coloca_tu_pedido", "Pedido", "pedido_mayorista");
   const fulfillment = get("fulfillment_type", "¿Es a Domicilio o Recoges en Tienda?", "es_a_domicilio_o_recoges_en_tienda", "Domicilio o Tienda", "Tipo de entrega");
@@ -55,7 +56,6 @@ export function mapHighLevelForm(value: unknown, form: WholesaleForm) {
   const pickup = /pickup|tienda|recog/.test(fulfillmentValue);
   const delivery = /delivery|domicilio|env[ií]o/.test(fulfillmentValue);
   if (!pickup && !delivery) throw new Error("Entrega debe ser Domicilio o Tienda");
-  if (form === "nuevo-mayorista" && !business) throw new Error("Falta Nombre del Negocio");
   const submission = get("submission_id", "submissionId", "event_id", "eventId", "formSubmissionId");
   return {
     source: "form" as const,
