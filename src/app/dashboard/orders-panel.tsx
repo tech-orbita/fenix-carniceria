@@ -267,13 +267,15 @@ function WholesaleOrdersTable({ orders: allOrders, pendingId, onStatusChange }: 
   const today = bogotaDay.format(new Date());
   const selectedDay = addDays(today, dayOffset);
   const dayOrders = allOrders.filter((order) => serviceDay(order) === selectedDay);
-  const dispatchedCount = dayOrders.filter(isClosed).length;
-  const openOrders = showDispatched ? dayOrders : dayOrders.filter((order) => !isClosed(order));
-  const orders = openOrders.filter((order) => listMode === "help"
-    ? ["needs_review", "incident"].includes(order.status)
-    : !["needs_review", "incident"].includes(order.status));
-  const helpCount = dayOrders.filter((order) => ["needs_review", "incident"].includes(order.status)).length;
-  const orderCount = dayOrders.filter((order) => !["needs_review", "incident"].includes(order.status)).length;
+  // La bandeja de ayuda es exclusiva para solicitudes originadas en el chat y sin
+  // pedido. Los pedidos normales nunca se ocultan por su estado operativo.
+  const chatHelpRequests = dayOrders.filter(isHelpWithoutOrder);
+  const customerOrders = dayOrders.filter((order) => !isHelpWithoutOrder(order));
+  const dispatchedCount = customerOrders.filter(isClosed).length;
+  const openOrders = showDispatched ? customerOrders : customerOrders.filter((order) => !isClosed(order));
+  const orders = listMode === "help" ? chatHelpRequests : openOrders;
+  const helpCount = chatHelpRequests.length;
+  const orderCount = customerOrders.length;
   const pendingByDay = (offset: number) => allOrders.filter((order) => !isClosed(order) && serviceDay(order) === addDays(today, offset)).length;
   const products = productsForOrders(orders);
   const orderCuts = new Map(orders.map((order) => [
@@ -385,7 +387,7 @@ function WholesaleOrdersTable({ orders: allOrders, pendingId, onStatusChange }: 
           {dispatchedCount > 0 && <label className="dispatched-toggle"><input checked={showDispatched} onChange={(event) => setShowDispatched(event.target.checked)} type="checkbox" />Ver despachados ({dispatchedCount})</label>}
           <div aria-label="Tipo de registro" className="request-mode-filters" role="group">
             <button aria-pressed={listMode === "orders"} className={listMode === "orders" ? "orders-filter is-active" : "orders-filter"} onClick={() => setListMode("orders")} type="button">Pedidos ({orderCount})</button>
-            {helpCount > 0 && <button aria-pressed={listMode === "help"} className={listMode === "help" ? "help-filter is-active" : "help-filter"} onClick={() => setListMode("help")} type="button">Requiere ayuda ({helpCount})</button>}
+            {helpCount > 0 && <button aria-pressed={listMode === "help"} className={listMode === "help" ? "help-filter is-active" : "help-filter"} onClick={() => { clearFilters(); setListMode("help"); }} type="button">Requiere ayuda ({helpCount})</button>}
           </div>
           {hasFilters && <button className="clear-filters" onClick={clearFilters} type="button">Limpiar filtros</button>}
         </div>
@@ -407,13 +409,12 @@ function WholesaleOrdersTable({ orders: allOrders, pendingId, onStatusChange }: 
           </thead>
           <tbody>
             {visibleOrders.map((order) => <tr className={isClosed(order) ? "is-dispatched" : undefined} key={order.id}>
-              <th scope="row"><div className="matrix-client"><span><strong>{order.businessName ?? order.customer}</strong><small className="client-address" title={`Pedido ${order.orderNumber}`}>{order.address || order.orderNumber}</small>{["needs_review", "incident"].includes(order.status) && <button className="help-badge" onClick={() => { clearFilters(); setListMode("help"); }} title="Ver pedidos que requieren ayuda" type="button">Requiere ayuda</button>}</span><div className="matrix-row-actions"><ConversationLink order={order} />{isHelpWithoutOrder(order)
+              <th scope="row"><div className="matrix-client"><span><strong>{order.businessName ?? order.customer}</strong><small className="client-address" title={`Pedido ${order.orderNumber}`}>{order.address || order.orderNumber}</small></span><div className="matrix-row-actions"><ConversationLink order={order} />{isHelpWithoutOrder(order)
                 ? <span className="no-order-badge">Sin pedido</span>
                 : isClosed(order)
                   ? <button className="dispatch-action is-done" disabled={pendingId === order.id || editing} onClick={() => onStatusChange(order, "new")} title="Volver a pendiente" type="button">{pendingId === order.id ? "…" : "Deshacer"}</button>
                   : <>
                     {!['preparing', 'ready'].includes(order.status) && <button className="advance-action" disabled={pendingId === order.id || editing} onClick={() => onStatusChange(order, "preparing")} title="Mover a En Preparación en el panel y en GHL" type="button">En preparación</button>}
-                    <button className="help-badge" disabled={pendingId === order.id || editing} onClick={() => onStatusChange(order, "help")} title="Mover a Requiere ayuda en el panel y en GHL" type="button">Requiere ayuda</button>
                     <button className="dispatch-action" disabled={pendingId === order.id || editing} onClick={() => onStatusChange(order, "dispatched")} title="Confirmar que el pedido salió" type="button">{pendingId === order.id ? "Guardando…" : "✓ Despachado"}</button>
                     {dayOffset === 1 && <button className="advance-action" disabled={saving || editing} onClick={() => void advanceOrder(order)} title="Autorizar este pedido para despacho hoy" type="button">Adelantar a hoy</button>}
                   </>}</div></div></th>

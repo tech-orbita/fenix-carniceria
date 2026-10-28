@@ -21,6 +21,7 @@ export const wholesaleProductCatalog: readonly WholesaleProduct[] = [
   { category: "Res · cortes", name: "Falda", aliases: ["falda"] },
   { category: "Res · cortes", name: "Punta gorda", aliases: ["punta gorda"] },
   { category: "Cerdo", name: "Pulpa cerdo", aliases: ["pulpa de cerdo", "pulpa cerdo"] },
+  { category: "Cerdo", name: "Lomo cerdo", aliases: ["lomo de cerdo", "lomo cerdo", "cerdo lomo"] },
   { category: "Cerdo", name: "Costilla cerdo", aliases: ["costilla de cerdo", "costilla cerdo"] },
   { category: "Cerdo", name: "Chuleta", aliases: ["chuleta"] },
   { category: "Res · cortes", name: "Asado de Tira", aliases: ["asado de tira"] },
@@ -59,6 +60,8 @@ export type BlandaIndicator = "C" | "L" | "T" | "B";
 
 export function blandaIndicatorFor(value: string): BlandaIndicator | undefined {
   const normalized = normalizeProductName(value);
+  const explicit = normalized.match(/(?:^| )blanda ([cltb])(?: |$)/)?.[1]?.toUpperCase() as BlandaIndicator | undefined;
+  if (explicit) return explicit;
   if (/(?:^| )capon(?: |$)/.test(normalized)) return "C";
   if (/(?:^| )lomo(?: |$)/.test(normalized) && !/(?:fino|pinga)/.test(normalized)) return "L";
   if (/(?:^| )(?:tetafulla|tetafula)(?: |$)/.test(normalized)) return "T";
@@ -100,7 +103,7 @@ function readableProductName(value: string) {
 
 export function normalizeWholesaleUnit(value: string) {
   const unit = normalizeProductName(value);
-  if (["kg", "kgs", "kilo", "kilos", "kilogramo", "kilogramos"].includes(unit)) return "kg";
+  if (["k", "kg", "kgs", "kilo", "kilos", "kilogramo", "kilogramos"].includes(unit)) return "kg";
   if (["lb", "lbs", "lib", "libra", "libras"].includes(unit)) return "lb";
   return unit;
 }
@@ -117,26 +120,45 @@ export function toKilograms(quantity: number, unit: string) {
 
 export function parseOrderText(text: string) {
   const normalized = text.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  const unit = "(?:kg|kgs|kilo|kilos|kilogramo|kilogramos|lb|lbs|lib|libra|libras)";
-  const expression = new RegExp(
-    `(\\d+(?:[.,]\\d+)?)\\s*(${unit})\\b\\s*(?:de\\s+)?(.+?)(?=(?:[,;\\n.]|\\s+y\\s+\\d+(?:[.,]\\d+)?\\s*${unit}|$))`,
-    "gi",
-  );
+  const unit = "(?:kilogramos|kilogramo|kilos|kilo|kgs|kg|k|libras|libra|lbs|lb|lib)";
   const items: Array<{ product_name: string; quantity: number; unit: string; preparation?: string }> = [];
 
-  for (const match of normalized.matchAll(expression)) {
-    const quantity = Number(match[1].replace(",", "."));
-    const requestedName = readableProductName(match[3]);
+  const addItem = (quantityValue: string, unitValue: string | undefined, productValue: string) => {
+    const quantity = Number(quantityValue.replace(",", "."));
+    const requestedName = readableProductName(productValue);
     const catalogProduct = catalogProductFor(requestedName);
-    if (!Number.isFinite(quantity) || quantity <= 0 || !requestedName) continue;
+    if (!Number.isFinite(quantity) || quantity <= 0 || !requestedName) return;
     items.push({
       product_name: catalogProduct?.name ?? "Comodín",
       quantity,
-      unit: normalizeWholesaleUnit(match[2]),
+      unit: normalizeWholesaleUnit(unitValue ?? "kg"),
       ...(catalogProduct?.name === "Blanda" && blandaIndicatorFor(requestedName)
         ? { preparation: blandaIndicatorFor(requestedName) }
         : !catalogProduct ? { preparation: requestedName } : {}),
     });
+  };
+
+  const chunks = normalized
+    .split(/[;\n]+/)
+    .flatMap((line) => line.split(/\s+y\s+(?=\d)/i))
+    .map((line) => line.replace(/^[\s\-*•]+/, "").trim())
+    .filter(Boolean);
+
+  for (const chunk of chunks) {
+    const quantityFirst = chunk.match(new RegExp(`^(\\d+(?:[.,]\\d+)?)\\s*(?:(${unit})\\b\\s*)?(?:de\\s+)?(.+)$`, "i"));
+    if (quantityFirst) {
+      addItem(quantityFirst[1], quantityFirst[2], quantityFirst[3]);
+      continue;
+    }
+
+    const productFirst = chunk.match(new RegExp(`^(.+?)\\s+(\\d+(?:[.,]\\d+)?)\\s*(${unit})\\b$`, "i"));
+    if (productFirst) {
+      addItem(productFirst[2], productFirst[3], productFirst[1]);
+      continue;
+    }
+
+    const unitFirst = chunk.match(new RegExp(`^(${unit})\\b\\s+(.+?)\\s+(\\d+(?:[.,]\\d+)?)$`, "i"));
+    if (unitFirst) addItem(unitFirst[3], unitFirst[1], unitFirst[2]);
   }
 
   return items;

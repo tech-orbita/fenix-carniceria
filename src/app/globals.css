@@ -2894,22 +2894,35 @@ a {
 
 .orders-app .matrix-client {
   display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 12px;
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 5px;
 }
 
 .orders-app .matrix-row-actions {
   display: flex;
   flex: 0 0 auto;
   align-items: center;
-  justify-content: flex-end;
-  gap: 6px;
+  justify-content: flex-start;
+  gap: 4px;
+  width: 100%;
 }
 
 .orders-app .matrix-client .client-address {
-  max-width: 150px;
+  max-width: 185px;
   line-height: 1.25;
+}
+
+.orders-app .matrix-row-actions .conversation-link {
+  width: 24px;
+  height: 24px;
+}
+
+.orders-app .matrix-row-actions .advance-action,
+.orders-app .matrix-row-actions .dispatch-action {
+  min-height: 24px;
+  padding: 0 7px;
+  font-size: 10px;
 }
 
 .orders-app .no-order-badge {
@@ -2927,7 +2940,33 @@ a {
 }
 
 .orders-app .wholesale-matrix th:first-child {
-  min-width: 260px;
+  width: 215px;
+  min-width: 215px;
+  max-width: 215px;
+}
+
+.orders-app .wholesale-matrix th:nth-child(2),
+.orders-app .wholesale-matrix td:nth-child(2) {
+  width: 122px;
+  min-width: 122px;
+}
+
+.orders-app .wholesale-matrix th:nth-child(3),
+.orders-app .wholesale-matrix td:nth-child(3) {
+  width: 104px;
+  min-width: 104px;
+}
+
+.orders-app .wholesale-matrix th:nth-child(4),
+.orders-app .wholesale-matrix td:nth-child(4) {
+  width: 116px;
+  min-width: 116px;
+}
+
+.orders-app .wholesale-matrix th:nth-child(5),
+.orders-app .wholesale-matrix td:nth-child(5) {
+  width: 150px;
+  min-width: 150px;
 }
 
 .orders-app .dispatch-action {

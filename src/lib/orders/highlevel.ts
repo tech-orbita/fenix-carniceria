@@ -57,6 +57,19 @@ export function mapHighLevelForm(value: unknown, form: WholesaleForm) {
   const delivery = /delivery|domicilio|env[ií]o/.test(fulfillmentValue);
   if (!pickup && !delivery) throw new Error("Entrega debe ser Domicilio o Tienda");
   const submission = get("submission_id", "submissionId", "event_id", "eventId", "formSubmissionId");
+  const directAddress = typeof payload.address === "string" && payload.address.trim() ? payload.address.trim() : undefined;
+  // `location.address` es la sede de Fénix, no la dirección del contacto. Priorizar
+  // siempre los campos explícitos del contacto/formulario para no contaminar pedidos.
+  const customerAddress = get(
+    "customData.address",
+    "customData.Dirección",
+    "address1",
+    "contact.address1",
+    "full_address",
+    "contact.full_address",
+    "Dirección",
+    "Agrega Dirección de Entrega",
+  ) ?? directAddress;
   return {
     source: "form" as const,
     source_reference: submission ? `ghl:${form}:${submission}` : undefined,
@@ -64,7 +77,7 @@ export function mapHighLevelForm(value: unknown, form: WholesaleForm) {
     customer: {
       name: name || business!, phone: phone.replace(/[\s()-]/g, ""), business_name: business,
       tax_id: get("tax_id", "Nit o Cédula"), email: get("email", "contact.email"),
-      address: get("address", "Dirección", "address1", "contact.address1"),
+      address: customerAddress?.replace(/,\s*$/, ""),
     },
     fulfillment_type: pickup ? "pickup" as const : "delivery" as const,
     route: get("zone", "Zona"),

@@ -68,3 +68,43 @@ test("envía productos sin columna al comodín conservando su nombre", () => {
   const order = mapHighLevelForm({ ...base, "Coloca tu Pedido": "3 kg de osobuco especial" }, "mayorista-cliente");
   assert.deepEqual(order.items, [{ product_name: "Comodín", quantity: 3, unit: "kg", preparation: "Osobuco especial" }]);
 });
+
+test("conserva todas las líneas aunque omitan o inviertan la unidad", () => {
+  const order = mapHighLevelForm({
+    ...base,
+    "Coloca tu Pedido": "10 CAPON\n2 SOBREBARRIGA\n10 MOLIDA\n15 CHURRASCO\n6 PATAS DE RES\nmolida especial 4 lib\nk carne molida 1",
+  }, "mayorista-cliente");
+  assert.deepEqual(order.items, [
+    { product_name: "Blanda", quantity: 10, unit: "kg", preparation: "C" },
+    { product_name: "Sobrebarriga", quantity: 2, unit: "kg" },
+    { product_name: "Comodín", quantity: 10, unit: "kg", preparation: "Molida" },
+    { product_name: "Comodín", quantity: 15, unit: "kg", preparation: "Churrasco" },
+    { product_name: "Pata", quantity: 6, unit: "kg" },
+    { product_name: "Molida especial", quantity: 4, unit: "lb" },
+    { product_name: "Comodín", quantity: 1, unit: "kg", preparation: "Carne molida" },
+  ]);
+});
+
+test("prioriza la dirección del contacto sobre la dirección de la sede", () => {
+  const order = mapHighLevelForm({
+    ...base,
+    location: { address: "Dirección de Fénix" },
+    address1: "Calle 8 # 69-38",
+    customData: { address: "Carrera 20 # 10-15, " },
+  }, "nuevo-mayorista");
+  assert.equal(order.customer.address, "Carrera 20 # 10-15");
+});
+
+test("interpreta las líneas reales de blanda, cerdo y pollo sin perder productos", () => {
+  const order = mapHighLevelForm({
+    ...base,
+    "Coloca tu Pedido": "4 k blanda c\n2 k de cerdo lomo\n6 k blanda L\n5 pechugas pollo\n4 pierna pernil",
+  }, "mayorista-cliente");
+  assert.deepEqual(order.items, [
+    { product_name: "Blanda", quantity: 4, unit: "kg", preparation: "C" },
+    { product_name: "Lomo cerdo", quantity: 2, unit: "kg" },
+    { product_name: "Blanda", quantity: 6, unit: "kg", preparation: "L" },
+    { product_name: "Comodín", quantity: 5, unit: "kg", preparation: "Pechugas pollo" },
+    { product_name: "Comodín", quantity: 4, unit: "kg", preparation: "Pierna pernil" },
+  ]);
+});
