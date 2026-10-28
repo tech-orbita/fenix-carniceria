@@ -8,23 +8,35 @@ export function mapHighLevelForm(value: unknown, form: WholesaleForm) {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("El webhook debe contener un objeto JSON");
   const payload = value as Record<string, unknown>;
   const fields = new Map<string, unknown>();
-  function collect(record: Record<string, unknown>) {
-    for (const [key, value] of Object.entries(record)) {
-      fields.set(normalize(key.replace(/^contact\./, "")), value);
+  function put(key: string, value: unknown) {
+    const normalized = normalize(key);
+    if (!fields.has(normalized)) fields.set(normalized, value);
+    if (/^contact\./i.test(key)) {
+      const withoutContact = normalize(key.replace(/^contact\./i, ""));
+      if (!fields.has(withoutContact)) fields.set(withoutContact, value);
     }
   }
-  collect(payload);
-  for (const key of ["contact", "customFields", "custom_fields", "customData", "custom_data"]) {
-    const nested = payload[key];
-    if (nested && typeof nested === "object" && !Array.isArray(nested)) collect(nested as Record<string, unknown>);
-    if (Array.isArray(nested)) for (const entry of nested) {
-      if (entry && typeof entry === "object") {
+  function collect(record: Record<string, unknown>, prefix = "", depth = 0) {
+    if (depth > 5) return;
+    for (const [key, value] of Object.entries(record)) {
+      put(key, value);
+      if (prefix) put(`${prefix}.${key}`, value);
+      if (value && typeof value === "object" && !Array.isArray(value)) {
+        const field = value as Record<string, unknown>;
+        const name = field.key ?? field.fieldKey ?? field.name ?? field.label;
+        if (typeof name === "string" && "value" in field) put(name, field.value);
+        collect(field, prefix ? `${prefix}.${key}` : key, depth + 1);
+      }
+      if (Array.isArray(value)) for (const entry of value) {
+        if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
         const field = entry as Record<string, unknown>;
-        const name = field.key ?? field.name;
-        if (typeof name === "string") fields.set(normalize(name.replace(/^contact\./, "")), field.value);
+        const name = field.key ?? field.fieldKey ?? field.name ?? field.label;
+        if (typeof name === "string") put(name, field.value);
+        collect(field, prefix ? `${prefix}.${key}` : key, depth + 1);
       }
     }
   }
+  collect(payload);
   const get = (...keys: string[]) => {
     for (const key of keys) {
       const value = fields.get(normalize(key));
@@ -33,25 +45,28 @@ export function mapHighLevelForm(value: unknown, form: WholesaleForm) {
     }
     return undefined;
   };
-  const name = get("customer_name", "Nombre Completo", "full_name", "name") ?? [get("first_name"), get("last_name")].filter(Boolean).join(" ");
-  const business = get("business_name", "Nombre del Negocio", "company_name");
-  const phone = get("phone", "Teléfono");
-  const text = get("order_text", "Coloca tu Pedido", "coloca_tu_pedido");
-  const fulfillment = get("fulfillment_type", "¿Es a Domicilio o Recoges en Tienda?", "es_a_domicilio_o_recoges_en_tienda");
+  const name = get("customer_name", "Nombre Completo", "full_name", "contact.name", "name") ?? [get("first_name", "contact.first_name"), get("last_name", "contact.last_name")].filter(Boolean).join(" ");
+  const business = get("business_name", "Nombre del Negocio", "company_name", "contact.company_name", "companyName")
+    ?? (form === "nuevo-mayorista" ? name : undefined);
+  const phone = get("phone", "Teléfono", "contact.phone");
+  const text = get("order_text", "Coloca tu Pedido", "coloca_tu_pedido", "Pedido", "pedido_mayorista");
+  const fulfillment = get("fulfillment_type", "¿Es a Domicilio o Recoges en Tienda?", "es_a_domicilio_o_recoges_en_tienda", "Domicilio o Tienda", "Tipo de entrega");
   if (!phone || !(name || business) || !text) throw new Error("Faltan nombre o negocio, teléfono o Coloca tu Pedido");
-  if (!fulfillment || !["delivery", "domicilio", "pickup", "tienda"].includes(fulfillment.toLowerCase())) throw new Error("Entrega debe ser Domicilio o Tienda");
-  if (form === "nuevo-mayorista" && !business) throw new Error("Falta Nombre del Negocio");
-  const submission = get("submission_id", "submissionId", "event_id");
+  const fulfillmentValue = fulfillment?.toLowerCase() ?? "";
+  const pickup = /pickup|tienda|recog/.test(fulfillmentValue);
+  const delivery = /delivery|domicilio|env[ií]o/.test(fulfillmentValue);
+  if (!pickup && !delivery) throw new Error("Entrega debe ser Domicilio o Tienda");
+  const submission = get("submission_id", "submissionId", "event_id", "eventId", "formSubmissionId");
   return {
     source: "form" as const,
     source_reference: submission ? `ghl:${form}:${submission}` : undefined,
     customer_type: "wholesale" as const,
     customer: {
       name: name || business!, phone: phone.replace(/[\s()-]/g, ""), business_name: business,
-      tax_id: get("tax_id", "Nit o Cédula"), email: get("email"),
-      address: get("address", "Dirección", "address1"),
+      tax_id: get("tax_id", "Nit o Cédula"), email: get("email", "contact.email"),
+      address: get("address", "Dirección", "address1", "contact.address1"),
     },
-    fulfillment_type: ["pickup", "tienda"].includes(fulfillment.toLowerCase()) ? "pickup" as const : "delivery" as const,
+    fulfillment_type: pickup ? "pickup" as const : "delivery" as const,
     route: get("zone", "Zona"),
     notes: get("observations", "Observaciones Adicionales"),
     items: parseOrderText(text),
@@ -60,9 +75,9 @@ export function mapHighLevelForm(value: unknown, form: WholesaleForm) {
       maps_url: get("maps_url", "Ubicación de Maps"),
       receiver_phone: get("receiver_phone", "Número de Quien Recibe"),
       payment_proof: get("payment_proof", "Aqui puedes subir tu comprobante de Pago"),
-      contact_id: get("contactId", "contact_id"),
-      location_id: get("locationId", "location_id"),
-      conversation_id: get("conversationId", "conversation_id"),
+      contact_id: get("contactId", "contact_id", "contact.id"),
+      location_id: get("locationId", "location_id", "location.id"),
+      conversation_id: get("conversationId", "conversation_id", "conversation.id"),
       conversation_url: get("conversationUrl", "conversation_url"),
       original_payload: payload,
     },

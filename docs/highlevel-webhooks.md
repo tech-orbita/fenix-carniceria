@@ -32,6 +32,10 @@ El cuerpo puede incluir los campos con sus etiquetas originales o los siguientes
 | conversationId | ID de la conversación, si está disponible |
 | conversationUrl | URL directa de la conversación, si está disponible |
 
+El parser también acepta el payload nativo anidado de HighLevel (`contact.id`, `location.id`,
+`conversation.id` y arreglos de `customData`/`customFields`). Aun así, el workflow debe enviar los
+campos del formulario con sus etiquetas o con las claves estables de la tabla anterior.
+
 Nombre o negocio, teléfono, modalidad y texto del pedido son obligatorios. El formulario nuevo requiere negocio. Los campos no presentes en el formulario cliente se omiten; se conservan los datos registrados de ese teléfono. Usar el mismo formato internacional de teléfono en ambos formularios.
 
 No usar el ID de contacto como submission_id: el mismo contacto puede hacer varios pedidos. Con un identificador de envío se rechazan duplicados con 409; sin él, cada petición crea un pedido nuevo.
@@ -47,8 +51,14 @@ Las variables del servidor y el despliegue de producción están activos. Queda 
 El token privado debe incluir `opportunities.readonly`, `opportunities.write` y, si se usará **Enviar resumen**, `conversations/message.write`. La app busca el pipeline `Mayoristas` y estas etapas por nombre: `Realizo Pedido`, `En Preparacion`, `Despachados`, `Requiere ayuda`, `Pendiente por Pago` y `Pago Realizado`. También se pueden fijar sus IDs con las variables `GHL_WHOLESALE_PIPELINE_ID` y `GHL_STAGE_*_ID` de `.env.example`.
 
 - Un formulario aceptado crea o mueve la oportunidad a **Realizo Pedido**.
-- Los cambios operativos del panel sincronizan **En Preparacion**, **Despachados** o **Requiere ayuda**.
+- El número generado por el sistema (`FEN-000000`) se guarda en el campo de contacto **Orden**. La app
+  descubre ese campo por nombre o usa `GHL_ORDER_CUSTOM_FIELD_ID` cuando se configura explícitamente.
+- Los botones mayoristas **En preparación**, **Requiere ayuda** y **Despachado** sincronizan la etapa equivalente.
 - La pestaña **Cartera** sincroniza **Pendiente por Pago** y **Pago Realizado**.
+- Cartera actualiza también el valor monetario de la oportunidad. Si existe un campo de contacto llamado
+  **Valor del pedido** (o se configura `GHL_ORDER_TOTAL_CUSTOM_FIELD_ID`), guarda allí el total para que las
+  automatizaciones de HighLevel puedan incluirlo. **Enviar resumen** manda además el recordatorio con valor
+  y número de pedido directamente por WhatsApp.
 - Los fallos de HighLevel no revierten el pedido: quedan registrados en los logs para reintento/configuración.
 - Las solicitudes de atención de un mayorista que todavía no envió formulario llegan a `POST /api/webhooks/ghl/wholesale-help-requests`. El webhook crea un registro sin productos en **Mayoristas → Requiere ayuda**, conserva los datos de conversación y evita duplicados mediante `sourceEventId`.
 - El workflow n8n separado recibe el evento en `/webhook/fenix-mayoristas-ayuda`, exige el encabezado `x-fenix-secret` y reenvía la solicitud al webhook de la aplicación usando `Authorization: Bearer <ORDERS_INGEST_SECRET>`.

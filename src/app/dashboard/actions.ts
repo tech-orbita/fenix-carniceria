@@ -6,7 +6,7 @@ import { requireViewer } from "@/lib/auth/viewer";
 import { createClient } from "@/lib/supabase/server";
 import { catalogProductFor, normalizeProductName, toKilograms } from "@/lib/orders/product-parser";
 import { retailBillMessage } from "@/lib/orders/retail-bill";
-import { sendHighLevelMessage, sendWholesalePaymentSummary, syncOrderPipeline, syncWholesalePipeline } from "@/lib/orders/highlevel-pipeline";
+import { sendHighLevelMessage, sendWholesalePaymentSummary, syncHighLevelOrderFields, syncOrderPipeline, syncWholesalePipeline } from "@/lib/orders/highlevel-pipeline";
 import type { HighLevelContext, OrderPipelineStage } from "@/lib/orders/highlevel-pipeline";
 
 import type { OrderStatus } from "./types";
@@ -238,18 +238,26 @@ export async function updateWholesalePayment(
   if (error || !data) return { ok: false, message: "No se pudo actualizar la cartera del pedido." };
   const customer = Array.isArray(data.customers) ? data.customers[0] : data.customers;
   const context = highLevelContext(data.source_payload);
-  await syncWholesalePipeline(
-    context,
-    paymentStatus === "paid" ? "paid" : "payment_pending",
-    `${customer?.business_name || customer?.name || "Cliente"} · ${data.order_number}`,
-    total,
-  );
+  const [pipeline, fields] = await Promise.all([
+    syncWholesalePipeline(
+      context,
+      paymentStatus === "paid" ? "paid" : "payment_pending",
+      `${customer?.business_name || customer?.name || "Cliente"} · ${data.order_number}`,
+      total,
+    ),
+    syncHighLevelOrderFields(context, { orderNumber: data.order_number, total }),
+  ]);
   if (sendSummary) {
     const sent = await sendWholesalePaymentSummary(context, customer?.business_name || customer?.name || "cliente", data.order_number, total);
     if (!sent.ok) return { ok: false, message: `Se guardó la cartera, pero ${sent.message}` };
   }
   revalidatePath("/dashboard");
-  return { ok: true, message: sendSummary ? "Cartera actualizada y resumen enviado." : "Cartera actualizada." };
+  const synchronizationWarning = !pipeline.ok
+    ? ` No se pudo mover el pipeline: ${pipeline.message}`
+    : !fields.ok
+      ? ` El pipeline se movió, pero ${fields.message}`
+      : "";
+  return { ok: true, message: `${sendSummary ? "Cartera actualizada y resumen enviado." : "Cartera actualizada."}${synchronizationWarning}` };
 }
 
 type OrderDetailsInput = {

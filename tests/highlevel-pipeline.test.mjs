@@ -1,7 +1,7 @@
 import { afterEach, test } from "node:test";
 import assert from "node:assert/strict";
 
-import { sendHighLevelMessage, syncRetailPipeline } from "../src/lib/orders/highlevel-pipeline.ts";
+import { sendHighLevelMessage, syncHighLevelOrderFields, syncRetailPipeline } from "../src/lib/orders/highlevel-pipeline.ts";
 
 const originalFetch = globalThis.fetch;
 const originalEnv = { ...process.env };
@@ -109,5 +109,33 @@ test("envía un mensaje de WhatsApp al contacto por HighLevel", async () => {
     type: "WhatsApp",
     contactId: "contact-1",
     message: "Resumen del pedido",
+  });
+});
+
+test("llena Orden y Valor del pedido en los campos del contacto", async () => {
+  configure();
+  const requests = [];
+  globalThis.fetch = async (input, init = {}) => {
+    requests.push({ url: String(input), init });
+    if (String(input).includes("/customFields?")) return Response.json({ customFields: [
+      { id: "order-field", name: "Orden", fieldKey: "contact.orden" },
+      { id: "total-field", name: "Valor del pedido", fieldKey: "contact.valor_del_pedido" },
+    ] });
+    return Response.json({ contact: { id: "contact-order-fields" } });
+  };
+
+  const result = await syncHighLevelOrderFields(
+    { locationId: "location-order-fields", contactId: "contact-order-fields" },
+    { orderNumber: "FEN-000123", total: 185_000 },
+  );
+
+  assert.equal(result.ok, true);
+  const update = requests.find((request) => request.url.endsWith("/contacts/contact-order-fields"));
+  assert.equal(update?.init.method, "PUT");
+  assert.deepEqual(JSON.parse(String(update?.init.body)), {
+    customFields: [
+      { id: "order-field", field_value: "FEN-000123" },
+      { id: "total-field", field_value: 185_000 },
+    ],
   });
 });

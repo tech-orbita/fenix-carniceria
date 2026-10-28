@@ -411,7 +411,12 @@ function WholesaleOrdersTable({ orders: allOrders, pendingId, onStatusChange }: 
                 ? <span className="no-order-badge">Sin pedido</span>
                 : isClosed(order)
                   ? <button className="dispatch-action is-done" disabled={pendingId === order.id || editing} onClick={() => onStatusChange(order, "new")} title="Volver a pendiente" type="button">{pendingId === order.id ? "…" : "Deshacer"}</button>
-                  : <><button className="dispatch-action" disabled={pendingId === order.id || editing} onClick={() => onStatusChange(order, "dispatched")} title="Confirmar que el pedido salió" type="button">{pendingId === order.id ? "Guardando…" : "✓ Despachado"}</button>{dayOffset === 1 && <button className="advance-action" disabled={saving || editing} onClick={() => void advanceOrder(order)} title="Autorizar este pedido para despacho hoy" type="button">Adelantar a hoy</button>}</>}</div></div></th>
+                  : <>
+                    {!['preparing', 'ready'].includes(order.status) && <button className="advance-action" disabled={pendingId === order.id || editing} onClick={() => onStatusChange(order, "preparing")} title="Mover a En Preparación en el panel y en GHL" type="button">En preparación</button>}
+                    <button className="help-badge" disabled={pendingId === order.id || editing} onClick={() => onStatusChange(order, "help")} title="Mover a Requiere ayuda en el panel y en GHL" type="button">Requiere ayuda</button>
+                    <button className="dispatch-action" disabled={pendingId === order.id || editing} onClick={() => onStatusChange(order, "dispatched")} title="Confirmar que el pedido salió" type="button">{pendingId === order.id ? "Guardando…" : "✓ Despachado"}</button>
+                    {dayOffset === 1 && <button className="advance-action" disabled={saving || editing} onClick={() => void advanceOrder(order)} title="Autorizar este pedido para despacho hoy" type="button">Adelantar a hoy</button>}
+                  </>}</div></div></th>
               <td>{order.phone}</td>
               <td>{order.route}</td>
               <td>{order.formData?.billing || "—"}</td>
