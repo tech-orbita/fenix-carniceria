@@ -387,7 +387,7 @@ function WholesaleOrdersTable({ orders: allOrders, pendingId, onStatusChange }: 
           {dispatchedCount > 0 && <label className="dispatched-toggle"><input checked={showDispatched} onChange={(event) => setShowDispatched(event.target.checked)} type="checkbox" />Ver despachados ({dispatchedCount})</label>}
           <div aria-label="Tipo de registro" className="request-mode-filters" role="group">
             <button aria-pressed={listMode === "orders"} className={listMode === "orders" ? "orders-filter is-active" : "orders-filter"} onClick={() => setListMode("orders")} type="button">Pedidos ({orderCount})</button>
-            {helpCount > 0 && <button aria-pressed={listMode === "help"} className={listMode === "help" ? "help-filter is-active" : "help-filter"} onClick={() => { clearFilters(); setListMode("help"); }} type="button">Requiere ayuda ({helpCount})</button>}
+            <button aria-pressed={listMode === "help"} className={listMode === "help" ? "help-filter is-active" : "help-filter"} onClick={() => { clearFilters(); setListMode("help"); }} type="button">Requiere ayuda ({helpCount})</button>
           </div>
           {hasFilters && <button className="clear-filters" onClick={clearFilters} type="button">Limpiar filtros</button>}
         </div>
