@@ -54,7 +54,7 @@ export function whatsappUrl(phone: string, message: string) {
   return `https://wa.me/${international}?text=${encodeURIComponent(message)}`;
 }
 
-export type IconName = "address" | "calendar" | "chat" | "check" | "copy" | "download" | "edit" | "filter" | "help" | "print" | "receipt" | "search" | "shop" | "truck";
+export type IconName = "address" | "calendar" | "chat" | "check" | "clock" | "copy" | "download" | "edit" | "filter" | "help" | "print" | "receipt" | "search" | "shop" | "truck" | "undo";
 
 export function Icon({ name }: { name: IconName }) {
   const paths = {
@@ -63,6 +63,7 @@ export function Icon({ name }: { name: IconName }) {
     calendar: <><rect height="17" rx="2" width="18" x="3" y="4" /><path d="M3 9h18M8 2v4M16 2v4" /></>,
     chat: <><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4Z" /><path d="M8 9h8M8 13h5" /></>,
     check: <path d="m5 12 5 5L20 7" />,
+    clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
     copy: <><rect height="13" rx="2" width="13" x="8" y="8" /><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3" /></>,
     download: <><path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M5 21h14" /></>,
     edit: <><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z" /></>,
@@ -72,6 +73,7 @@ export function Icon({ name }: { name: IconName }) {
     search: <><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></>,
     shop: <><path d="M4 10v11h16V10" /><path d="M3 10 5 3h14l2 7" /><path d="M8 21v-7h8v7" /></>,
     truck: <><path d="M3 6h11v10H3z" /><path d="M14 10h4l3 3v3h-7z" /><circle cx="7" cy="18" r="2" /><circle cx="17" cy="18" r="2" /></>,
+    undo: <><path d="M9 7 4 12l5 5" /><path d="M4 12h9a7 7 0 0 1 7 7" /></>,
   };
   return <svg aria-hidden="true" fill="none" height="20" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="20">{paths[name]}</svg>;
 }
