@@ -253,8 +253,8 @@ function WholesaleOrdersTable({ orders: allOrders, pendingId, onStatusChange }: 
   const [query, setQuery] = useState("");
   const [view, setView] = useState<"orders" | "wallet">("orders");
   const [dayOffset, setDayOffset] = useState(0);
-  const [showDispatched, setShowDispatched] = useState(false);
-  const [listMode, setListMode] = useState<"orders" | "help">("orders");
+  const [listMode, setListMode] = useState<"orders" | "help" | "dispatched">("orders");
+  const [showInfoColumns, setShowInfoColumns] = useState(true);
   const [zones, setZones] = useState<string[]>([]);
   const [cuts, setCuts] = useState<string[]>([]);
   const [extraColumns, setExtraColumns] = useState<string[]>([]);
@@ -271,11 +271,12 @@ function WholesaleOrdersTable({ orders: allOrders, pendingId, onStatusChange }: 
   // pedido. Los pedidos normales nunca se ocultan por su estado operativo.
   const chatHelpRequests = dayOrders.filter(isHelpWithoutOrder);
   const customerOrders = dayOrders.filter((order) => !isHelpWithoutOrder(order));
-  const dispatchedCount = customerOrders.filter(isClosed).length;
-  const openOrders = showDispatched ? customerOrders : customerOrders.filter((order) => !isClosed(order));
-  const orders = listMode === "help" ? chatHelpRequests : openOrders;
+  const dispatchedOrders = customerOrders.filter(isClosed);
+  const openOrders = customerOrders.filter((order) => !isClosed(order));
+  const orders = listMode === "help" ? chatHelpRequests : listMode === "dispatched" ? dispatchedOrders : openOrders;
   const helpCount = chatHelpRequests.length;
-  const orderCount = customerOrders.length;
+  const dispatchedCount = dispatchedOrders.length;
+  const orderCount = openOrders.length;
   const pendingByDay = (offset: number) => allOrders.filter((order) => !isClosed(order) && serviceDay(order) === addDays(today, offset)).length;
   const products = productsForOrders(orders);
   const orderCuts = new Map(orders.map((order) => [
@@ -384,14 +385,15 @@ function WholesaleOrdersTable({ orders: allOrders, pendingId, onStatusChange }: 
             <input onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === "Escape") setQuery(""); }} placeholder="Buscar cliente o teléfono" type="text" value={query} />
             {query && <button aria-label="Borrar búsqueda" onClick={() => setQuery("")} type="button">×</button>}
           </label>
-          {dispatchedCount > 0 && <label className="dispatched-toggle"><input checked={showDispatched} onChange={(event) => setShowDispatched(event.target.checked)} type="checkbox" />Ver despachados ({dispatchedCount})</label>}
           <div aria-label="Tipo de registro" className="request-mode-filters" role="group">
             <button aria-pressed={listMode === "orders"} className={listMode === "orders" ? "orders-filter is-active" : "orders-filter"} onClick={() => setListMode("orders")} type="button">Pedidos ({orderCount})</button>
             <button aria-pressed={listMode === "help"} className={listMode === "help" ? "help-filter is-active" : "help-filter"} onClick={() => { clearFilters(); setListMode("help"); }} type="button">Requiere ayuda ({helpCount})</button>
+            <button aria-pressed={listMode === "dispatched"} className={listMode === "dispatched" ? "dispatched-filter is-active" : "dispatched-filter"} onClick={() => { clearFilters(); setListMode("dispatched"); }} type="button">Despachados ({dispatchedCount})</button>
           </div>
           {hasFilters && <button className="clear-filters" onClick={clearFilters} type="button">Limpiar filtros</button>}
         </div>
         <div className="toolbar-actions">
+          <button aria-pressed={!showInfoColumns} className="outline-action" onClick={() => setShowInfoColumns((current) => !current)} type="button">{showInfoColumns ? "Ocultar datos" : "Mostrar datos"}</button>
           {editing ? <>
             {hiddenProducts.length > 0 && <label className="zone-filter"><span className="sr-only">Agregar columna de corte</span><select aria-label="Agregar columna de corte" onChange={(event) => { if (event.target.value) setExtraColumns((current) => [...current, event.target.value]); }} value=""><option value="">+ Agregar corte</option>{hiddenProducts.map((product) => <option key={product.name} value={product.name}>{product.name}</option>)}</select></label>}
             <button className="outline-action" disabled={saving} onClick={stopEditing} type="button">Cancelar</button>
@@ -402,10 +404,10 @@ function WholesaleOrdersTable({ orders: allOrders, pendingId, onStatusChange }: 
       </div>
       {editNotice && <div className="table-edit-notice" role="status">{editNotice}</div>}
       <div className="matrix-scroll">
-        <table className="order-matrix wholesale-matrix">
+        <table className={`order-matrix wholesale-matrix ${showInfoColumns ? "with-order-info" : "without-order-info"}`}>
           <thead>
-            <tr className="category-row"><th colSpan={5}>Pedido recibido</th>{categories.map((category, index) => <th colSpan={category.count} key={`${category.name}-${index}`}>{category.name}</th>)}</tr>
-            <tr><th>Cliente</th><th>Teléfono</th><th>Zona</th><th>Facturación</th><th>Comentario</th>{visibleProducts.map((product) => <th key={product.name} title={product.name === "Blanda" ? "C = Capón · L = Lomo · T = Tetafula · B = Calavera" : undefined}>{product.name}<small className="unit-label">{product.name === "Blanda" ? "kg · C/L/T/B" : "kg"}</small></th>)}</tr>
+            <tr className="category-row"><th colSpan={showInfoColumns ? 5 : 1}>Pedido recibido</th>{categories.map((category, index) => <th colSpan={category.count} key={`${category.name}-${index}`}>{category.name}</th>)}</tr>
+            <tr><th>Cliente</th>{showInfoColumns && <><th>Teléfono</th><th>Zona</th><th>Facturación</th><th>Comentario</th></>}{visibleProducts.map((product) => <th key={product.name} title={product.name === "Blanda" ? "C = Capón · L = Lomo · T = Tetafula · B = Calavera" : undefined}>{product.name}<small className="unit-label">{product.name === "Blanda" ? "kg · C/L/T/B" : "kg"}</small></th>)}</tr>
           </thead>
           <tbody>
             {visibleOrders.map((order) => <tr className={isClosed(order) ? "is-dispatched" : undefined} key={order.id}>
@@ -414,14 +416,16 @@ function WholesaleOrdersTable({ orders: allOrders, pendingId, onStatusChange }: 
                 : isClosed(order)
                   ? <button className="dispatch-action is-done" disabled={pendingId === order.id || editing} onClick={() => onStatusChange(order, "new")} title="Volver a pendiente" type="button">{pendingId === order.id ? "…" : "Deshacer"}</button>
                   : <>
-                    {!['preparing', 'ready'].includes(order.status) && <button className="advance-action" disabled={pendingId === order.id || editing} onClick={() => onStatusChange(order, "preparing")} title="Mover a En Preparación en el panel y en GHL" type="button">En preparación</button>}
+                    {!['preparing', 'ready'].includes(order.status) && <button className="advance-action" disabled={pendingId === order.id || editing} onClick={() => onStatusChange(order, "preparing")} title="Mover a Preparación en el panel y en GHL" type="button">Preparación</button>}
                     <button className="dispatch-action" disabled={pendingId === order.id || editing} onClick={() => onStatusChange(order, "dispatched")} title="Confirmar que el pedido salió" type="button">{pendingId === order.id ? "Guardando…" : "✓ Despachado"}</button>
                     {dayOffset === 1 && <button className="advance-action" disabled={saving || editing} onClick={() => void advanceOrder(order)} title="Autorizar este pedido para despacho hoy" type="button">Adelantar a hoy</button>}
                   </>}</div></div></th>
-              <td>{order.phone}</td>
-              <td>{order.route}</td>
-              <td>{order.formData?.billing || "—"}</td>
-              <td className="matrix-comment-cell">{editing ? <textarea aria-label={`Comentario para ${order.orderNumber}`} onChange={(event) => updateDraft(order.id, "notes", event.target.value)} placeholder="Añade un comentario" rows={2} value={draftRows[order.id]?.notes ?? ""} /> : order.notes || "—"}</td>
+              {showInfoColumns && <>
+                <td>{order.phone}</td>
+                <td>{order.route}</td>
+                <td>{order.formData?.billing || "—"}</td>
+                <td className="matrix-comment-cell">{editing ? <textarea aria-label={`Comentario para ${order.orderNumber}`} onChange={(event) => updateDraft(order.id, "notes", event.target.value)} placeholder="Añade un comentario" rows={2} value={draftRows[order.id]?.notes ?? ""} /> : order.notes || "—"}</td>
+              </>}
               {visibleProducts.map((product) => {
                 const value = productQuantity(order, product);
                 const placeholder = product.name === "Blanda" ? "kg C/L/T/B" : product.name === "Comodín" ? "kg producto" : "kg";
@@ -429,9 +433,9 @@ function WholesaleOrdersTable({ orders: allOrders, pendingId, onStatusChange }: 
                 return <td className={editing ? "matrix-quantity-cell is-editing" : value ? "matrix-quantity-cell has-value" : "matrix-quantity-cell"} key={product.name}>{editing ? <input aria-label={`${product.name} de ${order.orderNumber}`} onChange={(event) => updateDraft(order.id, product.name, event.target.value)} placeholder={placeholder} title={title} value={draftRows[order.id]?.quantities[product.name] ?? ""} /> : value || ""}</td>;
               })}
             </tr>)}
-            {!visibleOrders.length && <tr><td className="matrix-empty" colSpan={visibleProducts.length + 5}>{hasFilters ? "Ningún pedido coincide con los filtros." : "No hay pedidos pendientes para este día."}</td></tr>}
+            {!visibleOrders.length && <tr><td className="matrix-empty" colSpan={visibleProducts.length + (showInfoColumns ? 5 : 1)}>{hasFilters ? "Ningún pedido coincide con los filtros." : listMode === "dispatched" ? "No hay pedidos despachados para este día." : listMode === "help" ? "No hay solicitudes de ayuda para este día." : "No hay pedidos pendientes para este día."}</td></tr>}
           </tbody>
-          {visibleOrders.length > 0 && visibleProducts.length > 0 && <tfoot><tr><th scope="row">Total</th><td colSpan={4}>{visibleSummary}</td>{totals.map((total, index) => <td key={visibleProducts[index].name}>{total || "—"}</td>)}</tr></tfoot>}
+          {visibleOrders.length > 0 && visibleProducts.length > 0 && <tfoot><tr><th scope="row">{showInfoColumns ? "Total" : `Total · ${visibleSummary}`}</th>{showInfoColumns && <td colSpan={4}>{visibleSummary}</td>}{totals.map((total, index) => <td key={visibleProducts[index].name}>{total || "—"}</td>)}</tr></tfoot>}
         </table>
       </div>
     </section></>
