@@ -2954,9 +2954,29 @@ a {
   line-height: 1.25;
 }
 
+.orders-app .matrix-client .client-order-number {
+  color: var(--wine);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+}
+
 .orders-app .matrix-row-actions .conversation-link {
   width: 24px;
   height: 24px;
+}
+
+.orders-app .matrix-row-actions .payment-proof-link {
+  border: 1px solid #e7aa28;
+  border-radius: 8px;
+  background: #fff6d8;
+  color: #7c4b00;
+  text-decoration: none;
+}
+
+.orders-app .matrix-row-actions .payment-proof-link:hover {
+  border-color: #b87500;
+  background: #ffedb0;
 }
 
 .orders-app .matrix-row-actions .advance-action,

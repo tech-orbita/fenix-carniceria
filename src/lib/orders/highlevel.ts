@@ -7,15 +7,18 @@ const normalize = (key: string) => key.normalize("NFD").replace(/[\u0300-\u036f]
 function canonicalZone(value?: string) {
   if (!value) return undefined;
   const normalized = normalize(value);
+  // Solo normalizamos equivalencias exactas conocidas. Las opciones del formulario
+  // pueden cambiar y sus etiquetas deben llegar intactas al panel (por ejemplo,
+  // "Barranquilla Norte" o una zona nueva), sin reducirlas por coincidencias parciales.
   const zones: Array<[string, string]> = [
     ["soledad", "Soledad"],
     ["centro", "Centro"],
     ["norte", "Norte"],
     ["sur", "Sur"],
-    ["cedi", "Cedi"],
+    ["galapa", "Galapa"],
     ["sinclasificar", "Sin clasificar"],
   ];
-  return zones.find(([key]) => normalized.includes(key))?.[1] ?? value.trim();
+  return zones.find(([key]) => normalized === key)?.[1] ?? value.trim().slice(0, 80);
 }
 
 export function mapHighLevelForm(value: unknown, form: WholesaleForm) {
@@ -56,6 +59,23 @@ export function mapHighLevelForm(value: unknown, form: WholesaleForm) {
       const value = fields.get(normalize(key));
       if (typeof value === "string" && value.trim() && !value.includes("{{")) return value.trim();
       if (typeof value === "number") return String(value);
+    }
+    return undefined;
+  };
+  const getFileUrl = (...keys: string[]) => {
+    const direct = get(...keys);
+    if (direct) return direct;
+    for (const key of keys) {
+      const value = fields.get(normalize(key));
+      if (Array.isArray(value)) {
+        const url = value.find((entry): entry is string => typeof entry === "string" && Boolean(entry.trim()));
+        if (url) return url.trim();
+      }
+      if (value && typeof value === "object" && !Array.isArray(value)) {
+        const file = value as Record<string, unknown>;
+        const url = file.url ?? file.fileUrl ?? file.file_url;
+        if (typeof url === "string" && url.trim()) return url.trim();
+      }
     }
     return undefined;
   };
@@ -113,7 +133,7 @@ export function mapHighLevelForm(value: unknown, form: WholesaleForm) {
       form, order_text: text, tax_id: get("tax_id", "Nit o Cédula"), billing: get("billing", "Facturación"),
       maps_url: get("maps_url", "Ubicación de Maps"),
       receiver_phone: get("receiver_phone", "Número de Quien Recibe"),
-      payment_proof: get("payment_proof", "Aqui puedes subir tu comprobante de Pago"),
+      payment_proof: getFileUrl("payment_proof", "Aqui puedes subir tu comprobante de Pago"),
       contact_id: get("contactId", "contact_id", "contact.id"),
       location_id: get("locationId", "location_id", "location.id"),
       conversation_id: get("conversationId", "conversation_id", "conversation.id"),

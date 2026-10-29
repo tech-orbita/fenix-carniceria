@@ -9,6 +9,11 @@ type Pipeline = {
   stages?: PipelineStage[];
 };
 
+type Opportunity = {
+  id: string;
+  name?: string;
+};
+
 type CustomField = {
   id: string;
   name?: string;
@@ -193,8 +198,22 @@ export async function syncOrderPipeline(
       status: "all",
       limit: "20",
     });
-    const found = await ghlFetch<{ opportunities?: Array<{ id: string }> }>(`/opportunities/search?${search}`, config.token);
-    const opportunity = found.opportunities?.[0];
+    const found = await ghlFetch<{ opportunities?: Opportunity[] }>(`/opportunities/search?${search}`, config.token);
+    // Cada formulario representa un pedido diferente. Se reutiliza únicamente la
+    // oportunidad del mismo pedido (mismo nombre/número), nunca la primera del
+    // contacto, para conservar los pedidos anteriores en HighLevel.
+    const orderNumber = normalize(opportunityName.split("·").at(-1) ?? opportunityName);
+    const exactOpportunity = found.opportunities?.find((candidate) => {
+      if (!candidate.name) return false;
+      const candidateName = normalize(candidate.name);
+      return candidateName === normalize(opportunityName) || candidateName.includes(orderNumber);
+    });
+    // Compatibilidad defensiva si HighLevel omite `name` en una búsqueda de una
+    // sola oportunidad. Al recibir un formulario nuevo no se usa este fallback.
+    const unnamedExisting = stage !== "order_placed" && found.opportunities?.length === 1 && !found.opportunities[0].name
+      ? found.opportunities[0]
+      : undefined;
+    const opportunity = exactOpportunity ?? unnamedExisting;
     const body = {
       pipelineId: pipeline.id,
       pipelineStageId: stageId,

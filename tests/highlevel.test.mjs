@@ -100,7 +100,25 @@ test("guarda la zona registrada en el formulario aunque GHL envíe el nombre com
     ...base,
     "Contact.Custom Fields.Zona": "Barranquilla Norte",
   }, "nuevo-mayorista");
-  assert.equal(order.route, "Norte");
+  assert.equal(order.route, "Barranquilla Norte");
+});
+
+test("conserva una opción nueva de zona para que el panel la pueda registrar", () => {
+  const order = mapHighLevelForm({
+    ...base,
+    Zona: "Suroccidente especial",
+  }, "nuevo-mayorista");
+  assert.equal(order.route, "Suroccidente especial");
+});
+
+test("acepta el comprobante de pago cuando HighLevel lo envía como lista de archivos", () => {
+  const order = mapHighLevelForm({
+    ...base,
+    customData: [
+      { fieldKey: "Aqui puedes subir tu comprobante de Pago", value: ["https://files.example/comprobante.jpg"] },
+    ],
+  }, "mayorista-cliente");
+  assert.equal(order.form_data.payment_proof, "https://files.example/comprobante.jpg");
 });
 
 test("interpreta las líneas reales de blanda, cerdo y pollo sin perder productos", () => {

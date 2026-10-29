@@ -91,7 +91,22 @@ export async function POST(request: NextRequest) {
 export async function ingestOrder(body: IngestBody) {
   const supabase = createAdminClient();
   const routeName = body.route?.trim() || "Sin clasificar";
-  const { data: route } = await supabase.from("routes").select("id").eq("name", routeName).maybeSingle();
+  let { data: route } = await supabase.from("routes").select("id").eq("name", routeName).maybeSingle();
+  // El formulario es la fuente de verdad de las zonas. Si allí aparece una opción
+  // nueva, se registra para que el pedido y el filtro del panel la muestren sin
+  // requerir otra lista fija en el código.
+  if (!route && body.route) {
+    const { data: createdRoute, error: routeError } = await supabase
+      .from("routes")
+      .insert({ name: routeName, sort_order: 900 })
+      .select("id")
+      .maybeSingle();
+    if (createdRoute) route = createdRoute;
+    else if (routeError?.code === "23505") {
+      const concurrentRoute = await supabase.from("routes").select("id").eq("name", routeName).maybeSingle();
+      route = concurrentRoute.data;
+    }
+  }
   const { data: fallbackRoute } = route
     ? { data: null }
     : await supabase.from("routes").select("id").eq("name", "Sin clasificar").single();

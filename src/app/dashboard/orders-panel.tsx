@@ -98,6 +98,16 @@ function hasHighLevelConversation(order: Order) {
   return Boolean(order.highLevel?.conversationUrl || order.highLevel?.conversationId || order.highLevel?.contactId);
 }
 
+function safeExternalUrl(value?: string) {
+  if (!value) return undefined;
+  try {
+    const url = new URL(value);
+    return ["http:", "https:"].includes(url.protocol) ? url.toString() : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function ConversationLink({ order }: { order: Order }) {
   const customer = order.businessName ?? order.customer;
   if (!hasHighLevelConversation(order)) {
@@ -411,7 +421,7 @@ function WholesaleOrdersTable({ orders: allOrders, pendingId, onStatusChange }: 
           </thead>
           <tbody>
             {visibleOrders.map((order) => <tr className={isClosed(order) ? "is-dispatched" : undefined} key={order.id}>
-              <th scope="row"><div className="matrix-client"><span><strong>{order.businessName ?? order.customer}</strong><small className="client-address" title={`Pedido ${order.orderNumber}`}>{order.address || order.orderNumber}</small></span><div className="matrix-row-actions"><ConversationLink order={order} />{isHelpWithoutOrder(order)
+              <th scope="row"><div className="matrix-client"><span><strong>{order.businessName ?? order.customer}</strong><small className="client-order-number">Pedido {order.orderNumber}</small><small className="client-address">{order.address}</small></span><div className="matrix-row-actions"><ConversationLink order={order} />{safeExternalUrl(order.formData?.payment_proof) && <a aria-label={`Abrir comprobante de ${order.orderNumber}`} className="payment-proof-link row-icon-action tooltip-icon-action" data-tooltip="Comprobante adjunto" href={safeExternalUrl(order.formData?.payment_proof)} rel="noreferrer" target="_blank"><Icon name="receipt" /><span className="sr-only">Ver comprobante adjunto</span></a>}{isHelpWithoutOrder(order)
                 ? <span className="no-order-badge">Sin pedido</span>
                 : isClosed(order)
                   ? <button aria-label="Volver a pedidos pendientes" className="dispatch-action is-done row-icon-action tooltip-icon-action" data-tooltip="Volver a pedidos" disabled={pendingId === order.id || editing} onClick={() => onStatusChange(order, "new")} type="button">{pendingId === order.id ? "…" : <Icon name="undo" />}<span className="sr-only">Volver a pedidos pendientes</span></button>

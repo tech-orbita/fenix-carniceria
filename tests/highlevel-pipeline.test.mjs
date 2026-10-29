@@ -67,6 +67,43 @@ test("crea la oportunidad minorista en Realizo Pedido cuando aún no existe", as
   });
 });
 
+test("crea otra oportunidad cuando el contacto hace un pedido nuevo", async () => {
+  configure();
+  const requests = [];
+  globalThis.fetch = async (input, init = {}) => {
+    requests.push({ url: String(input), init });
+    if (String(input).includes("/opportunities/pipelines?")) return Response.json({ pipelines: [{ id: "retail-pipeline", name: "Minoristas", stages: [{ id: "placed-stage", name: "Realizo Pedido" }] }] });
+    if (String(input).includes("/opportunities/search?")) return Response.json({ opportunities: [{ id: "old-opportunity", name: "Luis · FEN-000001" }] });
+    return Response.json({ opportunity: { id: "new-opportunity" } }, { status: 201 });
+  };
+
+  const result = await syncRetailPipeline({ locationId: "location-new-order", contactId: "contact-2" }, "order_placed", "Luis · FEN-000002", 0);
+
+  assert.equal(result.ok, true);
+  assert.ok(requests.some((request) => request.url.endsWith("/opportunities/") && request.init.method === "POST"));
+  assert.ok(!requests.some((request) => request.url.endsWith("/opportunities/old-opportunity")));
+});
+
+test("actualiza la oportunidad que corresponde al número de pedido", async () => {
+  configure();
+  const requests = [];
+  globalThis.fetch = async (input, init = {}) => {
+    requests.push({ url: String(input), init });
+    if (String(input).includes("/opportunities/pipelines?")) return Response.json({ pipelines: [{ id: "retail-pipeline", name: "Minoristas", stages: [{ id: "paid-stage", name: "Pago" }] }] });
+    if (String(input).includes("/opportunities/search?")) return Response.json({ opportunities: [
+      { id: "old-opportunity", name: "Luis · FEN-000001" },
+      { id: "current-opportunity", name: "Luis · FEN-000002" },
+    ] });
+    return Response.json({ opportunity: { id: "current-opportunity" } });
+  };
+
+  const result = await syncRetailPipeline({ locationId: "location-current-order", contactId: "contact-2" }, "paid", "Luis · FEN-000002", 10);
+
+  assert.equal(result.ok, true);
+  assert.ok(requests.some((request) => request.url.endsWith("/opportunities/current-opportunity") && request.init.method === "PUT"));
+  assert.ok(!requests.some((request) => request.url.endsWith("/opportunities/old-opportunity")));
+});
+
 test("reconoce todas las etapas visibles del pipeline Minoristas", async () => {
   configure();
   const stages = [
