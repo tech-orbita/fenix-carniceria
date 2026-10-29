@@ -467,7 +467,7 @@ export function OrdersPanel({ initialOrders, loadError, viewer }: { initialOrder
   const [notice, setNotice] = useState<string | undefined>(loadError);
   const wholesale = orders.filter((order) => order.customerType === "wholesale");
   const retail = orders.filter((order) => order.customerType === "retail");
-  useOrdersRealtime(assignedType ? [assignedType] : ["wholesale", "retail"]);
+  const { soundEnabled, toggleSound } = useOrdersRealtime(assignedType ? [assignedType] : ["wholesale", "retail"]);
 
   // El aviso se oculta solo tras unos segundos.
   useEffect(() => {
@@ -529,10 +529,16 @@ export function OrdersPanel({ initialOrders, loadError, viewer }: { initialOrder
       <div className="dashboard-topbar">
         {!assignedType && <section aria-label="Tipo de cliente" className="segment-switch"><button aria-pressed={activeType === "wholesale"} onClick={() => { setActiveType("wholesale"); setNotice(undefined); }} type="button"><Icon name="truck" /><strong>Mayoristas</strong><b>{wholesale.length}</b></button><button aria-pressed={activeType === "retail"} onClick={() => { setActiveType("retail"); setNotice(undefined); }} type="button"><Icon name="shop" /><strong>Minoristas</strong><b>{retail.length}</b></button></section>}
         {viewer && <div className="session-bar">
-          <span>{viewer.email}{assignedType ? ` · ${assignedType === "wholesale" ? "Mayoristas" : "Minoristas"}` : " · Administrador"}</span>
-          <Link href="/mi-cuenta">Mi contraseña</Link>
-          {viewer.role === "admin" && <Link href="/usuarios">Usuarios</Link>}
-          <form action={signOut}><button type="submit">Salir</button></form>
+          <div className="session-identity" title={viewer.email}>
+            <span className="session-avatar" aria-hidden="true">{viewer.email.slice(0, 1).toLocaleUpperCase("es")}</span>
+            <span className="session-copy"><strong>{viewer.email}</strong><small>{assignedType ? assignedType === "wholesale" ? "Equipo mayoristas" : "Equipo minoristas" : "Administrador"}</small></span>
+          </div>
+          <nav aria-label="Opciones de cuenta" className="session-actions">
+            <button aria-label={soundEnabled ? "Desactivar sonido de pedidos nuevos" : "Activar sonido de pedidos nuevos"} aria-pressed={soundEnabled} className={soundEnabled ? "sound-toggle is-enabled" : "sound-toggle"} onClick={() => void toggleSound()} title={soundEnabled ? "Sonido activo · clic para desactivar" : "Activar sonido de pedidos nuevos"} type="button"><span aria-hidden="true">{soundEnabled ? "🔔" : "🔕"}</span></button>
+            <Link href="/mi-cuenta" title="Cambiar mi contraseña">Cuenta</Link>
+            {viewer.role === "admin" && <Link href="/usuarios">Usuarios</Link>}
+            <form action={signOut}><button type="submit">Salir</button></form>
+          </nav>
         </div>}
       </div>
       {notice && <div className="operation-notice" role="status">{notice}</div>}
