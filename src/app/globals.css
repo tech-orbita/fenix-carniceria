@@ -2564,9 +2564,18 @@ a {
 }
 
 .orders-app .wholesale-matrix .matrix-quantity-cell.has-value {
-  background: #d9e8ff;
   color: var(--wine-dark);
   font-weight: 800;
+}
+
+.orders-app .wholesale-matrix tbody tr:nth-child(odd) td,
+.orders-app .wholesale-matrix tbody tr:nth-child(odd) th:first-child {
+  background: #fff;
+}
+
+.orders-app .wholesale-matrix tbody tr:nth-child(even) td,
+.orders-app .wholesale-matrix tbody tr:nth-child(even) th:first-child {
+  background: #faf7f1;
 }
 
 .orders-app .wholesale-matrix tfoot th,
