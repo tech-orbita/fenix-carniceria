@@ -215,7 +215,9 @@ export async function upsertRetailOrder(value: unknown) {
     orderAction: body.orderAction ?? null,
     orderWindowStart: retailOrderWindowStart(),
   };
-  const subtotal = items.reduce((total, item) => total + item.quantity * item.unit_price, 0);
+  // Las piezas conservan la cantidad solicitada, pero no se cobran como si
+  // fueran kilos. El subtotal queda pendiente hasta registrar el peso real.
+  const subtotal = items.reduce((total, item) => total + (item.unit === "kg" ? item.quantity * item.unit_price : 0), 0);
 
   if (openOrder) {
     const { error: updateError } = await supabase.from("orders").update({

@@ -30,14 +30,24 @@ function itemQuantity(item: RetailBillItem) {
   return item.actualQuantity ?? item.quantity;
 }
 
+function billableQuantity(item: RetailBillItem) {
+  return item.actualQuantity ?? (item.unit === "kg" ? item.quantity : 0);
+}
+
+function pendingWeight(item: RetailBillItem) {
+  return item.actualQuantity == null && item.unit !== "kg";
+}
+
 function isPaid(status: string) {
   return ["paid", "verified", "pagado", "verificado"].includes(status.toLocaleLowerCase("es"));
 }
 
 export function retailBillMessage(order: RetailBillOrder) {
-  const subtotal = order.items.reduce((total, item) => total + itemQuantity(item) * item.unitPrice, 0);
+  const subtotal = order.items.reduce((total, item) => total + billableQuantity(item) * item.unitPrice, 0);
   const total = subtotal + order.deliveryFee + order.adjustments;
-  const lines = order.items.map((item) => `• ${item.productName}: ${quantity.format(itemQuantity(item))} ${item.unit} × ${money.format(item.unitPrice)} = ${money.format(itemQuantity(item) * item.unitPrice)}`);
+  const lines = order.items.map((item) => pendingWeight(item)
+    ? `• ${item.productName}: ${quantity.format(item.quantity)} und · peso pendiente`
+    : `• ${item.productName}: ${quantity.format(itemQuantity(item))} kg × ${money.format(item.unitPrice)} = ${money.format(billableQuantity(item) * item.unitPrice)}`);
   return [
     `Hola ${order.customer}, te compartimos la cuenta de tu pedido ${order.orderNumber} en Fénix J.A. (${dateTime.format(new Date(order.receivedAt))}):`,
     "",

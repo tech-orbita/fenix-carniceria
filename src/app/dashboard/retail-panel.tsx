@@ -66,8 +66,16 @@ function itemQuantity(item: Order["items"][number]) {
   return item.actualQuantity ?? item.quantity;
 }
 
+function pendingWeight(item: Order["items"][number]) {
+  return item.actualQuantity == null && item.unit !== "kg";
+}
+
+function billableQuantity(item: Order["items"][number]) {
+  return item.actualQuantity ?? (item.unit === "kg" ? item.quantity : 0);
+}
+
 function itemsSubtotal(order: Order) {
-  return order.items.reduce((total, item) => total + itemQuantity(item) * item.unitPrice, 0);
+  return order.items.reduce((total, item) => total + billableQuantity(item) * item.unitPrice, 0);
 }
 
 function isQuote(order: Order) {
@@ -170,7 +178,7 @@ function ThermalTicket({ order, logo }: { order: Order; logo: boolean }) {
         <div><dt>Entrega</dt><dd>{order.fulfillment === "delivery" ? "Domicilio" : "Recoge"}</dd></div><div><dt>Dirección</dt><dd>{order.address}</dd></div>
       </dl>
       <div className="ticket-rule" />
-      {order.items.map((item) => <div className="ticket-line" key={item.id}><strong>{item.productName}</strong><span>{quantityFormat.format(itemQuantity(item))} {item.unit} × {money.format(item.unitPrice)}/{item.unit}</span><b>{money.format(itemQuantity(item) * item.unitPrice)}</b>{item.preparation && <small>{item.preparation}</small>}</div>)}
+      {order.items.map((item) => <div className="ticket-line" key={item.id}><strong>{item.productName}</strong>{pendingWeight(item) ? <><span>{quantityFormat.format(item.quantity)} und · peso pendiente</span><b>Por pesar</b></> : <><span>{quantityFormat.format(itemQuantity(item))} kg × {money.format(item.unitPrice)}/kg</span><b>{money.format(billableQuantity(item) * item.unitPrice)}</b></>}{item.preparation && <small>{item.preparation}</small>}</div>)}
       <div className="ticket-rule" />
       {order.deliveryFee > 0 && <div className="ticket-subtotal"><span>Domicilio</span><span>{money.format(order.deliveryFee)}</span></div>}
       {order.adjustments !== 0 && <div className="ticket-subtotal"><span>Ajustes</span><span>{money.format(order.adjustments)}</span></div>}
@@ -190,7 +198,7 @@ function EditOrderForm({ order, saving, onCancel, onSave }: { order: Order; savi
     address: order.address,
     notes: order.notes ?? "",
     items: order.items.map((item) => {
-      const normalized = toKilograms(itemQuantity(item), item.unit);
+      const normalized = pendingWeight(item) ? { quantity: 0, unit: "kg" } : toKilograms(itemQuantity(item), item.unit);
       return {
         id: item.id,
         productName: item.productName,
@@ -218,7 +226,7 @@ function EditOrderForm({ order, saving, onCancel, onSave }: { order: Order; savi
         <legend>Productos · ajusta el gramaje y el precio real</legend>
         {details.items.map((item, index) => <div className="rt-edit-row" key={item.id}>
           <label>Producto<input onChange={(event) => updateItem(index, { productName: event.target.value })} required value={item.productName} />{order.items[index]?.notes && <small>Pedido: {order.items[index].notes}</small>}</label>
-          <label>Cantidad<input min="0.001" onChange={(event) => updateItem(index, { quantity: Number(event.target.value) })} required step="0.001" type="number" value={item.quantity} /></label>
+          <label>Peso real<input min="0.001" onChange={(event) => updateItem(index, { quantity: Number(event.target.value) })} placeholder="0" required step="0.001" type="number" value={item.quantity || ""} /></label>
           <label>Unidad<input aria-label="Unidad fija en kilogramos" readOnly value="kg" /></label>
           <label>Precio por kg<input min="0" onChange={(event) => updateItem(index, { unitPrice: Number(event.target.value) })} required step="100" type="number" value={item.unitPrice} /></label>
           <label>Preparación<input onChange={(event) => updateItem(index, { preparation: event.target.value })} placeholder="Sin indicaciones" value={item.preparation} /></label>
@@ -313,9 +321,9 @@ function OrderDetail({ order, pending, logo, onMove, onPaymentChange, onResolveH
           <thead><tr><th scope="col">Producto</th><th scope="col">Cantidad</th><th scope="col">Precio</th><th scope="col">Subtotal</th></tr></thead>
           <tbody>{order.items.map((item) => <tr key={item.id}>
             <th scope="row">{item.productName}{item.notes && <small>Pedido: {item.notes}</small>}{item.preparation && <small>Preparación: {item.preparation}</small>}</th>
-            <td>{quantityFormat.format(itemQuantity(item))} {item.unit}</td>
-            <td>{money.format(item.unitPrice)}<small>por {item.unit}</small></td>
-            <td>{money.format(itemQuantity(item) * item.unitPrice)}</td>
+            <td>{pendingWeight(item) ? <>{quantityFormat.format(item.quantity)} und<small>Peso pendiente</small></> : <>{quantityFormat.format(itemQuantity(item))} kg</>}</td>
+            <td>{money.format(item.unitPrice)}<small>por kg</small></td>
+            <td>{pendingWeight(item) ? "Por pesar" : money.format(billableQuantity(item) * item.unitPrice)}</td>
           </tr>)}</tbody>
         </table>}
         {order.notes && <div className="rt-note"><strong>Indicaciones</strong><p>{order.notes}</p></div>}

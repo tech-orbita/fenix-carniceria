@@ -8,6 +8,8 @@ const catalog = [
   { id: "molida", name: "Molida súper especial", catalogKey: "res:molida super especial", pricePerKg: 23_000 },
   { id: "butifarra", name: "Butifarra", catalogKey: "otros:butifarra", pricePerKg: 9_000 },
   { id: "pechuga", name: "Pechuga congelada", catalogKey: "pollo:pechuga congelada", pricePerKg: 14_000 },
+  { id: "pernil", name: "Pernil mixto (contramuslo)", catalogKey: "pollo:pernil mixto (contramuslo)", pricePerKg: 8_000 },
+  { id: "hueso-pechuga", name: "Hueso de pechuga", catalogKey: "pollo:hueso de pechuga", pricePerKg: 5_000 },
   { id: "costilla-res", name: "Costilla", catalogKey: "res:costilla", pricePerKg: 20_400 },
   { id: "costilla-cerdo", name: "Costilla", catalogKey: "cerdo:costilla", pricePerKg: 20_000 },
 ];
@@ -52,9 +54,23 @@ test("entiende pesos después del producto y conserva cantidades por unidad", ()
     { product_name: "Punta gorda", quantity: 2, unit_price: 39_000, notes: "punta gorda 2 kilos" },
     { product_name: "Sobre barriga delgada", quantity: 1, unit_price: 29_000, notes: "sobrebarriga 2 libras" },
     { product_name: "Pulpa", quantity: 2, unit_price: 22_000, notes: "4 libras de pulpa" },
-    { product_name: "Muslo Colombina", quantity: 1, unit_price: 10_000, notes: "muslo colombia 4" },
-    { product_name: "Ala especial", quantity: 1, unit_price: 11_000, notes: "ala especial 5 alas" },
+    { product_name: "Muslo Colombina", quantity: 4, unit_price: 10_000, notes: "muslo colombia 4" },
+    { product_name: "Ala especial", quantity: 5, unit_price: 11_000, notes: "ala especial 5 alas" },
   ]);
+  assert.deepEqual(items.slice(-2).map(({ unit }) => unit), ["und", "und"]);
+});
+
+test("usa exclusivamente los nombres minoristas para pechuga y pierna pernil", () => {
+  const items = normalizeRetailItems([], "2 pechugas\n4 pierna pernil", catalog);
+  assert.deepEqual(items.map(({ product_name, quantity, unit, unit_price }) => ({ product_name, quantity, unit, unit_price })), [
+    { product_name: "Pechuga congelada", quantity: 2, unit: "und", unit_price: 14_000 },
+    { product_name: "Pernil mixto (contramuslo)", quantity: 4, unit: "und", unit_price: 8_000 },
+  ]);
+});
+
+test("respeta las unidades explícitas que entrega el agente", () => {
+  const [item] = normalizeRetailItems([{ product_name: "pechuga", quantity: 2, unit: "unidades" }], "", catalog);
+  assert.deepEqual({ name: item.product_name, quantity: item.quantity, unit: item.unit }, { name: "Pechuga congelada", quantity: 2, unit: "und" });
 });
 
 test("calcula kilos cuando el cliente compra por valor", () => {

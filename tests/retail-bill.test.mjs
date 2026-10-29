@@ -22,3 +22,13 @@ test("arma la cuenta minorista con peso real, domicilio y total", () => {
   assert.match(message, /Total a pagar: \$\s?37\.000/);
   assert.match(message, /Quedamos atentos a tu pago/);
 });
+
+test("no cobra unidades sin peso real", () => {
+  const message = retailBillMessage({
+    orderNumber: "FEN-2", customer: "Ana", receivedAt: "2026-10-29T12:00:00Z",
+    paymentStatus: "pending", deliveryFee: 0, adjustments: 0,
+    items: [{ productName: "Pechuga congelada", quantity: 2, unit: "und", unitPrice: 14_000 }],
+  });
+  assert.match(message, /2 und · peso pendiente/);
+  assert.match(message, /Subtotal: \$\s?0/);
+});

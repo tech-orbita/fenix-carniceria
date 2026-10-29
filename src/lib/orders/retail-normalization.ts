@@ -22,7 +22,7 @@ export type NormalizedRetailItem = {
   product_id: string | null;
   product_name: string;
   quantity: number;
-  unit: "kg";
+  unit: "kg" | "und";
   preparation: string | null;
   notes: string | null;
   unit_price: number;
@@ -37,6 +37,9 @@ const retailAliases: Record<string, string> = {
   "muslos colombia": "muslo colombina",
   "pechuga completa": "pechuga congelada",
   pechuga: "pechuga congelada",
+  "pierna pernil": "pernil mixto contramuslo",
+  "pierna y pernil": "pernil mixto contramuslo",
+  "pierna perniles": "pernil mixto contramuslo",
   sobrebarriga: "sobre barriga delgada",
   "sobre barriga": "sobre barriga delgada",
   churrasco: "lomo ancho",
@@ -50,10 +53,14 @@ function singularToken(token: string) {
 
 function comparable(value: string) {
   const normalized = normalizeProductName(value);
-  return (retailAliases[normalized] ?? normalized)
+  const singular = normalized
+    .split(" ")
+    .filter(Boolean)
+    .map(singularToken)
+    .join(" ");
+  return (retailAliases[normalized] ?? retailAliases[singular] ?? singular)
     .split(" ")
     .filter((token) => token && !["de", "del", "la", "el", "para", "carne"].includes(token))
-    .map(singularToken)
     .join(" ");
 }
 
@@ -143,19 +150,21 @@ function parsedLine(item: RetailInputItem) {
     return {
       rawText,
       productText: counted[1].trim(),
-      quantity: 1,
-      unit: "kg",
+      quantity: numericValue(counted[2]),
+      unit: "und",
       amount: null,
     };
   }
 
   const plainQuantity = rawText.match(/^(\d+(?:[.,]\d+)?)\s+(?:de\s+)?(.+)$/i);
   if (plainQuantity) {
+    const productText = plainQuantity[2].trim();
+    const countedProduct = /\b(?:pechugas?|piernas?\s+(?:y\s+)?pernil(?:es)?)\b/i.test(productText);
     return {
       rawText,
-      productText: plainQuantity[2].trim(),
+      productText,
       quantity: numericValue(plainQuantity[1]),
-      unit: "kg",
+      unit: countedProduct ? "und" : "kg",
       amount: null,
     };
   }
@@ -165,11 +174,13 @@ function parsedLine(item: RetailInputItem) {
   if (isAmount && Number.isFinite(structuredQuantity) && structuredQuantity > 0) {
     return { rawText, productText: String(item.product_name ?? item.name ?? rawText).trim(), quantity: null, unit: "COP", amount: structuredQuantity };
   }
+  const suppliedUnit = normalizeProductName(String(item.unit ?? "kg"));
+  const countedUnit = ["unidad", "unidades", "und", "unds", "pieza", "piezas"].includes(suppliedUnit);
   return {
     rawText,
     productText: String(item.product_name ?? item.name ?? rawText).trim(),
     quantity: Number.isFinite(structuredQuantity) && structuredQuantity > 0 ? structuredQuantity : 1,
-    unit: String(item.unit ?? "kg").trim() || "kg",
+    unit: countedUnit ? "und" : String(item.unit ?? "kg").trim() || "kg",
     amount: null,
   };
 }
@@ -191,9 +202,10 @@ export function normalizeRetailItems(
     if (!parsed.productText) return null;
     const product = matchRetailProduct(parsed.productText, catalog);
     const unitPrice = product?.pricePerKg ?? 0;
+    const counted = parsed.unit === "und";
     const normalizedQuantity = parsed.amount != null
       ? (unitPrice > 0 ? parsed.amount / unitPrice : 1)
-      : toKilograms(Number(parsed.quantity), parsed.unit).quantity;
+      : counted ? Number(parsed.quantity) : toKilograms(Number(parsed.quantity), parsed.unit).quantity;
     if (!Number.isFinite(normalizedQuantity) || normalizedQuantity <= 0) return null;
 
     const canonicalName = product?.name ?? title(parsed.productText);
@@ -204,7 +216,7 @@ export function normalizeRetailItems(
       product_id: product?.id ?? null,
       product_name: canonicalName.slice(0, 180),
       quantity: Math.round(normalizedQuantity * 1_000) / 1_000,
-      unit: "kg",
+      unit: counted ? "und" : "kg",
       preparation: String(item.preparation ?? "").trim().slice(0, 250) || null,
       notes: String(item.notes ?? sourceNote).trim().slice(0, 500) || null,
       unit_price: unitPrice,
