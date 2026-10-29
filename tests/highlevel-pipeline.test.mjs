@@ -149,13 +149,13 @@ test("envía un mensaje de WhatsApp al contacto por HighLevel", async () => {
   });
 });
 
-test("llena Orden y Valor del pedido en los campos del contacto", async () => {
+test("llena Pedido y Valor del pedido en los campos del contacto", async () => {
   configure();
   const requests = [];
   globalThis.fetch = async (input, init = {}) => {
     requests.push({ url: String(input), init });
     if (String(input).includes("/customFields?")) return Response.json({ customFields: [
-      { id: "order-field", name: "Orden", fieldKey: "contact.orden" },
+      { id: "order-field", name: "Pedido", fieldKey: "contact.pedido" },
       { id: "total-field", name: "Valor del pedido", fieldKey: "contact.valor_del_pedido" },
     ] });
     return Response.json({ contact: { id: "contact-order-fields" } });

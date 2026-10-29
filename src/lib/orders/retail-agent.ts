@@ -3,7 +3,7 @@ import { timingSafeEqual } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
-import { syncRetailPipeline } from "@/lib/orders/highlevel-pipeline";
+import { syncHighLevelOrderFields, syncRetailPipeline } from "@/lib/orders/highlevel-pipeline";
 import { normalizeRetailItems, requiresRetailHelp } from "@/lib/orders/retail-normalization";
 import type { RetailCatalogProduct, RetailInputItem } from "@/lib/orders/retail-normalization";
 import { retailOrderWindowStart } from "@/lib/orders/retail-order-window";
@@ -235,7 +235,18 @@ export async function upsertRetailOrder(value: unknown) {
     if (deleteError) return NextResponse.json({ error: "Could not replace order items" }, { status: 500 });
     const { error: itemsError } = await supabase.from("order_items").insert(items.map((item, sort_order) => ({ ...item, order_id: openOrder.id, sort_order })));
     if (itemsError) return NextResponse.json({ error: "Could not save order items" }, { status: 500 });
-    return NextResponse.json({ id: openOrder.id, order_number: openOrder.order_number, status: openOrder.status, adjusted: true });
+    const orderFields = await syncHighLevelOrderFields(
+      { contactId: body.contactId, locationId: body.locationId, conversationId: body.conversationId },
+      { orderNumber: openOrder.order_number, total: subtotal },
+    );
+    return NextResponse.json({
+      id: openOrder.id,
+      order_number: openOrder.order_number,
+      status: openOrder.status,
+      adjusted: true,
+      order_field_synced: orderFields.ok,
+      order_field_message: orderFields.ok ? undefined : orderFields.message,
+    });
   }
 
   const sourceReference = body.sourceEventId ? `ghl:retail:${body.sourceEventId}` : null;
@@ -280,13 +291,25 @@ export async function upsertRetailOrder(value: unknown) {
     await supabase.from("orders").delete().eq("id", order.id);
     return NextResponse.json({ error: "Could not save order items" }, { status: 500 });
   }
-  const pipeline = await syncRetailPipeline(
-    { contactId: body.contactId, locationId: body.locationId, conversationId: body.conversationId },
-    "order_placed",
-    `${name} · ${order.order_number}`,
-    subtotal,
-  );
-  return NextResponse.json({ ...order, adjusted: false, duplicate: false, pipeline_synced: pipeline.ok, pipeline_message: pipeline.ok ? undefined : pipeline.message }, { status: 201 });
+  const highLevelContext = { contactId: body.contactId, locationId: body.locationId, conversationId: body.conversationId };
+  const [pipeline, orderFields] = await Promise.all([
+    syncRetailPipeline(
+      highLevelContext,
+      "order_placed",
+      `${name} · ${order.order_number}`,
+      subtotal,
+    ),
+    syncHighLevelOrderFields(highLevelContext, { orderNumber: order.order_number, total: subtotal }),
+  ]);
+  return NextResponse.json({
+    ...order,
+    adjusted: false,
+    duplicate: false,
+    pipeline_synced: pipeline.ok,
+    pipeline_message: pipeline.ok ? undefined : pipeline.message,
+    order_field_synced: orderFields.ok,
+    order_field_message: orderFields.ok ? undefined : orderFields.message,
+  }, { status: 201 });
 }
 
 export async function flagRetailHelpRequest(value: unknown) {
