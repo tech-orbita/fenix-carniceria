@@ -83,8 +83,16 @@ export function mapHighLevelForm(value: unknown, form: WholesaleForm) {
   // conservan los alias anteriores para que los flujos históricos sigan
   // funcionando mientras todos los contactos se actualizan.
   const name = get("full_name", "Nombre Completo", "customer_name", "contact.name", "name") ?? [get("first_name", "contact.first_name"), get("last_name", "contact.last_name")].filter(Boolean).join(" ");
-  const business = get("business_name", "Business_name", "Nombre del Negocio", "company_name", "contact.company_name", "companyName")
-    ?? (form === "nuevo-mayorista" ? name : undefined);
+  const businessKeys = [
+    "business_name", "Business_name", "Nombre del Negocio", "nombre_del_negocio",
+    "contact.nombre_del_negocio", "company_name", "contact.company_name", "companyName",
+  ];
+  const hasExplicitBusinessField = businessKeys.some((key) => fields.has(normalize(key)));
+  const business = get(...businessKeys)
+    // Compatibilidad con el formulario anterior, que usaba el nombre del
+    // contacto como negocio. Si el flujo nuevo envía el campo vacío, no se
+    // debe inventar una empresa copiando el nombre de la persona.
+    ?? (form === "nuevo-mayorista" && !hasExplicitBusinessField ? name : undefined);
   const phone = get("phone", "Teléfono", "contact.phone");
   const text = get("order_text", "Coloca tu Pedido", "coloca_tu_pedido", "Pedido", "pedido_mayorista");
   const fulfillment = get("fulfillment_type", "¿Es a Domicilio o Recoges en Tienda?", "es_a_domicilio_o_recoges_en_tienda", "Domicilio o Tienda", "Tipo de entrega");

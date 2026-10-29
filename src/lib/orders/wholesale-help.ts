@@ -102,7 +102,7 @@ export async function flagWholesaleHelpRequest(value: unknown) {
       conversationId: typeof sourcePayload.conversationId === "string" ? sourcePayload.conversationId : undefined,
     },
     "help",
-    `${customer.business_name || customer.name} · ${result.data.order_number}`,
+    `${customer.name} · ${result.data.order_number}`,
     Number(result.data.total ?? 0),
   );
   return NextResponse.json({

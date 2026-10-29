@@ -70,7 +70,7 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus) {
       highLevelContext(data.source_payload),
       data.customer_type,
       pipelineStage,
-      `${customer?.business_name || customer?.name || "Cliente"} · ${data.order_number}`,
+      `${customer?.name || "Cliente"} · ${data.order_number}`,
       Number(data.total),
     );
     if (!synced.ok) message = `Estado actualizado, pero no se pudo mover el pipeline: ${synced.message}`;
@@ -120,7 +120,7 @@ export async function resolveOrderHelp(orderId: string) {
     highLevelContext(current.source_payload),
     current.customer_type,
     pipelineStageFor(status)!,
-    `${customer?.business_name || customer?.name || "Cliente"} · ${current.order_number}`,
+    `${customer?.name || "Cliente"} · ${current.order_number}`,
     Number(current.total),
   );
   revalidatePath("/dashboard");
@@ -188,7 +188,7 @@ export async function updateOrderPaymentStatus(
     highLevelContext(data.source_payload),
     "retail",
     paymentStatus === "paid" ? "paid" : "payment_pending",
-    `${customer?.business_name || customer?.name || "Cliente"} · ${data.order_number}`,
+    `${customer?.name || "Cliente"} · ${data.order_number}`,
     Number(data.total),
   );
 
@@ -242,13 +242,13 @@ export async function updateWholesalePayment(
     syncWholesalePipeline(
       context,
       paymentStatus === "paid" ? "paid" : "payment_pending",
-      `${customer?.business_name || customer?.name || "Cliente"} · ${data.order_number}`,
+      `${customer?.name || "Cliente"} · ${data.order_number}`,
       total,
     ),
     syncHighLevelOrderFields(context, { orderNumber: data.order_number, total }),
   ]);
   if (sendSummary) {
-    const sent = await sendWholesalePaymentSummary(context, customer?.business_name || customer?.name || "cliente", data.order_number, total);
+    const sent = await sendWholesalePaymentSummary(context, customer?.name || "cliente", data.order_number, total);
     if (!sent.ok) return { ok: false, message: `Se guardó la cartera, pero ${sent.message}` };
   }
   revalidatePath("/dashboard");

@@ -191,7 +191,7 @@ export async function ingestOrder(body: IngestBody) {
         syncWholesalePipeline(
           highLevelContext,
           "order_placed",
-          `${body.customer.business_name || body.customer.name} · ${order.order_number}`,
+          `${body.customer.name} · ${order.order_number}`,
           subtotal,
         ),
         syncHighLevelOrderFields(highLevelContext, { orderNumber: order.order_number, total: subtotal }),
