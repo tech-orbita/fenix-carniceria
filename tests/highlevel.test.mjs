@@ -95,6 +95,14 @@ test("prioriza la dirección del contacto sobre la dirección de la sede", () =>
   assert.equal(order.customer.address, "Carrera 20 # 10-15");
 });
 
+test("guarda la zona registrada en el formulario aunque GHL envíe el nombre completo del campo", () => {
+  const order = mapHighLevelForm({
+    ...base,
+    "Contact.Custom Fields.Zona": "Barranquilla Norte",
+  }, "nuevo-mayorista");
+  assert.equal(order.route, "Norte");
+});
+
 test("interpreta las líneas reales de blanda, cerdo y pollo sin perder productos", () => {
   const order = mapHighLevelForm({
     ...base,

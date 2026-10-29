@@ -2564,7 +2564,7 @@ a {
 }
 
 .orders-app .wholesale-matrix .matrix-quantity-cell.has-value {
-  background: #eef5ff;
+  background: #d9e8ff;
   color: var(--wine-dark);
   font-weight: 800;
 }
@@ -2875,10 +2875,12 @@ a {
 }
 
 .orders-app .wallet-actions {
-  display: flex;
+  display: grid;
+  width: min(100%, 350px);
+  grid-template-columns: repeat(3, minmax(104px, 1fr));
   align-items: center;
   justify-content: center;
-  flex-wrap: nowrap;
+  margin: 0 auto;
   gap: 6px;
 }
 
@@ -2899,19 +2901,27 @@ a {
   color: #18733c;
 }
 
-.orders-app .wallet-actions .wallet-icon-action {
-  display: inline-grid;
-  width: 34px;
-  min-width: 34px;
+.orders-app .wallet-actions .wallet-action-button {
+  display: inline-flex;
+  width: 100%;
   height: 34px;
   min-height: 34px;
-  place-items: center;
-  padding: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 0 8px;
+  white-space: nowrap;
 }
 
-.orders-app .wallet-actions .wallet-icon-action svg {
+.orders-app .wallet-actions .wallet-action-button svg {
+  flex: 0 0 auto;
   width: 17px;
   height: 17px;
+}
+
+.orders-app .wallet-table th:last-child,
+.orders-app .wallet-table td:last-child {
+  min-width: 365px;
 }
 
 .orders-app .matrix-client {
@@ -3011,6 +3021,10 @@ a {
   width: 215px;
   min-width: 215px;
   max-width: 215px;
+}
+
+.orders-app .wholesale-matrix thead tr:nth-child(2) th:first-child {
+  text-align: center;
 }
 
 .orders-app .wholesale-matrix.with-order-info th:nth-child(2),
