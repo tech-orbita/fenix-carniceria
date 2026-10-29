@@ -9,10 +9,15 @@ export async function proxy(request: NextRequest) {
   const { response, authenticated } = await updateSession(request);
   // Sin credenciales solo se muestran datos ficticios del modo demostración.
   if (!hasSupabaseEnvironment()) return response;
-  const isLogin = request.nextUrl.pathname === "/login";
+  const pathname = request.nextUrl.pathname;
+  const isLogin = pathname === "/login";
+  const isPublicAuthRoute = isLogin
+    || pathname === "/recuperar-contrasena"
+    || pathname === "/restablecer-contrasena"
+    || pathname === "/auth/callback";
 
-  if (authenticated === isLogin) {
-    const redirect = NextResponse.redirect(new URL(isLogin ? "/" : "/login", request.url));
+  if ((authenticated && isLogin) || (!authenticated && !isPublicAuthRoute)) {
+    const redirect = NextResponse.redirect(new URL(authenticated ? "/" : "/login", request.url));
     response.cookies.getAll().forEach((cookie) => redirect.cookies.set(cookie));
     return redirect;
   }

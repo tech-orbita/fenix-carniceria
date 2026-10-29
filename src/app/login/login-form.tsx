@@ -1,10 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState, useState } from "react";
 
 import { signIn } from "./actions";
 
-export function LoginForm() {
+export function LoginForm({ notice }: { notice?: string }) {
   const [state, action, pending] = useActionState(signIn, {});
   const [showPassword, setShowPassword] = useState(false);
 
@@ -39,8 +40,10 @@ export function LoginForm() {
           </button>
         </div>
       </label>
+      {notice && <p className="auth-success" role="status">{notice}</p>}
       {state.message && <p className="auth-error" role="alert">{state.message}</p>}
       <button className="auth-submit" disabled={pending} type="submit">{pending ? "Entrando…" : "Entrar"}</button>
+      <Link className="auth-link" href="/recuperar-contrasena">Olvidé mi contraseña</Link>
     </form>
   );
 }

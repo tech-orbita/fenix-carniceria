@@ -520,6 +520,7 @@ export function OrdersPanel({ initialOrders, loadError, viewer }: { initialOrder
         {!assignedType && <section aria-label="Tipo de cliente" className="segment-switch"><button aria-pressed={activeType === "wholesale"} onClick={() => { setActiveType("wholesale"); setNotice(undefined); }} type="button"><Icon name="truck" /><strong>Mayoristas</strong><b>{wholesale.length}</b></button><button aria-pressed={activeType === "retail"} onClick={() => { setActiveType("retail"); setNotice(undefined); }} type="button"><Icon name="shop" /><strong>Minoristas</strong><b>{retail.length}</b></button></section>}
         {viewer && <div className="session-bar">
           <span>{viewer.email}{assignedType ? ` · ${assignedType === "wholesale" ? "Mayoristas" : "Minoristas"}` : " · Administrador"}</span>
+          <Link href="/mi-cuenta">Mi contraseña</Link>
           {viewer.role === "admin" && <Link href="/usuarios">Usuarios</Link>}
           <form action={signOut}><button type="submit">Salir</button></form>
         </div>}
