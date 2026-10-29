@@ -79,8 +79,11 @@ export function mapHighLevelForm(value: unknown, form: WholesaleForm) {
     }
     return undefined;
   };
-  const name = get("customer_name", "Nombre Completo", "full_name", "contact.name", "name") ?? [get("first_name", "contact.first_name"), get("last_name", "contact.last_name")].filter(Boolean).join(" ");
-  const business = get("business_name", "Nombre del Negocio", "company_name", "contact.company_name", "companyName")
+  // Los formularios nuevos envían la persona y la empresa por separado. Se
+  // conservan los alias anteriores para que los flujos históricos sigan
+  // funcionando mientras todos los contactos se actualizan.
+  const name = get("full_name", "Nombre Completo", "customer_name", "contact.name", "name") ?? [get("first_name", "contact.first_name"), get("last_name", "contact.last_name")].filter(Boolean).join(" ");
+  const business = get("business_name", "Business_name", "Nombre del Negocio", "company_name", "contact.company_name", "companyName")
     ?? (form === "nuevo-mayorista" ? name : undefined);
   const phone = get("phone", "Teléfono", "contact.phone");
   const text = get("order_text", "Coloca tu Pedido", "coloca_tu_pedido", "Pedido", "pedido_mayorista");
