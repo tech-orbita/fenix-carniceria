@@ -3076,7 +3076,8 @@ a {
   gap: 5px;
 }
 
-.orders-app .matrix-client .client-heading-line {
+.orders-app .matrix-client .client-heading-line,
+.orders-app .wallet-client .client-heading-line {
   display: flex;
   min-width: 0;
   align-items: baseline;
@@ -3084,7 +3085,8 @@ a {
   white-space: nowrap;
 }
 
-.orders-app .matrix-client .client-heading-line strong {
+.orders-app .matrix-client .client-heading-line strong,
+.orders-app .wallet-client .client-heading-line strong {
   display: inline;
   overflow: hidden;
   min-width: 0;
@@ -3092,7 +3094,8 @@ a {
   white-space: nowrap;
 }
 
-.orders-app .matrix-client .client-contact-inline {
+.orders-app .matrix-client .client-contact-inline,
+.orders-app .wallet-client .client-contact-inline {
   display: inline;
   overflow: hidden;
   min-width: 0;
