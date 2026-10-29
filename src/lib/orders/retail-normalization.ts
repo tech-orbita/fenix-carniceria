@@ -58,7 +58,11 @@ function comparable(value: string) {
     .filter(Boolean)
     .map(singularToken)
     .join(" ");
-  return (retailAliases[normalized] ?? retailAliases[singular] ?? singular)
+  const cleaned = singular
+    .split(" ")
+    .filter((token) => token && !["porfavor", "porfa", "xfa", "por", "favor"].includes(token))
+    .join(" ");
+  return (retailAliases[normalized] ?? retailAliases[singular] ?? retailAliases[cleaned] ?? cleaned)
     .split(" ")
     .filter((token) => token && !["de", "del", "la", "el", "para", "carne"].includes(token))
     .join(" ");

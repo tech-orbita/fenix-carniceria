@@ -73,6 +73,18 @@ test("respeta las unidades explícitas que entrega el agente", () => {
   assert.deepEqual({ name: item.product_name, quantity: item.quantity, unit: item.unit }, { name: "Pechuga congelada", quantity: 2, unit: "und" });
 });
 
+test("calcula pesos explícitos aunque el cliente agregue expresiones de cortesía", () => {
+  const extendedCatalog = [
+    ...catalog,
+    { id: "sobrebarriga", name: "Sobre barriga delgada", catalogKey: "res:sobre barriga delgada", pricePerKg: 29_000 },
+  ];
+  const [item] = normalizeRetailItems([], "2 lb de sobrebarriga porfavor", extendedCatalog);
+  assert.deepEqual(
+    { name: item.product_name, quantity: item.quantity, unit: item.unit, price: item.unit_price },
+    { name: "Sobre barriga delgada", quantity: 1, unit: "kg", price: 29_000 },
+  );
+});
+
 test("calcula kilos cuando el cliente compra por valor", () => {
   const [item] = normalizeRetailItems([], "$11.000 de pulpa", catalog);
   assert.equal(item.quantity, 0.5);
