@@ -36,7 +36,12 @@ function sameAddress(left?: string | null, right?: string | null) {
   return normalize(left) === normalize(right) || normalize(right).startsWith(normalize(left));
 }
 
-export default async function DashboardPage() {
+export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ demo?: string }> }) {
+  const { demo } = await searchParams;
+  if (process.env.NODE_ENV !== "production" && demo === "contacto") {
+    return <OrdersPanel initialOrders={demoOrders()} loadError="Vista previa local: empresa y persona de contacto separadas." />;
+  }
+
   if (!hasSupabaseEnvironment()) {
     return <OrdersPanel initialOrders={demoOrders()} loadError="Modo demostración: configura Supabase para usar pedidos reales." />;
   }
