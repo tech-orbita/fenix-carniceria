@@ -244,6 +244,10 @@ export async function updateWholesalePayment(
   paymentStatus: "pending" | "paid",
   sendSummary = false,
 ) {
+  const viewer = await requireViewer();
+  if (viewer.role !== "admin") {
+    return { ok: false, message: "La cartera mayorista es exclusiva de administradores." };
+  }
   if (!/^\d+$/.test(orderId) || !Number.isFinite(total) || total < 0 || total > 999_999_999 || !["pending", "paid"].includes(paymentStatus)) {
     return { ok: false, message: "Revisa el valor y el estado de pago." };
   }

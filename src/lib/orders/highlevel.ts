@@ -1,4 +1,4 @@
-import { parseOrderText } from "./product-parser.ts";
+import { parseOrderTextDetailed } from "./product-parser.ts";
 
 export type WholesaleForm = "mayorista-cliente" | "nuevo-mayorista";
 
@@ -127,6 +127,11 @@ export function mapHighLevelForm(value: unknown, form: WholesaleForm) {
     "Dirección",
     "Agrega Dirección de Entrega",
   ) ?? directAddress;
+  const parsedOrder = parseOrderTextDetailed(text);
+  const observations = get("observations", "Observaciones Adicionales");
+  const clarification = parsedOrder.unresolved.length
+    ? `Por aclarar en el pedido: ${parsedOrder.unresolved.join(" · ")}`
+    : undefined;
   return {
     source: "form" as const,
     source_reference: submission ? `ghl:${form}:${submission}` : undefined,
@@ -138,8 +143,8 @@ export function mapHighLevelForm(value: unknown, form: WholesaleForm) {
     },
     fulfillment_type: pickup ? "pickup" as const : "delivery" as const,
     route: zone,
-    notes: get("observations", "Observaciones Adicionales"),
-    items: parseOrderText(text),
+    notes: [observations, clarification].filter(Boolean).join("\n") || undefined,
+    items: parsedOrder.items,
     form_data: {
       form, order_text: text, tax_id: get("tax_id", "Nit o Cédula"), billing: get("billing", "Facturación"),
       maps_url: get("maps_url", "Ubicación de Maps"),

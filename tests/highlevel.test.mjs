@@ -5,8 +5,23 @@ const base = { "Nombre Completo": "Ana", "Teléfono": "+57 300 123 4567", "Coloc
 test("cliente: preserva pedido libre y solo clasifica partidas inequívocas", () => {
   const order = mapHighLevelForm(base, "mayorista-cliente");
   assert.equal(order.form_data.order_text, base["Coloca tu Pedido"]);
-  assert.deepEqual(order.items, [{ product_name: "Costilla", quantity: 2, unit: "kg" }]);
+  assert.deepEqual(order.items, [
+    { product_name: "Costilla", quantity: 2, unit: "kg" },
+    { product_name: "Comodín", quantity: 0, unit: "kg", preparation: "Molida por confirmar" },
+  ]);
+  assert.match(order.notes, /Por aclarar en el pedido: Molida por confirmar/);
   assert.equal(order.customer.phone, "+573001234567");
+});
+
+test("ninguna línea ambigua desaparece de la tabla mayorista", () => {
+  const order = mapHighLevelForm({ ...base, "Coloca tu Pedido": "2 kg costilla\nproducto secreto\n3 libras corte extraterrestre" }, "mayorista-cliente");
+  assert.deepEqual(order.items, [
+    { product_name: "Costilla", quantity: 2, unit: "kg" },
+    { product_name: "Comodín", quantity: 0, unit: "kg", preparation: "Producto secreto" },
+    { product_name: "Comodín", quantity: 3, unit: "lb", preparation: "Corte extraterrestre" },
+  ]);
+  assert.match(order.notes, /producto secreto/i);
+  assert.match(order.notes, /3 libras corte extraterrestre/i);
 });
 test("nuevo: mapea campos personalizados y datos de entrega", () => {
   const order = mapHighLevelForm({ ...base, customData: { "Nombre del Negocio": "Asados", "Nit o Cédula": "123", "Facturación": "Electrónica", "Ubicación de Maps": "https://maps.google.com/", "Número de Quien Recibe": "3001234568" }, submission_id: "envio-1" }, "nuevo-mayorista");

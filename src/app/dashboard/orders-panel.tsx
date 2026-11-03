@@ -264,7 +264,7 @@ function WholesaleWallet({ orders }: { orders: Order[] }) {
   </section>;
 }
 
-function WholesaleOrdersTable({ orders: allOrders, pendingId, onStatusChange }: { orders: Order[]; pendingId?: string; onStatusChange: (order: Order, phase: OperationalPhase) => void }) {
+function WholesaleOrdersTable({ isAdmin, orders: allOrders, pendingId, onStatusChange }: { isAdmin: boolean; orders: Order[]; pendingId?: string; onStatusChange: (order: Order, phase: OperationalPhase) => void }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [view, setView] = useState<"orders" | "wallet">("orders");
@@ -380,10 +380,10 @@ function WholesaleOrdersTable({ orders: allOrders, pendingId, onStatusChange }: 
     setEditNotice(result.message);
     if (result.ok) router.refresh();
   };
-  if (view === "wallet") return <><div className="wholesale-tabs"><button onClick={() => setView("orders")} type="button">Pedidos</button><button aria-current="page" type="button">Cartera</button></div><WholesaleWallet orders={allOrders} /></>;
+  if (view === "wallet" && isAdmin) return <><div className="wholesale-tabs"><button onClick={() => setView("orders")} type="button">Pedidos</button><button aria-current="page" type="button">Cartera</button></div><WholesaleWallet orders={allOrders} /></>;
   return (
     <>
-    <div className="wholesale-tabs"><button aria-current="page" type="button">Pedidos</button><button onClick={() => setView("wallet")} type="button">Cartera</button></div>
+    {isAdmin && <div className="wholesale-tabs"><button aria-current="page" type="button">Pedidos</button><button onClick={() => setView("wallet")} type="button">Cartera</button></div>}
     <section className="wholesale-workspace">
       <div className="section-toolbar">
         <div className="table-filters">
@@ -427,7 +427,7 @@ function WholesaleOrdersTable({ orders: allOrders, pendingId, onStatusChange }: 
           </thead>
           <tbody>
             {visibleOrders.map((order) => <tr className={isClosed(order) ? "is-dispatched" : undefined} key={order.id}>
-              <th scope="row"><div className="matrix-client"><span><span className="client-heading-line"><strong>{order.businessName && order.businessName !== order.customer ? order.businessName : order.customer}</strong>{order.businessName && order.businessName !== order.customer && <small className="client-contact-inline">- {order.customer}</small>}</span><small className="client-order-number">Pedido {order.orderNumber}</small><small className="client-address">{order.address}</small></span><div className="matrix-row-actions"><ConversationLink order={order} />{safeExternalUrl(order.formData?.payment_proof) && <a aria-label={`Abrir comprobante de ${order.orderNumber}`} className="payment-proof-link row-icon-action tooltip-icon-action" data-tooltip="Comprobante adjunto" href={safeExternalUrl(order.formData?.payment_proof)} rel="noreferrer" target="_blank"><Icon name="receipt" /><span className="sr-only">Ver comprobante adjunto</span></a>}{isHelpWithoutOrder(order)
+              <th scope="row"><div className="matrix-client"><span><span className="client-heading-line"><strong>{order.businessName && order.businessName !== order.customer ? order.businessName : order.customer}</strong>{order.businessName && order.businessName !== order.customer && <small className="client-contact-inline">- {order.customer}</small>}</span><small className="client-order-number">Pedido {order.orderNumber}</small><small className="client-address">{order.address}</small></span><div className="matrix-row-actions"><ConversationLink order={order} />{isAdmin && safeExternalUrl(order.formData?.payment_proof) && <a aria-label={`Abrir comprobante de ${order.orderNumber}`} className="payment-proof-link row-icon-action tooltip-icon-action" data-tooltip="Comprobante adjunto" href={safeExternalUrl(order.formData?.payment_proof)} rel="noreferrer" target="_blank"><Icon name="receipt" /><span className="sr-only">Ver comprobante adjunto</span></a>}{isHelpWithoutOrder(order)
                 ? <span className="no-order-badge">Sin pedido</span>
                 : isClosed(order)
                   ? <button aria-label="Volver a pedidos pendientes" className="dispatch-action is-done row-icon-action tooltip-icon-action" data-tooltip="Volver a pedidos" disabled={pendingId === order.id || editing} onClick={() => onStatusChange(order, "new")} type="button">{pendingId === order.id ? "…" : <Icon name="undo" />}<span className="sr-only">Volver a pedidos pendientes</span></button>
@@ -552,7 +552,7 @@ export function OrdersPanel({ initialOrders, loadError, viewer }: { initialOrder
         </div>}
       </div>
       {notice && <div className="operation-notice" role="status">{notice}</div>}
-      {activeType === "wholesale" ? <WholesaleOrdersTable onStatusChange={(order, phase) => void moveOrder(order, phase)} orders={wholesale} pendingId={pendingId} /> : <RetailPanel onMove={(order, phase) => void moveOrder(order, phase)} onPaymentChange={(order, status) => void changePaymentStatus(order, status)} onResolveHelp={(order) => void resolveHelp(order)} onSave={saveOrder} onSendBill={(order) => void sendBill(order)} orders={retail} pendingId={pendingId} />}
+      {activeType === "wholesale" ? <WholesaleOrdersTable isAdmin={viewer?.role === "admin"} onStatusChange={(order, phase) => void moveOrder(order, phase)} orders={wholesale} pendingId={pendingId} /> : <RetailPanel onMove={(order, phase) => void moveOrder(order, phase)} onPaymentChange={(order, status) => void changePaymentStatus(order, status)} onResolveHelp={(order) => void resolveHelp(order)} onSave={saveOrder} onSendBill={(order) => void sendBill(order)} orders={retail} pendingId={pendingId} />}
     </main></div>
   );
 }

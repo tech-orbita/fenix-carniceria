@@ -130,16 +130,23 @@ export function toKilograms(quantity: number, unit: string) {
   return { quantity, unit: normalized };
 }
 
-export function parseOrderText(text: string) {
+export type ParsedWholesaleOrder = {
+  items: Array<{ product_name: string; quantity: number; unit: string; preparation?: string }>;
+  unresolved: string[];
+};
+
+export function parseOrderTextDetailed(text: string): ParsedWholesaleOrder {
   const normalized = text.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   const unit = "(?:kilogramos|kilogramo|kilos|kilo|kgs|kg|k|libras|libra|lbs|lb|lib|unidades|unidad|unds|und|piezas|pieza)";
   const items: Array<{ product_name: string; quantity: number; unit: string; preparation?: string }> = [];
+  const unresolved: string[] = [];
 
-  const addItem = (quantityValue: string, unitValue: string | undefined, productValue: string) => {
+  const addItem = (quantityValue: string, unitValue: string | undefined, productValue: string, originalChunk: string) => {
     const quantity = Number(quantityValue.replace(",", "."));
     const requestedName = readableProductName(productValue);
     const catalogProduct = catalogProductFor(requestedName);
     if (!Number.isFinite(quantity) || quantity < 0 || !requestedName) return;
+    if (!catalogProduct || catalogProduct.name === "Comodín") unresolved.push(originalChunk);
     const preparation = catalogProduct?.name === "Blanda"
       ? blandaIndicatorFor(requestedName)
       : /\bsin\s+hueso\b/i.test(requestedName) ? "Sin hueso" : undefined;
@@ -159,8 +166,13 @@ export function parseOrderText(text: string) {
   const addItemWithoutQuantity = (productValue: string) => {
     const requestedName = readableProductName(productValue);
     const catalogProduct = catalogProductFor(requestedName);
-    if (!catalogProduct || catalogProduct.name === "Comodín") return;
-    addItem("0", undefined, requestedName);
+    if (!requestedName) return;
+    unresolved.push(productValue.trim());
+    if (!catalogProduct || catalogProduct.name === "Comodín") {
+      items.push({ product_name: "Comodín", quantity: 0, unit: "kg", preparation: requestedName });
+      return;
+    }
+    addItem("0", undefined, requestedName, productValue);
   };
 
   const chunks = normalized
@@ -173,24 +185,28 @@ export function parseOrderText(text: string) {
   for (const chunk of chunks) {
     const quantityFirst = chunk.match(new RegExp(`^(\\d+(?:[.,]\\d+)?)\\s*(?:(${unit})\\b\\s*)?(?:de\\s+)?(.+)$`, "i"));
     if (quantityFirst) {
-      addItem(quantityFirst[1], quantityFirst[2], quantityFirst[3]);
+      addItem(quantityFirst[1], quantityFirst[2], quantityFirst[3], chunk);
       continue;
     }
 
     const productFirst = chunk.match(new RegExp(`^(.+?)\\s+(\\d+(?:[.,]\\d+)?)\\s*(${unit})\\b$`, "i"));
     if (productFirst) {
-      addItem(productFirst[2], productFirst[3], productFirst[1]);
+      addItem(productFirst[2], productFirst[3], productFirst[1], chunk);
       continue;
     }
 
     const unitFirst = chunk.match(new RegExp(`^(${unit})\\b\\s+(.+?)\\s+(\\d+(?:[.,]\\d+)?)$`, "i"));
     if (unitFirst) {
-      addItem(unitFirst[3], unitFirst[1], unitFirst[2]);
+      addItem(unitFirst[3], unitFirst[1], unitFirst[2], chunk);
       continue;
     }
 
     addItemWithoutQuantity(chunk);
   }
 
-  return items;
+  return { items, unresolved: [...new Set(unresolved.filter(Boolean))] };
+}
+
+export function parseOrderText(text: string) {
+  return parseOrderTextDetailed(text).items;
 }
