@@ -4,7 +4,9 @@ export type RetailCatalogProduct = {
   id: string;
   name: string;
   catalogKey: string;
-  pricePerKg: number;
+  pricePerKg?: number;
+  pricePerUnit?: number;
+  saleUnit?: "kg" | "und";
 };
 
 export type RetailInputItem = {
@@ -23,6 +25,7 @@ export type NormalizedRetailItem = {
   product_name: string;
   quantity: number;
   unit: "kg" | "und";
+  actual_quantity: number | null;
   preparation: string | null;
   notes: string | null;
   unit_price: number;
@@ -205,8 +208,9 @@ export function normalizeRetailItems(
     const parsed = parsedLine(item);
     if (!parsed.productText) return null;
     const product = matchRetailProduct(parsed.productText, catalog);
-    const unitPrice = product?.pricePerKg ?? 0;
-    const counted = parsed.unit === "und";
+    const pricedByUnit = product?.saleUnit === "und";
+    const unitPrice = pricedByUnit ? product.pricePerUnit ?? 0 : product?.pricePerKg ?? 0;
+    const counted = parsed.unit === "und" || pricedByUnit;
     const normalizedQuantity = parsed.amount != null
       ? (unitPrice > 0 ? parsed.amount / unitPrice : 1)
       : counted ? Number(parsed.quantity) : toKilograms(Number(parsed.quantity), parsed.unit).quantity;
@@ -221,6 +225,7 @@ export function normalizeRetailItems(
       product_name: canonicalName.slice(0, 180),
       quantity: Math.round(normalizedQuantity * 1_000) / 1_000,
       unit: counted ? "und" : "kg",
+      actual_quantity: pricedByUnit ? Math.round(normalizedQuantity * 1_000) / 1_000 : null,
       preparation: String(item.preparation ?? "").trim().slice(0, 250) || null,
       notes: String(item.notes ?? sourceNote).trim().slice(0, 500) || null,
       unit_price: unitPrice,

@@ -4,8 +4,8 @@ import { revalidatePath } from "next/cache";
 
 import { requireViewer } from "@/lib/auth/viewer";
 import { createClient } from "@/lib/supabase/server";
-import { catalogProductFor, normalizeProductName, toKilograms } from "@/lib/orders/product-parser";
-import { retailBillMessage } from "@/lib/orders/retail-bill";
+import { catalogProductFor, normalizeProductName, toKilograms, wholesaleUnitFor } from "@/lib/orders/product-parser";
+import { retailBillMessage, retailDispatchMessage } from "@/lib/orders/retail-bill";
 import { sendHighLevelMessage, sendWholesalePaymentSummary, syncHighLevelOrderFields, syncOrderPipeline, syncWholesalePipeline } from "@/lib/orders/highlevel-pipeline";
 import type { HighLevelContext, OrderPipelineStage } from "@/lib/orders/highlevel-pipeline";
 
@@ -55,7 +55,7 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus) {
     .from("orders")
     .update({ status })
     .eq("id", Number(orderId))
-    .select("id,order_number,customer_type,source_payload,total,customers(name,business_name)")
+    .select("id,order_number,customer_type,fulfillment_type,source_payload,total,customers(name,business_name)")
     .maybeSingle();
 
   if (error || !data) {
@@ -74,6 +74,25 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus) {
       Number(data.total),
     );
     if (!synced.ok) message = `Estado actualizado, pero no se pudo mover el pipeline: ${synced.message}`;
+  }
+
+  if (data.customer_type === "retail" && status === "dispatched") {
+    const customer = Array.isArray(data.customers) ? data.customers[0] : data.customers;
+    const sent = await sendHighLevelMessage(
+      highLevelContext(data.source_payload),
+      retailDispatchMessage({
+        orderNumber: data.order_number,
+        customer: customer?.name || "cliente",
+        fulfillment: data.fulfillment_type === "pickup" ? "pickup" : "delivery",
+      }),
+    );
+    if (!sent.ok) {
+      message = message === "Estado actualizado."
+        ? `Estado actualizado, pero no se pudo avisar al cliente: ${sent.message}`
+        : `${message} Tampoco se pudo avisar al cliente: ${sent.message}`;
+    } else if (message === "Estado actualizado.") {
+      message = "Estado actualizado y cliente notificado por WhatsApp.";
+    }
   }
 
   revalidatePath("/dashboard");
@@ -287,7 +306,9 @@ export async function updateOrderDetails(
   const phone = details.phone.trim();
   const address = details.address.trim();
   const notes = details.notes.trim();
-  const normalizedItems = details.items.map((item) => ({ ...item, ...toKilograms(item.quantity, item.unit) }));
+  const normalizedItems = details.items.map((item) => item.unit === "und"
+    ? { ...item, unit: "und" }
+    : { ...item, ...toKilograms(item.quantity, item.unit) });
 
   if (
     !customer ||
@@ -338,7 +359,7 @@ export async function updateOrderDetails(
         .update({
           product_name: item.productName.trim(),
           actual_quantity: item.quantity,
-          unit: "kg",
+          unit: item.unit,
           unit_price: item.unitPrice,
           preparation: item.preparation.trim() || null,
         })
@@ -361,12 +382,12 @@ type WholesaleTableRowInput = {
   quantities: Array<{ productName: string; value: string }>;
 };
 
-function parseQuantity(value: string) {
+function parseQuantity(value: string, defaultUnit = "kg") {
   const match = value.trim().match(/^(\d+(?:[.,]\d+)?)\s*([\p{L}]+)?$/u);
   if (!match) return null;
   const quantity = Number(match[1].replace(",", "."));
-  if (!Number.isFinite(quantity) || quantity <= 0) return null;
-  return toKilograms(quantity, match[2] ?? "kg");
+  if (!Number.isFinite(quantity) || quantity < 0) return null;
+  return toKilograms(quantity, match[2] ?? defaultUnit);
 }
 
 function parseWholesaleCell(productName: string, value: string) {
@@ -385,7 +406,7 @@ function parseWholesaleCell(productName: string, value: string) {
     return parsed.every(Boolean) ? parsed as Array<{ quantity: number; unit: string; preparation: string }> : null;
   }
   if (normalizedProduct !== "blanda") {
-    const parsed = parseQuantity(value);
+    const parsed = parseQuantity(value, wholesaleUnitFor(productName));
     return parsed ? [{ ...parsed, preparation: null as string | null }] : null;
   }
   const parts = value.split("/").map((part) => part.trim()).filter(Boolean);
@@ -394,7 +415,7 @@ function parseWholesaleCell(productName: string, value: string) {
     const match = part.match(/^(\d+(?:[.,]\d+)?)\s*(kg|kgs|kilo|kilos|lb|lbs|libra|libras)?\s*([CLTB])?$/i);
     if (!match) return null;
     const quantity = Number(match[1].replace(",", "."));
-    if (!Number.isFinite(quantity) || quantity <= 0) return null;
+    if (!Number.isFinite(quantity) || quantity < 0) return null;
     return { ...toKilograms(quantity, match[2] ?? "kg"), preparation: match[3]?.toUpperCase() ?? null };
   });
   return parsed.every(Boolean) ? parsed as Array<{ quantity: number; unit: string; preparation: string | null }> : null;
@@ -429,7 +450,7 @@ export async function updateWholesaleTable(rows: WholesaleTableRowInput[]) {
         !productName.trim() || productName.length > 120 || value.length > 80 || (value.trim() && !parseWholesaleCell(productName, value)),
       )
     ) {
-      return { ok: false, message: "Revisa las cantidades. Usa valores en kg como “1,5” o “2 kg”." };
+      return { ok: false, message: "Revisa las cantidades. Usa valores como “1,5”, “2 kg” o “0” cuando la cantidad está por definir." };
     }
   }
 

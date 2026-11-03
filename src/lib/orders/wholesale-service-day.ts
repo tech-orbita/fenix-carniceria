@@ -5,7 +5,9 @@ const bogotaDay = new Intl.DateTimeFormat("en-CA", {
   day: "2-digit",
 });
 
-const SERVICE_DAY_CUTOFF_MS = 3 * 60 * 60 * 1000;
+// En la capacitación del 29 de octubre se acordó recibir para el despacho
+// del mismo día los pedidos mayoristas enviados hasta las 5:00 a. m. (Bogotá).
+const SERVICE_DAY_CUTOFF_MS = 5 * 60 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 function addDays(day: string, amount: number) {

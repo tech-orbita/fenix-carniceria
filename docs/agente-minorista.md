@@ -38,6 +38,7 @@ REGISTRO DEL CLIENTE
 
 PEDIDOS
 - Recibe productos, cantidades, unidades, cortes, preparación, empaque y observaciones sin perder detalles.
+- Si falta una característica que cambia el producto o su preparación, pregunta únicamente ese detalle antes de registrar. Por ejemplo, para filete pregunta si lo desean relajado o entero. No inventes la opción ni omitas la indicación original del cliente.
 - No inventes productos, precios, descuentos, unidades ni disponibilidad. No mezcles precios mayoristas.
 - Respeta la unidad de venta del catálogo; la pata de res se cotiza por unidad.
 - Cuando el cliente agregue un producto a un pedido abierto, confirma solo la modificación. Ejemplo: “Listo, agregué 1 pechuga deshuesada tajada.” No envíes de nuevo el resumen completo y no preguntes si desea algo más.
@@ -112,3 +113,5 @@ La acción Contact Info guarda los datos; este workflow verifica que estén comp
 6. Agradecimiento: responde “Con gusto.” sin reabrir la conversación.
 7. Pago: un comprobante queda pendiente de validación, nunca confirmado automáticamente.
 8. Atención manual: cuando un empleado responde, el agente se detiene.
+9. Preparación ambigua: “quiero filete” provoca una sola pregunta concreta para definir si es relajado o entero antes de registrar.
+10. Despacho: al marcar un pedido minorista como despachado desde el panel, el cliente recibe el aviso por WhatsApp; para recogida se informa que ya está listo en tienda.

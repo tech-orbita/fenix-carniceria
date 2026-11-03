@@ -2,6 +2,7 @@ export type WholesaleProduct = {
   category: string;
   name: string;
   aliases: readonly string[];
+  defaultUnit?: "kg" | "und";
 };
 
 export const wholesaleProductCatalog: readonly WholesaleProduct[] = [
@@ -10,7 +11,7 @@ export const wholesaleProductCatalog: readonly WholesaleProduct[] = [
   { category: "Res · cortes", name: "Espaldilla", aliases: ["espaldilla", "espaldi"] },
   { category: "Res · cortes", name: "Atravesado", aliases: ["pollo atravesado", "atravesado"] },
   { category: "Res · cortes", name: "Bollo", aliases: ["bollo"] },
-  { category: "Res · cortes", name: "Costilla", aliases: ["costilla de res", "costilla res", "costilla"] },
+  { category: "Res · cortes", name: "Costilla", aliases: ["costilla de res", "costilla res", "costilla", "costillo"] },
   { category: "Res · cortes", name: "Hueso", aliases: ["hueso de res", "hueso res", "hueso"] },
   { category: "Res · vísceras", name: "Hígado", aliases: ["higado", "hígado"] },
   { category: "Res · vísceras", name: "Corazón", aliases: ["corazon", "corazón"] },
@@ -29,8 +30,8 @@ export const wholesaleProductCatalog: readonly WholesaleProduct[] = [
   { category: "Res · cortes", name: "Jarrete", aliases: ["jarrete"] },
   { category: "Res · cortes", name: "Hueso paleta", aliases: ["hueso de paleta", "hueso paleta"] },
   { category: "Res · cortes", name: "Molida corriente", aliases: ["molida corriente", "carne molida corriente"] },
-  { category: "Res · cortes", name: "Sobrebarriga", aliases: ["sobrebarriga"] },
-  { category: "Res · vísceras", name: "Pata", aliases: ["pata de res", "pata res", "pata"] },
+  { category: "Res · cortes", name: "Sobrebarriga", aliases: ["sobrebarriga", "sobre barriga"] },
+  { category: "Res · vísceras", name: "Pata", aliases: ["patas de res", "pata de res", "pata res", "patas", "pata"], defaultUnit: "und" },
   { category: "Cerdo", name: "Pezuña cerdo", aliases: ["pezuña de cerdo", "pezuna de cerdo", "pezuña cerdo", "pezuna cerdo"] },
   { category: "Pollo", name: "Contramuslo", aliases: ["pernil mixto", "contramuslo"] },
   { category: "Res · vísceras", name: "Lenguas", aliases: ["lengua de res", "lenguas", "lengua"] },
@@ -43,6 +44,10 @@ export const wholesaleProductCatalog: readonly WholesaleProduct[] = [
   { category: "Pollo", name: "Muslo colombina", aliases: ["muslo colombina", "colombina"] },
   { category: "Pollo", name: "Pechuga congela", aliases: ["pechuga congelada", "pechuga congela"] },
   { category: "Pollo", name: "Pollo entero", aliases: ["pollo entero"] },
+  { category: "Pescado", name: "Bassa selecta", aliases: ["bassa selecta", "basa selecta"] },
+  { category: "Pescado", name: "Bassa", aliases: ["bassa", "basa"] },
+  { category: "Otros productos", name: "Butifarra", aliases: ["butifarra"] },
+  { category: "Otros productos", name: "Chorizo", aliases: ["chorizo"] },
   { category: "Res · vísceras", name: "Pajarilla", aliases: ["pajarilla"] },
   { category: "Res · vísceras", name: "Ubre", aliases: ["ubre"] },
   { category: "Res · vísceras", name: "Chinchurria", aliases: ["chinchurria", "chinchulín", "chinchulin"] },
@@ -82,11 +87,17 @@ export function catalogProductFor(value: string) {
   const normalized = normalizeProductName(value);
   const candidates = wholesaleProductCatalog.flatMap((product) =>
     product.aliases.map((alias) => ({ product, alias: normalizeProductName(alias) })),
-  ).sort((left, right) => right.alias.length - left.alias.length);
+  ).filter(({ alias }) => normalized === alias || normalized.includes(alias))
+    // Priorizar el primer producto escrito evita que "rabo sin hueso" se
+    // clasifique como Hueso. Si empiezan en la misma posición gana el alias
+    // más específico (por ejemplo, "hueso de paleta" sobre "hueso").
+    .sort((left, right) => normalized.indexOf(left.alias) - normalized.indexOf(right.alias) || right.alias.length - left.alias.length);
 
-  return candidates.find(({ alias }) =>
-    normalized === alias || normalized.includes(alias),
-  )?.product;
+  return candidates[0]?.product;
+}
+
+export function wholesaleUnitFor(value: string) {
+  return catalogProductFor(value)?.defaultUnit ?? "kg";
 }
 
 function readableProductName(value: string) {
@@ -105,6 +116,7 @@ export function normalizeWholesaleUnit(value: string) {
   const unit = normalizeProductName(value);
   if (["k", "kg", "kgs", "kilo", "kilos", "kilogramo", "kilogramos"].includes(unit)) return "kg";
   if (["lb", "lbs", "lib", "libra", "libras"].includes(unit)) return "lb";
+  if (["und", "unds", "unidad", "unidades", "pieza", "piezas"].includes(unit)) return "und";
   return unit;
 }
 
@@ -120,27 +132,41 @@ export function toKilograms(quantity: number, unit: string) {
 
 export function parseOrderText(text: string) {
   const normalized = text.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  const unit = "(?:kilogramos|kilogramo|kilos|kilo|kgs|kg|k|libras|libra|lbs|lb|lib)";
+  const unit = "(?:kilogramos|kilogramo|kilos|kilo|kgs|kg|k|libras|libra|lbs|lb|lib|unidades|unidad|unds|und|piezas|pieza)";
   const items: Array<{ product_name: string; quantity: number; unit: string; preparation?: string }> = [];
 
   const addItem = (quantityValue: string, unitValue: string | undefined, productValue: string) => {
     const quantity = Number(quantityValue.replace(",", "."));
     const requestedName = readableProductName(productValue);
     const catalogProduct = catalogProductFor(requestedName);
-    if (!Number.isFinite(quantity) || quantity <= 0 || !requestedName) return;
+    if (!Number.isFinite(quantity) || quantity < 0 || !requestedName) return;
+    const preparation = catalogProduct?.name === "Blanda"
+      ? blandaIndicatorFor(requestedName)
+      : /\bsin\s+hueso\b/i.test(requestedName) ? "Sin hueso" : undefined;
     items.push({
       product_name: catalogProduct?.name ?? "Comodín",
       quantity,
-      unit: normalizeWholesaleUnit(unitValue ?? "kg"),
-      ...(catalogProduct?.name === "Blanda" && blandaIndicatorFor(requestedName)
-        ? { preparation: blandaIndicatorFor(requestedName) }
+      unit: normalizeWholesaleUnit(unitValue ?? catalogProduct?.defaultUnit ?? "kg"),
+      ...(preparation
+        ? { preparation }
         : !catalogProduct ? { preparation: requestedName } : {}),
     });
   };
 
+  // Los clientes habituales a veces piden "costilla, rabo, sobrebarriga" sin
+  // cantidad. El producto debe llegar a la planilla con 0 para que Fénix defina
+  // cuánto despacha, en vez de desaparecer del pedido.
+  const addItemWithoutQuantity = (productValue: string) => {
+    const requestedName = readableProductName(productValue);
+    const catalogProduct = catalogProductFor(requestedName);
+    if (!catalogProduct || catalogProduct.name === "Comodín") return;
+    addItem("0", undefined, requestedName);
+  };
+
   const chunks = normalized
     .split(/[;\n]+/)
-    .flatMap((line) => line.split(/\s+y\s+(?=\d)/i))
+    .flatMap((line) => line.split(/\s+y\s+/i))
+    .flatMap((line) => line.split(/,(?!\d)/))
     .map((line) => line.replace(/^[\s\-*•]+/, "").trim())
     .filter(Boolean);
 
@@ -158,7 +184,12 @@ export function parseOrderText(text: string) {
     }
 
     const unitFirst = chunk.match(new RegExp(`^(${unit})\\b\\s+(.+?)\\s+(\\d+(?:[.,]\\d+)?)$`, "i"));
-    if (unitFirst) addItem(unitFirst[3], unitFirst[1], unitFirst[2]);
+    if (unitFirst) {
+      addItem(unitFirst[3], unitFirst[1], unitFirst[2]);
+      continue;
+    }
+
+    addItemWithoutQuantity(chunk);
   }
 
   return items;

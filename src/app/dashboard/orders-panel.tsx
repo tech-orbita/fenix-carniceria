@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-import { catalogProductFor, normalizeProductName, toKilograms, wholesaleProductCatalog } from "@/lib/orders/product-parser";
+import { catalogProductFor, normalizeProductName, toKilograms, wholesaleProductCatalog, wholesaleUnitFor } from "@/lib/orders/product-parser";
 import type { WholesaleProduct } from "@/lib/orders/product-parser";
 import { wholesaleServiceDay } from "@/lib/orders/wholesale-service-day";
 
@@ -56,7 +56,7 @@ function productQuantity(order: Order, product: WholesaleProduct) {
   return formatAmounts(productAmounts(order, product));
 }
 
-// Los pedidos recibidos entre las 3 a. m. del día anterior y las 3 a. m. del día D (hora Bogotá) se despachan el día D.
+// Los pedidos recibidos entre las 5 a. m. del día anterior y las 5 a. m. del día D (hora Bogotá) se despachan el día D.
 function serviceDay(order: Order) {
   // Una solicitud de ayuda sin formulario debe ser visible el mismo día en que llegó.
   if (isHelpWithoutOrder(order)) return bogotaDay.format(new Date(order.receivedAt));
@@ -188,7 +188,13 @@ async function downloadWholesaleOrders(orders: Order[], products: WholesaleProdu
     { header: "Estado", key: "status", width: 20 },
     { header: "Observaciones", key: "notes", width: 42 },
     { header: "NIT o cédula", key: "taxId", width: 20 },
-    ...products.map((product, index) => ({ header: product.name === "Blanda" ? "Blanda (kg; C=Capón, L=Lomo, T=Tetafula, B=Calavera)" : `${product.name} (kg)`, key: `product${index}`, width: product.name === "Blanda" ? 28 : 20 })),
+    ...products.map((product, index) => ({
+      header: product.name === "Blanda"
+        ? "Blanda (kg; C=Capón, L=Lomo, T=Tetafula, B=Calavera)"
+        : `${product.name} (${wholesaleUnitFor(product.name)})`,
+      key: `product${index}`,
+      width: product.name === "Blanda" ? 28 : 20,
+    })),
   ];
   orders.forEach((order) => worksheet.addRow({
     orderNumber: order.orderNumber,
@@ -417,7 +423,7 @@ function WholesaleOrdersTable({ orders: allOrders, pendingId, onStatusChange }: 
         <table className={`order-matrix wholesale-matrix ${showInfoColumns ? "with-order-info" : "without-order-info"}`}>
           <thead>
             <tr className="category-row"><th colSpan={showInfoColumns ? 5 : 1}>Pedido recibido</th>{categories.map((category, index) => <th colSpan={category.count} key={`${category.name}-${index}`}>{category.name}</th>)}</tr>
-            <tr><th>Cliente</th>{showInfoColumns && <><th>Teléfono</th><th>Zona</th><th>Facturación</th><th>Comentario</th></>}{visibleProducts.map((product) => <th key={product.name} title={product.name === "Blanda" ? "C = Capón · L = Lomo · T = Tetafula · B = Calavera" : undefined}>{product.name}<small className="unit-label">{product.name === "Blanda" ? "kg · C/L/T/B" : "kg"}</small></th>)}</tr>
+            <tr><th>Cliente</th>{showInfoColumns && <><th>Teléfono</th><th>Zona</th><th>Facturación</th><th>Comentario</th></>}{visibleProducts.map((product) => <th key={product.name} title={product.name === "Blanda" ? "C = Capón · L = Lomo · T = Tetafula · B = Calavera" : undefined}>{product.name}<small className="unit-label">{product.name === "Blanda" ? "kg · C/L/T/B" : wholesaleUnitFor(product.name)}</small></th>)}</tr>
           </thead>
           <tbody>
             {visibleOrders.map((order) => <tr className={isClosed(order) ? "is-dispatched" : undefined} key={order.id}>
@@ -437,8 +443,9 @@ function WholesaleOrdersTable({ orders: allOrders, pendingId, onStatusChange }: 
               </>}
               {visibleProducts.map((product) => {
                 const value = productQuantity(order, product);
-                const placeholder = product.name === "Blanda" ? "kg C/L/T/B" : product.name === "Comodín" ? "kg producto" : "kg";
-                const title = product.name === "Blanda" ? "Usa C=capón, L=lomo, T=tetafula y B=calavera. Ejemplo: 5 C / 2 L." : product.name === "Comodín" ? "Escribe cantidad y nombre del producto sin columna. Ejemplo: 2 kg producto especial." : "Cantidad en kg. También puedes escribir “2 lb” y se guarda como 1 kg.";
+                const defaultUnit = wholesaleUnitFor(product.name);
+                const placeholder = product.name === "Blanda" ? "kg C/L/T/B" : product.name === "Comodín" ? "kg producto" : defaultUnit;
+                const title = product.name === "Blanda" ? "Usa C=capón, L=lomo, T=tetafula y B=calavera. Ejemplo: 5 C / 2 L." : product.name === "Comodín" ? "Escribe cantidad y nombre del producto sin columna. Ejemplo: 2 kg producto especial." : defaultUnit === "und" ? "Cantidad en unidades. Usa 0 cuando el cliente no indicó cantidad." : "Cantidad en kg. También puedes escribir “2 lb” y se guarda como 1 kg; usa 0 si está por definir.";
                 return <td className={editing ? "matrix-quantity-cell is-editing" : value ? "matrix-quantity-cell has-value" : "matrix-quantity-cell"} key={product.name}>{editing ? <input aria-label={`${product.name} de ${order.orderNumber}`} onChange={(event) => updateDraft(order.id, product.name, event.target.value)} placeholder={placeholder} title={title} value={draftRows[order.id]?.quantities[product.name] ?? ""} /> : value || ""}</td>;
               })}
             </tr>)}
@@ -480,7 +487,10 @@ export function OrdersPanel({ initialOrders, loadError, viewer }: { initialOrder
     const status = phaseStatus[phase]; setPendingId(order.id); setNotice(undefined);
     const result = await updateOrderStatus(order.id, status); if (!result.ok) { setNotice(result.message); setPendingId(undefined); return; }
     setOrders((current) => current.map((item) => item.id === order.id ? { ...item, status } : item));
-    setNotice(result.message.includes("pipeline") ? result.message : `${order.orderNumber} pasó a “${phaseLabels[phase]}” y se sincronizó con el pipeline.`); setPendingId(undefined);
+    setNotice(result.message === "Estado actualizado."
+      ? `${order.orderNumber} pasó a “${phaseLabels[phase]}” y se sincronizó con el pipeline.`
+      : result.message);
+    setPendingId(undefined);
   };
 
   const saveOrder = async (order: Order, details: EditableOrderDetails) => {

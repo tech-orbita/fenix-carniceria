@@ -1945,7 +1945,8 @@ a {
 
 @media print {
   @page {
-    margin: 4mm;
+    size: 80mm auto;
+    margin: 0;
   }
 
   body {
@@ -1967,12 +1968,15 @@ a {
     position: absolute;
     inset: 0 auto auto 0;
     display: block;
-    width: 72mm;
-    padding: 2mm;
+    box-sizing: border-box;
+    width: 80mm;
+    padding: 3mm 4mm;
     background: white;
     color: black;
     font-family: "Courier New", monospace;
-    font-size: 10px;
+    font-size: 13px;
+    line-height: 1.4;
+    page-break-after: avoid;
   }
 
   .ticket-brand {
@@ -2007,6 +2011,7 @@ a {
   .ticket-meta div {
     display: grid;
     grid-template-columns: 20mm 1fr;
+    break-inside: avoid;
   }
 
   .ticket-meta dt,
@@ -2022,7 +2027,8 @@ a {
     display: grid;
     grid-template-columns: 1fr auto;
     gap: 2px 8px;
-    padding: 4px 0;
+    padding: 6px 0;
+    break-inside: avoid;
   }
 
   .ticket-line strong,
@@ -2036,6 +2042,8 @@ a {
 
   .ticket-line small {
     font-style: italic;
+    font-size: 12px;
+    line-height: 1.4;
   }
 
   .ticket-total strong {
@@ -4646,10 +4654,10 @@ a {
   }
 }
 
-/* Comanda térmica de 80 mm (72 mm imprimibles) con logo. */
+/* Comanda térmica de 80 mm con 72 mm útiles y tipografía legible. */
 @media print {
   .orders-app .thermal-ticket {
-    font-size: 11px;
+    font-size: 13px;
   }
 
   .orders-app .ticket-subtotal {

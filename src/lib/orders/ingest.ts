@@ -63,7 +63,8 @@ function isValidBody(value: unknown): value is IngestBody {
     body.items.every((item) =>
       Boolean(item?.product_name?.trim()) &&
       Number.isFinite(item?.quantity) &&
-      Number(item.quantity) > 0 &&
+      Number(item.quantity) >= 0 &&
+      (Number(item.quantity) > 0 || body.customer_type === "wholesale") &&
       Boolean(item?.unit?.trim()),
     )
   );

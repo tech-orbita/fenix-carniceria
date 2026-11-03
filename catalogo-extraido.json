@@ -1,10 +1,10 @@
 {
   "sources": [
-    "mayoristas.jpg",
-    "Minoristas.jpg"
+    "1793303840843_2A944A64837EAEC1CD1A.jpg",
+    "1793303841476_2A8C5CCC7E328B9227F6.jpg"
   ],
   "currency": "COP",
-  "source_date": null,
+  "source_date": "2026-11-02",
   "notes": [
     "Los nombres diferentes se conservan como productos distintos; no se asumen equivalencias entre cortes.",
     "Pata de res: 9000 COP por unidad; no por libra o kilo.",
@@ -305,30 +305,30 @@
       "segment": "mayorista",
       "category": "cerdo",
       "name": "Costilla de cerdo con piel",
-      "price_libra": 8750,
-      "price_kilo": 17500,
+      "price_libra": 8000,
+      "price_kilo": 16000,
       "price_unidad": null,
-      "source": "mayoristas.jpg",
+      "source": "1793303840843_2A944A64837EAEC1CD1A.jpg",
       "key": "cerdo:costilla de cerdo con piel"
     },
     {
       "segment": "mayorista",
       "category": "cerdo",
       "name": "Pulpa de cerdo criollo",
-      "price_libra": 9000,
-      "price_kilo": 18000,
+      "price_libra": 8500,
+      "price_kilo": 17000,
       "price_unidad": null,
-      "source": "mayoristas.jpg",
+      "source": "1793303840843_2A944A64837EAEC1CD1A.jpg",
       "key": "cerdo:pulpa de cerdo criollo"
     },
     {
       "segment": "mayorista",
       "category": "cerdo",
       "name": "Pezuña de cerdo",
-      "price_libra": 4000,
-      "price_kilo": 8000,
+      "price_libra": 3000,
+      "price_kilo": 6000,
       "price_unidad": null,
-      "source": "mayoristas.jpg",
+      "source": "1793303840843_2A944A64837EAEC1CD1A.jpg",
       "key": "cerdo:pezuna de cerdo"
     },
     {
@@ -355,10 +355,10 @@
       "segment": "mayorista",
       "category": "cerdo",
       "name": "Chuleta de cerdo criollo",
-      "price_libra": 6500,
-      "price_kilo": 13000,
+      "price_libra": 6000,
+      "price_kilo": 12000,
       "price_unidad": null,
-      "source": "mayoristas.jpg",
+      "source": "1793303840843_2A944A64837EAEC1CD1A.jpg",
       "key": "cerdo:chuleta de cerdo criollo"
     },
     {
@@ -390,6 +390,46 @@
       "price_unidad": null,
       "source": "mayoristas.jpg",
       "key": "pollo:hueso de pechuga"
+    },
+    {
+      "segment": "mayorista",
+      "category": "pescado",
+      "name": "Bassa",
+      "price_libra": 10200,
+      "price_kilo": 20400,
+      "price_unidad": null,
+      "source": "1793303840843_2A944A64837EAEC1CD1A.jpg",
+      "key": "pescado:bassa"
+    },
+    {
+      "segment": "mayorista",
+      "category": "pescado",
+      "name": "Bassa selecta",
+      "price_libra": 11200,
+      "price_kilo": 22400,
+      "price_unidad": null,
+      "source": "1793303840843_2A944A64837EAEC1CD1A.jpg",
+      "key": "pescado:bassa selecta"
+    },
+    {
+      "segment": "mayorista",
+      "category": "otros",
+      "name": "Butifarra",
+      "price_libra": 4500,
+      "price_kilo": 9000,
+      "price_unidad": null,
+      "source": "1793303840843_2A944A64837EAEC1CD1A.jpg",
+      "key": "otros:butifarra"
+    },
+    {
+      "segment": "mayorista",
+      "category": "otros",
+      "name": "Chorizo",
+      "price_libra": 4500,
+      "price_kilo": 9000,
+      "price_unidad": null,
+      "source": "1793303840843_2A944A64837EAEC1CD1A.jpg",
+      "key": "otros:chorizo"
     },
     {
       "segment": "minorista",
@@ -715,30 +755,30 @@
       "segment": "minorista",
       "category": "cerdo",
       "name": "Pulpa",
-      "price_libra": 11000,
-      "price_kilo": 22000,
+      "price_libra": 10000,
+      "price_kilo": 20000,
       "price_unidad": null,
-      "source": "Minoristas.jpg",
+      "source": "1793303841476_2A8C5CCC7E328B9227F6.jpg",
       "key": "cerdo:pulpa"
     },
     {
       "segment": "minorista",
       "category": "cerdo",
       "name": "Costilla",
-      "price_libra": 10000,
-      "price_kilo": 20000,
+      "price_libra": 9000,
+      "price_kilo": 18000,
       "price_unidad": null,
-      "source": "Minoristas.jpg",
+      "source": "1793303841476_2A8C5CCC7E328B9227F6.jpg",
       "key": "cerdo:costilla"
     },
     {
       "segment": "minorista",
       "category": "cerdo",
       "name": "Chuleta",
-      "price_libra": 7500,
-      "price_kilo": 15000,
+      "price_libra": 6500,
+      "price_kilo": 13000,
       "price_unidad": null,
-      "source": "Minoristas.jpg",
+      "source": "1793303841476_2A8C5CCC7E328B9227F6.jpg",
       "key": "cerdo:chuleta"
     },
     {
@@ -785,10 +825,10 @@
       "segment": "minorista",
       "category": "cerdo",
       "name": "Chicharrón carnudo",
-      "price_libra": 8000,
-      "price_kilo": 16000,
+      "price_libra": 6000,
+      "price_kilo": 12000,
       "price_unidad": null,
-      "source": "Minoristas.jpg",
+      "source": "1793303841476_2A8C5CCC7E328B9227F6.jpg",
       "key": "cerdo:chicharron carnudo"
     },
     {

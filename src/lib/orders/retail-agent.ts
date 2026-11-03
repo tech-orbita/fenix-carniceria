@@ -68,17 +68,21 @@ async function retailCatalog(): Promise<RetailCatalogProduct[]> {
   const supabase = createAdminClient();
   const [{ data: products, error: productError }, { data: prices, error: priceError }] = await Promise.all([
     supabase.from("products").select("id,name,catalog_key").eq("active", true),
-    supabase.from("product_prices").select("product_id,amount").eq("segment", "minorista").eq("unit", "kilo").is("valid_until", null),
+    supabase.from("product_prices").select("product_id,amount,unit").eq("segment", "minorista").in("unit", ["kilo", "unidad"]).is("valid_until", null),
   ]);
   if (productError || priceError) {
     console.error("[retail-order] Could not load retail catalog", { productError, priceError });
     return [];
   }
-  const amounts = new Map((prices ?? []).map((price) => [String(price.product_id), Number(price.amount)]));
-  return (products ?? []).flatMap((product) => {
-    const pricePerKg = amounts.get(String(product.id));
+  const amounts = new Map((prices ?? []).map((price) => [`${price.product_id}:${price.unit}`, Number(price.amount)]));
+  return (products ?? []).flatMap<RetailCatalogProduct>((product) => {
+    const pricePerKg = amounts.get(`${product.id}:kilo`);
+    const pricePerUnit = amounts.get(`${product.id}:unidad`);
+    if (Number.isFinite(pricePerUnit)) {
+      return [{ id: String(product.id), name: String(product.name), catalogKey: String(product.catalog_key), pricePerUnit: pricePerUnit!, saleUnit: "und" as const }];
+    }
     return Number.isFinite(pricePerKg)
-      ? [{ id: String(product.id), name: String(product.name), catalogKey: String(product.catalog_key), pricePerKg: pricePerKg! }]
+      ? [{ id: String(product.id), name: String(product.name), catalogKey: String(product.catalog_key), pricePerKg: pricePerKg!, saleUnit: "kg" as const }]
       : [];
   });
 }
@@ -217,7 +221,10 @@ export async function upsertRetailOrder(value: unknown) {
   };
   // Las piezas conservan la cantidad solicitada, pero no se cobran como si
   // fueran kilos. El subtotal queda pendiente hasta registrar el peso real.
-  const subtotal = items.reduce((total, item) => total + (item.unit === "kg" ? item.quantity * item.unit_price : 0), 0);
+  const subtotal = items.reduce((total, item) => {
+    const billableQuantity = item.actual_quantity ?? (item.unit === "kg" ? item.quantity : 0);
+    return total + billableQuantity * item.unit_price;
+  }, 0);
 
   if (openOrder) {
     const { error: updateError } = await supabase.from("orders").update({

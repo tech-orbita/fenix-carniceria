@@ -12,6 +12,7 @@ const catalog = [
   { id: "hueso-pechuga", name: "Hueso de pechuga", catalogKey: "pollo:hueso de pechuga", pricePerKg: 5_000 },
   { id: "costilla-res", name: "Costilla", catalogKey: "res:costilla", pricePerKg: 20_400 },
   { id: "costilla-cerdo", name: "Costilla", catalogKey: "cerdo:costilla", pricePerKg: 20_000 },
+  { id: "pata-res", name: "Pata de res", catalogKey: "res:pata de res", pricePerUnit: 9_000, saleUnit: "und" },
 ];
 
 test("convierte libras a kilos y aplica el precio minorista por kilo", () => {
@@ -71,6 +72,15 @@ test("usa exclusivamente los nombres minoristas para pechuga y pierna pernil", (
 test("respeta las unidades explícitas que entrega el agente", () => {
   const [item] = normalizeRetailItems([{ product_name: "pechuga", quantity: 2, unit: "unidades" }], "", catalog);
   assert.deepEqual({ name: item.product_name, quantity: item.quantity, unit: item.unit }, { name: "Pechuga congelada", quantity: 2, unit: "und" });
+});
+
+test("cobra la pata de res por unidad sin dejar el peso pendiente", () => {
+  const [item] = normalizeRetailItems([{ product_name: "pata de res", quantity: 2, unit: "unidades" }], "", catalog);
+
+  assert.deepEqual(
+    { name: item.product_name, quantity: item.quantity, actual: item.actual_quantity, unit: item.unit, price: item.unit_price },
+    { name: "Pata de res", quantity: 2, actual: 2, unit: "und", price: 9_000 },
+  );
 });
 
 test("calcula pesos explícitos aunque el cliente agregue expresiones de cortesía", () => {

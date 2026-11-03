@@ -34,9 +34,9 @@ las tablas de pedidos y sus políticas RLS antes de conectar información real.
 3. Instala las dependencias con `npm install`.
 4. Inicia el proyecto con `npm run dev`.
 
-El proyecto local de Supabase está enlazado al proyecto remoto
-`bmqfijttiihcjthsgmhz` (`Pedidos_Fenix`). No se han creado tablas ni aplicado
-migraciones remotas todavía.
+La operación usa el proyecto remoto de Supabase `hzyzafnkxumfvfdtpkcn`
+(`Pedidos Fenix`). Las tablas, las políticas por segmento y los usuarios del
+panel ya existen en ese proyecto.
 
 ## Base de datos y administrador
 
@@ -74,6 +74,7 @@ Las rutas `/api/webhooks/highlevel/mayorista-cliente` y
 `/api/webhooks/highlevel/nuevo-mayorista` reciben pedidos de los dos formularios.
 Requieren `Authorization: Bearer <ORDERS_INGEST_SECRET>`.
 Consulta [la configuración y el mapeo de campos](docs/highlevel-webhooks.md).
+Antes de activar los agentes, completa el [checklist de lanzamiento en GoHighLevel](docs/ghl-launch-checklist.md).
 El texto original aparece en el detalle y la comanda como pedido por cotizar.
 
 Los mayoristas que solicitan atención sin enviar formulario ingresan por

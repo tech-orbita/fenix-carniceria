@@ -16,6 +16,12 @@ type RetailBillOrder = {
   items: RetailBillItem[];
 };
 
+type RetailDispatchOrder = {
+  orderNumber: string;
+  customer: string;
+  fulfillment: "delivery" | "pickup";
+};
+
 const money = new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 });
 const quantity = new Intl.NumberFormat("es-CO", { maximumFractionDigits: 3 });
 const dateTime = new Intl.DateTimeFormat("es-CO", {
@@ -38,6 +44,10 @@ function pendingWeight(item: RetailBillItem) {
   return item.actualQuantity == null && item.unit !== "kg";
 }
 
+function itemUnit(item: RetailBillItem) {
+  return item.unit === "und" ? "und" : "kg";
+}
+
 function isPaid(status: string) {
   return ["paid", "verified", "pagado", "verificado"].includes(status.toLocaleLowerCase("es"));
 }
@@ -47,7 +57,7 @@ export function retailBillMessage(order: RetailBillOrder) {
   const total = subtotal + order.deliveryFee + order.adjustments;
   const lines = order.items.map((item) => pendingWeight(item)
     ? `• ${item.productName}: ${quantity.format(item.quantity)} und · peso pendiente`
-    : `• ${item.productName}: ${quantity.format(itemQuantity(item))} kg × ${money.format(item.unitPrice)} = ${money.format(billableQuantity(item) * item.unitPrice)}`);
+    : `• ${item.productName}: ${quantity.format(itemQuantity(item))} ${itemUnit(item)} × ${money.format(item.unitPrice)}/${itemUnit(item)} = ${money.format(billableQuantity(item) * item.unitPrice)}`);
   return [
     `Hola ${order.customer}, te compartimos la cuenta de tu pedido ${order.orderNumber} en Fénix J.A. (${dateTime.format(new Date(order.receivedAt))}):`,
     "",
@@ -60,4 +70,10 @@ export function retailBillMessage(order: RetailBillOrder) {
     "",
     isPaid(order.paymentStatus) ? "Este pedido ya figura como pagado. ¡Gracias por tu compra!" : "Quedamos atentos a tu pago y al comprobante. ¡Gracias por tu compra!",
   ].join("\n");
+}
+
+export function retailDispatchMessage(order: RetailDispatchOrder) {
+  return order.fulfillment === "pickup"
+    ? `Hola ${order.customer}, tu pedido ${order.orderNumber} ya está listo para recoger en Fénix J.A.`
+    : `Hola ${order.customer}, tu pedido ${order.orderNumber} ya salió a despacho. Te avisaremos si se presenta alguna novedad.`;
 }

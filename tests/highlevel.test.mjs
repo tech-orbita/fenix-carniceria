@@ -79,9 +79,42 @@ test("conserva todas las líneas aunque omitan o inviertan la unidad", () => {
     { product_name: "Sobrebarriga", quantity: 2, unit: "kg" },
     { product_name: "Comodín", quantity: 10, unit: "kg", preparation: "Molida" },
     { product_name: "Comodín", quantity: 15, unit: "kg", preparation: "Churrasco" },
-    { product_name: "Pata", quantity: 6, unit: "kg" },
+    { product_name: "Pata", quantity: 6, unit: "und" },
     { product_name: "Molida especial", quantity: 4, unit: "lb" },
     { product_name: "Comodín", quantity: 1, unit: "kg", preparation: "Carne molida" },
+  ]);
+});
+
+test("conserva con cero todos los cortes que el mayorista pide sin cantidad", () => {
+  const order = mapHighLevelForm({
+    ...base,
+    "Coloca tu Pedido": "capón, punta gorda, costillo, rabo sin hueso, sobre barriga y chocosuela",
+  }, "mayorista-cliente");
+  assert.deepEqual(order.items, [
+    { product_name: "Blanda", quantity: 0, unit: "kg", preparation: "C" },
+    { product_name: "Punta gorda", quantity: 0, unit: "kg" },
+    { product_name: "Costilla", quantity: 0, unit: "kg" },
+    { product_name: "Rabo res", quantity: 0, unit: "kg", preparation: "Sin hueso" },
+    { product_name: "Sobrebarriga", quantity: 0, unit: "kg" },
+    { product_name: "Chocosuela", quantity: 0, unit: "kg" },
+  ]);
+});
+
+test("maneja patas de res por unidad aunque el cliente omita la unidad", () => {
+  const order = mapHighLevelForm({ ...base, "Coloca tu Pedido": "3 patas de res" }, "mayorista-cliente");
+  assert.deepEqual(order.items, [{ product_name: "Pata", quantity: 3, unit: "und" }]);
+});
+
+test("clasifica pescado y otros productos de la lista mayorista vigente", () => {
+  const order = mapHighLevelForm({
+    ...base,
+    "Coloca tu Pedido": "2 kg bassa selecta, 1 kg bassa, 3 libras butifarra y 4 libras chorizo",
+  }, "mayorista-cliente");
+  assert.deepEqual(order.items, [
+    { product_name: "Bassa selecta", quantity: 2, unit: "kg" },
+    { product_name: "Bassa", quantity: 1, unit: "kg" },
+    { product_name: "Butifarra", quantity: 3, unit: "lb" },
+    { product_name: "Chorizo", quantity: 4, unit: "lb" },
   ]);
 });
 
