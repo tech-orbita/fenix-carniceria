@@ -1,98 +1,152 @@
 .registration-page {
-  --navy: #0b1736;
-  --blue: #3284ff;
-  --blue-dark: #1769e0;
-  --line: #dfe7f1;
-  display: grid;
+  --black: #070707;
+  --gold: #d7a94d;
+  --gold-light: #f3d08b;
+  --red: #d71920;
+  --red-dark: #a80e14;
+  --line: rgba(215, 169, 77, 0.32);
+  position: relative;
   min-height: 100vh;
-  grid-template-columns: minmax(320px, 0.82fr) minmax(560px, 1.18fr);
-  background: #f5f8fc;
-  color: var(--navy);
-}
-
-.registration-intro {
-  position: sticky;
-  top: 0;
-  display: flex;
-  height: 100vh;
-  flex-direction: column;
   overflow: hidden;
-  padding: clamp(34px, 5vw, 72px);
-  background: var(--navy);
-  color: white;
+  padding: clamp(28px, 5vw, 72px) 18px;
+  background:
+    radial-gradient(circle at 50% -10%, rgba(215, 25, 32, 0.16), transparent 31%),
+    radial-gradient(circle at 10% 34%, rgba(215, 169, 77, 0.1), transparent 27%),
+    radial-gradient(circle at 90% 74%, rgba(215, 169, 77, 0.08), transparent 28%),
+    repeating-linear-gradient(118deg, transparent 0 110px, rgba(255, 255, 255, 0.012) 112px 114px),
+    #050505;
+  color: #fff;
 }
 
-.registration-intro::after {
+.registration-page::before,
+.registration-page::after {
+  position: fixed;
+  z-index: 0;
+  width: min(46vw, 700px);
+  height: 3px;
+  background: linear-gradient(90deg, transparent, var(--gold), #fff0bd, var(--gold), transparent);
+  box-shadow: 0 0 18px rgba(215, 169, 77, 0.42);
+  content: "";
+  pointer-events: none;
+}
+
+.registration-page::before { top: 14vh; left: -10vw; transform: rotate(-35deg); }
+.registration-page::after { right: -10vw; bottom: 16vh; transform: rotate(-35deg); }
+
+.registration-shell {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 900px);
+  margin: 0 auto;
+  overflow: hidden;
+  border: 1px solid rgba(243, 208, 139, 0.55);
+  border-radius: 20px;
+  background: rgba(8, 8, 8, 0.94);
+  box-shadow: 0 32px 90px rgba(0, 0, 0, 0.72), 0 0 55px rgba(215, 169, 77, 0.08);
+}
+
+.registration-brand {
+  position: relative;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  padding: clamp(30px, 6vw, 56px) clamp(24px, 7vw, 70px) 34px;
+  background:
+    linear-gradient(135deg, transparent 0 18%, rgba(215, 169, 77, 0.12) 18.2% 18.5%, transparent 18.7% 81%, rgba(215, 169, 77, 0.12) 81.2% 81.5%, transparent 81.7%),
+    radial-gradient(ellipse at 50% 36%, rgba(215, 25, 32, 0.18), transparent 42%),
+    linear-gradient(180deg, #151515, #080808);
+  text-align: center;
+}
+
+.registration-brand::before,
+.registration-brand::after {
   position: absolute;
-  right: -180px;
-  bottom: -180px;
-  width: 470px;
-  height: 470px;
-  border: 90px solid rgba(50, 132, 255, 0.16);
-  border-radius: 50%;
+  top: 18px;
+  width: 34%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--gold));
   content: "";
 }
 
-.registration-logo { width: 150px; height: auto; object-fit: contain; filter: brightness(0) invert(1); }
-.registration-intro-copy { position: relative; z-index: 1; margin: auto 0 38px; }
-.registration-kicker { color: #85b8ff; font-size: 12px; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; }
-.registration-intro h1 { max-width: 620px; margin: 16px 0; font-size: clamp(38px, 5vw, 66px); line-height: .98; letter-spacing: -.055em; }
-.registration-intro-copy p { max-width: 540px; margin: 0; color: #b8c6dc; font-size: 17px; line-height: 1.65; }
-.registration-benefits { position: relative; z-index: 1; display: grid; gap: 18px; margin: 0 0 34px; padding: 0; list-style: none; }
-.registration-benefits li { display: flex; align-items: center; gap: 14px; }
-.registration-benefits b { display: grid; width: 34px; height: 34px; flex: 0 0 auto; place-items: center; border: 1px solid rgba(255,255,255,.22); border-radius: 50%; color: #85b8ff; font-size: 12px; }
-.registration-benefits span { display: grid; gap: 3px; }
-.registration-benefits strong { font-size: 14px; }
-.registration-benefits small, .registration-contact { color: #8fa0bb; font-size: 12px; line-height: 1.45; }
-.registration-contact { position: relative; z-index: 1; margin: 0; }
+.registration-brand::before { left: 0; transform: rotate(20deg); transform-origin: left; }
+.registration-brand::after { right: 0; transform: rotate(-20deg) scaleX(-1); transform-origin: right; }
+.registration-logo-frame { position: relative; display: grid; width: min(100%, 330px); min-height: 142px; place-items: center; }
+.registration-logo-frame::after { position: absolute; right: 13%; bottom: 15px; left: 13%; height: 2px; background: linear-gradient(90deg, transparent, var(--red), transparent); box-shadow: 0 0 14px rgba(215, 25, 32, 0.78); content: ""; }
+.registration-logo { width: min(100%, 285px); height: auto; object-fit: contain; filter: brightness(0) invert(1) drop-shadow(0 0 13px rgba(215, 25, 32, 0.5)); }
+.registration-kicker { margin-top: 5px; color: var(--gold-light); font-size: 11px; font-weight: 800; letter-spacing: .24em; text-transform: uppercase; }
+.registration-brand h1 { margin: 15px 0 7px; font-size: clamp(30px, 5vw, 48px); line-height: 1.05; letter-spacing: -.04em; }
+.registration-brand > p { max-width: 650px; margin: 0; color: #c8c2ba; font-size: 15px; line-height: 1.6; }
 
-.registration-card { width: min(100%, 850px); margin: auto; padding: clamp(34px, 5vw, 72px); }
-.registration-card > header { margin-bottom: 36px; }
-.registration-card > header span { color: var(--blue-dark); font-size: 12px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
-.registration-card > header h2 { margin: 8px 0 6px; font-size: clamp(30px, 3vw, 42px); letter-spacing: -.04em; }
-.registration-card > header p, .registration-section-heading p { margin: 0; color: #6e7f99; font-size: 14px; line-height: 1.5; }
-.registration-form { display: grid; gap: 30px; }
-.registration-section-heading { display: flex; align-items: flex-start; gap: 13px; padding-top: 6px; border-top: 1px solid var(--line); }
-.registration-section-heading > span { display: grid; width: 34px; height: 34px; flex: 0 0 auto; place-items: center; margin-top: 3px; border-radius: 9px; background: #e9f2ff; color: var(--blue-dark); font-size: 11px; font-weight: 900; }
-.registration-section-heading h2 { margin: 0 0 3px; font-size: 18px; }
-.registration-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin-top: -14px; }
-.registration-grid label { display: grid; gap: 7px; }
-.registration-grid label > span { font-size: 12px; font-weight: 800; }
-.registration-grid input { width: 100%; min-width: 0; border: 1px solid var(--line); border-radius: 11px; padding: 13px 14px; background: white; color: var(--navy); outline: none; font-size: 14px; transition: border-color .15s, box-shadow .15s; }
-.registration-grid input::placeholder { color: #a1aec0; }
-.registration-grid input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(50,132,255,.14); }
-.registration-wide { grid-column: 1 / -1; }
-.registration-checks { display: grid; gap: 10px; margin-top: -14px; }
-.registration-checks label { display: flex; align-items: flex-start; gap: 12px; border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; background: white; cursor: pointer; }
-.registration-checks input { width: 18px; height: 18px; margin: 1px 0 0; accent-color: var(--blue); }
-.registration-checks span { display: grid; gap: 3px; }
-.registration-checks strong { font-size: 13px; }
-.registration-checks small { color: #6e7f99; font-size: 12px; line-height: 1.4; }
-.registration-submit { display: flex; min-height: 50px; align-items: center; justify-content: space-between; border: 0; border-radius: 12px; padding: 0 20px; background: var(--blue); color: white; cursor: pointer; font: inherit; font-size: 14px; font-weight: 900; box-shadow: 0 9px 22px rgba(50,132,255,.24); }
-.registration-submit:hover:not(:disabled) { background: var(--blue-dark); }
-.registration-submit:disabled { opacity: .65; cursor: wait; }
-.registration-submit span { font-size: 22px; }
-.registration-footnote { margin: -17px 0 0; color: #7b8ba4; font-size: 11px; line-height: 1.5; text-align: center; }
-.registration-message { margin: -14px 0; border-radius: 10px; padding: 11px 13px; background: #e9f2ff; color: var(--blue-dark); font-size: 13px; font-weight: 700; }
-.registration-message.is-error { background: #fff0ed; color: #b43e2f; }
-.registration-honeypot { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
-.registration-success { border: 1px solid #bde9d9; border-radius: 18px; padding: clamp(30px, 5vw, 52px); background: #f0fbf7; text-align: center; }
-.registration-success > span { display: grid; width: 58px; height: 58px; margin: 0 auto 18px; place-items: center; border-radius: 50%; background: #16a474; color: white; font-size: 28px; font-weight: 900; }
-.registration-success h2 { margin: 0 0 8px; font-size: 26px; }
-.registration-success p { margin: 0; color: #42675b; line-height: 1.55; }
-.registration-success .registration-success-note { margin-top: 14px; color: #66847b; font-size: 12px; }
-
-@media (max-width: 900px) {
-  .registration-page { grid-template-columns: 1fr; }
-  .registration-intro { position: relative; height: auto; min-height: 520px; padding: 34px 28px; }
-  .registration-intro-copy { margin: 72px 0 44px; }
-  .registration-intro h1 { font-size: clamp(42px, 11vw, 62px); }
-  .registration-card { padding: 42px 24px 60px; }
+.registration-benefits {
+  display: grid;
+  width: 100%;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 28px 0 0;
+  padding: 0;
+  list-style: none;
 }
 
-@media (max-width: 560px) {
-  .registration-intro { min-height: 470px; }
-  .registration-benefits { display: none; }
+.registration-benefits li { display: flex; min-height: 46px; align-items: center; justify-content: center; gap: 9px; border: 1px solid rgba(215, 169, 77, 0.24); border-radius: 10px; background: rgba(255, 255, 255, 0.035); }
+.registration-benefits b { color: var(--gold); font-size: 10px; letter-spacing: .08em; }
+.registration-benefits span { color: #eee9e2; font-size: 11px; font-weight: 800; }
+
+.registration-card { padding: clamp(30px, 6vw, 58px) clamp(22px, 7vw, 70px); border-top: 1px solid var(--line); background: linear-gradient(180deg, rgba(20, 19, 18, 0.96), rgba(8, 8, 8, 0.98)); }
+.registration-card > header { margin-bottom: 36px; text-align: center; }
+.registration-card > header span { color: var(--gold); font-size: 11px; font-weight: 900; letter-spacing: .16em; text-transform: uppercase; }
+.registration-card > header h2 { margin: 9px 0 7px; font-size: clamp(27px, 4vw, 38px); letter-spacing: -.035em; }
+.registration-card > header p, .registration-section-heading p { margin: 0; color: #a9a39b; font-size: 13px; line-height: 1.5; }
+.registration-form { display: grid; gap: 30px; }
+.registration-section-heading { display: flex; align-items: flex-start; gap: 13px; padding-top: 15px; border-top: 1px solid var(--line); }
+.registration-section-heading > span { display: grid; width: 34px; height: 34px; flex: 0 0 auto; place-items: center; margin-top: 2px; border: 1px solid rgba(215, 169, 77, 0.55); border-radius: 50%; background: rgba(215, 169, 77, 0.08); color: var(--gold-light); font-size: 10px; font-weight: 900; }
+.registration-section-heading h2 { margin: 0 0 3px; color: #fff; font-size: 18px; }
+.registration-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin-top: -14px; }
+.registration-grid label { display: grid; gap: 7px; }
+.registration-grid label > span { color: #f5f1eb; font-size: 12px; font-weight: 800; }
+.registration-grid input { width: 100%; min-width: 0; border: 1px solid #d8d4ce; border-radius: 8px; padding: 13px 14px; background: #fff; color: #171717; outline: none; font-size: 14px; box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.08); transition: border-color .15s, box-shadow .15s; }
+.registration-grid input::placeholder { color: #8c929b; }
+.registration-grid input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(215, 169, 77, 0.2); }
+.registration-wide { grid-column: 1 / -1; }
+.registration-checks { display: grid; gap: 10px; margin-top: -14px; }
+.registration-checks label { display: flex; align-items: flex-start; gap: 12px; border: 1px solid rgba(215, 169, 77, 0.26); border-radius: 10px; padding: 14px 16px; background: rgba(255, 255, 255, 0.035); cursor: pointer; }
+.registration-checks label:hover { border-color: rgba(215, 169, 77, 0.52); background: rgba(215, 169, 77, 0.06); }
+.registration-checks input { width: 18px; height: 18px; margin: 1px 0 0; accent-color: var(--red); }
+.registration-checks span { display: grid; gap: 3px; }
+.registration-checks strong { color: #fff; font-size: 13px; }
+.registration-checks small { color: #aaa49c; font-size: 12px; line-height: 1.4; }
+.registration-submit { display: flex; min-height: 52px; align-items: center; justify-content: space-between; border: 1px solid #ef4a50; border-radius: 9px; padding: 0 20px; background: linear-gradient(135deg, #e02229, var(--red-dark)); color: white; cursor: pointer; font: inherit; font-size: 14px; font-weight: 900; letter-spacing: .01em; box-shadow: 0 10px 28px rgba(215, 25, 32, 0.25); }
+.registration-submit:hover:not(:disabled) { background: linear-gradient(135deg, #f02d34, #bd1118); box-shadow: 0 12px 32px rgba(215, 25, 32, 0.38); }
+.registration-submit:focus-visible { outline: 3px solid rgba(243, 208, 139, 0.72); outline-offset: 3px; }
+.registration-submit:disabled { opacity: .65; cursor: wait; }
+.registration-submit span { font-size: 22px; }
+.registration-footnote { margin: -17px 0 0; color: #8f8982; font-size: 11px; line-height: 1.5; text-align: center; }
+.registration-message { margin: -14px 0; border: 1px solid rgba(215, 169, 77, 0.4); border-radius: 9px; padding: 11px 13px; background: rgba(215, 169, 77, 0.1); color: var(--gold-light); font-size: 13px; font-weight: 700; }
+.registration-message.is-error { border-color: rgba(239, 74, 80, 0.5); background: rgba(215, 25, 32, 0.12); color: #ff9da1; }
+.registration-honeypot { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
+.registration-success { border: 1px solid rgba(215, 169, 77, 0.5); border-radius: 14px; padding: clamp(30px, 5vw, 52px); background: linear-gradient(180deg, rgba(215, 169, 77, 0.1), rgba(255, 255, 255, 0.025)); text-align: center; }
+.registration-success > span { display: grid; width: 58px; height: 58px; margin: 0 auto 18px; place-items: center; border: 1px solid var(--gold); border-radius: 50%; background: var(--red); color: white; font-size: 28px; font-weight: 900; box-shadow: 0 0 24px rgba(215, 25, 32, 0.32); }
+.registration-success h2 { margin: 0 0 8px; color: #fff; font-size: 26px; }
+.registration-success p { margin: 0; color: #c8c2ba; line-height: 1.55; }
+.registration-success .registration-success-note { margin-top: 14px; color: #9f9991; font-size: 12px; }
+.registration-contact { padding: 17px 24px; border-top: 1px solid rgba(215, 169, 77, 0.2); background: #050505; color: #8f8982; font-size: 11px; text-align: center; }
+
+@media (max-width: 620px) {
+  .registration-page { padding: 0; }
+  .registration-shell { border-width: 0; border-radius: 0; }
+  .registration-brand { padding: 30px 22px; }
+  .registration-logo-frame { min-height: 112px; }
+  .registration-logo { width: 220px; }
+  .registration-brand h1 { font-size: 32px; }
+  .registration-brand > p { font-size: 13px; }
+  .registration-benefits { grid-template-columns: 1fr; gap: 7px; }
+  .registration-benefits li { min-height: 38px; }
+  .registration-card { padding: 36px 20px 46px; }
   .registration-grid { grid-template-columns: 1fr; }
   .registration-wide { grid-column: auto; }
+  .registration-section-heading h2 { font-size: 17px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .registration-grid input,
+  .registration-submit { transition: none; }
 }
