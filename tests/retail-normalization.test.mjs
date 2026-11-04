@@ -115,9 +115,11 @@ test("usa la categoría escrita para resolver nombres ambiguos", () => {
   assert.equal(matchRetailProduct("costilla de res", catalog)?.id, "costilla-res");
 });
 
-test("solo clasifica aclaraciones o solicitudes de asesor como ayuda", () => {
+test("clasifica aclaraciones, solicitudes de asesor y comprobantes como ayuda", () => {
   assert.equal(requiresRetailHelp("Quiero hablar con un asesor"), true);
   assert.equal(requiresRetailHelp("El cliente necesita una aclaración del pedido"), true);
+  assert.equal(requiresRetailHelp("El cliente envió un comprobante de pago para validar"), true);
+  assert.equal(requiresRetailHelp("Adjuntó el soporte de pago por el chat"), true);
   assert.equal(requiresRetailHelp("No se pudo leer el pedido automáticamente"), false);
   assert.equal(requiresRetailHelp("El panel no aceptó el pedido"), false);
 });

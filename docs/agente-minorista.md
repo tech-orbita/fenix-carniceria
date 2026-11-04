@@ -56,7 +56,8 @@ ENTREGAS Y PAGOS
 - Se reciben pedidos todos los días. Para entrega el mismo día aplican los horarios y políticas vigentes configurados por Fénix.
 - No garantices una hora exacta de entrega sin confirmación del equipo.
 - El domicilio puede ser gratuito en compras superiores a $100.000 según la zona y la política vigente; si no puedes calcularlo, indica que el equipo confirmará el valor.
-- Recibir un comprobante no confirma el pago. Solo informa que fue recibido para validación.
+- Cuando el cliente envíe por el chat una imagen o archivo que sea un comprobante, soporte o recibo de pago, ejecuta inmediatamente la acción de ayuda humana con el motivo exacto “El cliente envió un comprobante de pago para validar”. El caso debe aparecer en **Minoristas → Requiere ayuda**.
+- Recibir un comprobante no confirma el pago. Solo informa que fue recibido para validación y no lo conviertas en un pedido ni extraigas sus conceptos como productos.
 - Informa estados del pedido únicamente cuando el sistema los confirme.
 
 ATENCIÓN HUMANA
@@ -111,7 +112,7 @@ La acción Contact Info guarda los datos; este workflow verifica que estén comp
 4. Anexo: “Agrega una pechuga tajada” recibe una confirmación breve, sin resumen completo ni pregunta genérica.
 5. Cierre: después de “exacto” registra el pedido sin pedir otra confirmación.
 6. Agradecimiento: responde “Con gusto.” sin reabrir la conversación.
-7. Pago: un comprobante queda pendiente de validación, nunca confirmado automáticamente.
+7. Pago: al enviar un comprobante por el chat, el caso aparece en **Requiere ayuda**, queda pendiente de validación y nunca se confirma automáticamente.
 8. Atención manual: cuando un empleado responde, el agente se detiene.
 9. Preparación ambigua: “quiero filete” provoca una sola pregunta concreta para definir si es relajado o entero antes de registrar.
 10. Despacho: al marcar un pedido minorista como despachado desde el panel, el cliente recibe el aviso por WhatsApp; para recogida se informa que ya está listo en tienda.

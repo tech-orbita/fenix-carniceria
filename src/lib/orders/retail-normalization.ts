@@ -235,5 +235,5 @@ export function normalizeRetailItems(
 
 export function requiresRetailHelp(reason: string) {
   const normalized = normalizeProductName(reason);
-  return /\b(?:asesor|asesoria|humano|persona|aclar|aclaracion|duda|confirmar|confirmacion|no entend|ayuda|atencion humana)\b/.test(normalized);
+  return /\b(?:asesor|asesoria|humano|persona|aclar|aclaracion|duda|confirmar|confirmacion|no entend|ayuda|atencion humana|comprobante(?: de)? pago|soporte de pago|recibo de pago)\b/.test(normalized);
 }
