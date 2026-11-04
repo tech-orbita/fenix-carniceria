@@ -7,7 +7,7 @@ export type WholesaleProduct = {
 
 export const wholesaleProductCatalog: readonly WholesaleProduct[] = [
   { category: "Res · cortes", name: "Blanda", aliases: ["carne blanda", "blanda", "capon", "capón", "lomo", "tetafulla", "tetafula", "calavera"] },
-  { category: "Res · cortes", name: "Molida especial", aliases: ["molida especial"] },
+  { category: "Res · cortes", name: "Molida especial", aliases: ["molida especial", "carne molida especial", "carne molida", "molida"] },
   { category: "Res · cortes", name: "Espaldilla", aliases: ["espaldilla", "espaldi"] },
   { category: "Res · cortes", name: "Atravesado", aliases: ["pollo atravesado", "atravesado"] },
   { category: "Res · cortes", name: "Bollo", aliases: ["bollo"] },
@@ -22,7 +22,8 @@ export const wholesaleProductCatalog: readonly WholesaleProduct[] = [
   { category: "Res · cortes", name: "Falda", aliases: ["falda"] },
   { category: "Res · cortes", name: "Punta gorda", aliases: ["punta gorda"] },
   { category: "Cerdo", name: "Pulpa cerdo", aliases: ["pulpa de cerdo", "pulpa cerdo"] },
-  { category: "Cerdo", name: "Lomo cerdo", aliases: ["lomo de cerdo", "lomo cerdo", "cerdo lomo"] },
+  { category: "Cerdo", name: "Lomo cerdo", aliases: ["lomo de cerdo", "lomo cerdo", "cerdo lomo", "cerdo"] },
+  { category: "Cerdo", name: "Pata cerdo", aliases: ["pata de cerdo", "pata cerdo", "cerdo pata"] },
   { category: "Cerdo", name: "Costilla cerdo", aliases: ["costilla de cerdo", "costilla cerdo"] },
   { category: "Cerdo", name: "Chuleta", aliases: ["chuleta"] },
   { category: "Res · cortes", name: "Asado de Tira", aliases: ["asado de tira"] },

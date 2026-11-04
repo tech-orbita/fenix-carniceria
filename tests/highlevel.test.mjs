@@ -2,12 +2,12 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mapHighLevelForm } from "../src/lib/orders/highlevel.ts";
 const base = { "Nombre Completo": "Ana", "Teléfono": "+57 300 123 4567", "Coloca tu Pedido": "2 kg de costilla\nMolida por confirmar", "¿Es a Domicilio o Recoges en Tienda?": "Domicilio" };
-test("cliente: preserva pedido libre y solo clasifica partidas inequívocas", () => {
+test("cliente: preserva el pedido libre y aplica la regla operativa de molida", () => {
   const order = mapHighLevelForm(base, "mayorista-cliente");
   assert.equal(order.form_data.order_text, base["Coloca tu Pedido"]);
   assert.deepEqual(order.items, [
     { product_name: "Costilla", quantity: 2, unit: "kg" },
-    { product_name: "Comodín", quantity: 0, unit: "kg", preparation: "Molida por confirmar" },
+    { product_name: "Molida especial", quantity: 0, unit: "kg" },
   ]);
   assert.match(order.notes, /Por aclarar en el pedido: Molida por confirmar/);
   assert.equal(order.customer.phone, "+573001234567");
@@ -92,11 +92,26 @@ test("conserva todas las líneas aunque omitan o inviertan la unidad", () => {
   assert.deepEqual(order.items, [
     { product_name: "Blanda", quantity: 10, unit: "kg", preparation: "C" },
     { product_name: "Sobrebarriga", quantity: 2, unit: "kg" },
-    { product_name: "Comodín", quantity: 10, unit: "kg", preparation: "Molida" },
+    { product_name: "Molida especial", quantity: 10, unit: "kg" },
     { product_name: "Comodín", quantity: 15, unit: "kg", preparation: "Churrasco" },
     { product_name: "Pata", quantity: 6, unit: "und" },
     { product_name: "Molida especial", quantity: 4, unit: "lb" },
-    { product_name: "Comodín", quantity: 1, unit: "kg", preparation: "Carne molida" },
+    { product_name: "Molida especial", quantity: 1, unit: "kg" },
+  ]);
+});
+
+test("separa molida corriente y pata de cerdo de los valores mayoristas por defecto", () => {
+  const order = mapHighLevelForm({
+    ...base,
+    "Coloca tu Pedido": "3 kg molida; 2 kg carne molida; 4 kg molida corriente; 5 kg cerdo; 6 kg cerdo pata; 7 kg pata de cerdo",
+  }, "mayorista-cliente");
+  assert.deepEqual(order.items, [
+    { product_name: "Molida especial", quantity: 3, unit: "kg" },
+    { product_name: "Molida especial", quantity: 2, unit: "kg" },
+    { product_name: "Molida corriente", quantity: 4, unit: "kg" },
+    { product_name: "Lomo cerdo", quantity: 5, unit: "kg" },
+    { product_name: "Pata cerdo", quantity: 6, unit: "kg" },
+    { product_name: "Pata cerdo", quantity: 7, unit: "kg" },
   ]);
 });
 
