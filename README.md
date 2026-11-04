@@ -80,3 +80,9 @@ El texto original aparece en el detalle y la comanda como pedido por cotizar.
 Los mayoristas que solicitan atención sin enviar formulario ingresan por
 `/api/webhooks/ghl/wholesale-help-requests`. Se registran sin productos en
 **Mayoristas → Requiere ayuda** y no pasan por el webhook minorista.
+
+## Inscripción anticipada de mayoristas
+
+`/registro-mayorista` es un formulario público para registrar o actualizar clientes antes de su primer pedido. La API normaliza el teléfono, evita duplicados por teléfono y correo, guarda el cliente en Supabase y usa el upsert oficial de HighLevel antes de agregar la etiqueta `cliente mayorista` sin reemplazar otras etiquetas.
+
+Los usuarios del panel con acceso al segmento mayorista pueden consultar las inscripciones en `/clientes-mayoristas`. El estado de sincronización queda almacenado junto al cliente para detectar fallos de HighLevel sin perder el registro local.

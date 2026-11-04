@@ -545,6 +545,7 @@ export function OrdersPanel({ initialOrders, loadError, viewer }: { initialOrder
           </div>
           <nav aria-label="Opciones de cuenta" className="session-actions">
             <button aria-label={soundEnabled ? "Desactivar sonido de pedidos nuevos" : "Activar sonido de pedidos nuevos"} aria-pressed={soundEnabled} className={soundEnabled ? "sound-toggle is-enabled" : "sound-toggle"} onClick={() => void toggleSound()} title={soundEnabled ? "Sonido activo · clic para desactivar" : "Activar sonido de pedidos nuevos"} type="button"><span aria-hidden="true">{soundEnabled ? "🔔" : "🔕"}</span></button>
+            {(viewer.role === "admin" || viewer.customerType === "wholesale") && <Link href="/clientes-mayoristas">Clientes mayoristas</Link>}
             <Link href="/mi-cuenta" title="Cambiar mi contraseña">Cuenta</Link>
             {viewer.role === "admin" && <Link href="/usuarios">Usuarios</Link>}
             <form action={signOut}><button type="submit">Salir</button></form>
