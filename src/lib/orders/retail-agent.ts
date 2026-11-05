@@ -3,6 +3,7 @@ import { timingSafeEqual } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { customerIdentityKey } from "@/lib/orders/wholesale-routes";
 import { syncRetailPipeline } from "@/lib/orders/highlevel-pipeline";
 import { normalizeRetailItems, requiresRetailHelp } from "@/lib/orders/retail-normalization";
 import type { RetailCatalogProduct, RetailInputItem } from "@/lib/orders/retail-normalization";
@@ -90,7 +91,7 @@ async function findCustomerId(phone: string) {
     .from("customers")
     .select("id")
     .eq("customer_type", "retail")
-    .eq("phone", phone)
+    .eq("identity_key", customerIdentityKey("retail", { name: "Cliente WhatsApp", phone }))
     .maybeSingle();
   return data?.id ?? null;
 }
@@ -180,11 +181,13 @@ export async function upsertRetailOrder(value: unknown) {
     ? await supabase.from("customers").select("name,tax_id,address,neighborhood,city,route_id").eq("id", existingCustomerId).single()
     : { data: null };
   const name = String(body.customer?.name ?? existingCustomer?.name ?? "Cliente WhatsApp").trim();
+  const identityKey = customerIdentityKey("retail", { name, phone });
   const address = String(body.delivery?.address ?? body.customer?.address ?? existingCustomer?.address ?? "").trim();
   const { data: customer, error: customerError } = await supabase
     .from("customers")
     .upsert({
       customer_type: "retail",
+      identity_key: identityKey,
       name,
       phone,
       tax_id: String(body.customer?.document ?? existingCustomer?.tax_id ?? "").trim() || null,
@@ -192,7 +195,7 @@ export async function upsertRetailOrder(value: unknown) {
       neighborhood: String(body.customer?.neighborhood ?? existingCustomer?.neighborhood ?? "").trim() || null,
       city: String(body.customer?.city ?? existingCustomer?.city ?? "Barranquilla").trim(),
       route_id: existingCustomer?.route_id ?? null,
-    }, { onConflict: "customer_type,phone" })
+    }, { onConflict: "customer_type,identity_key" })
     .select("id")
     .single();
   if (customerError || !customer) return NextResponse.json({ error: "Could not save customer" }, { status: 500 });
@@ -300,11 +303,13 @@ export async function flagRetailHelpRequest(value: unknown) {
   }
 
   const supabase = createAdminClient();
+  const identityKey = customerIdentityKey("retail", { name: String(body.customer?.name ?? "Cliente WhatsApp"), phone });
   const { data: customer, error: customerError } = await supabase.from("customers").upsert({
     customer_type: "retail",
+    identity_key: identityKey,
     name: String(body.customer?.name ?? "Cliente WhatsApp").trim() || "Cliente WhatsApp",
     phone,
-  }, { onConflict: "customer_type,phone" }).select("id,name").single();
+  }, { onConflict: "customer_type,identity_key" }).select("id,name").single();
   if (customerError || !customer) return NextResponse.json({ error: "Could not save customer" }, { status: 500 });
 
   const openOrder = await findCurrentOrder(customer.id);

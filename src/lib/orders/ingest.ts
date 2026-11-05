@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { syncHighLevelOrderFields, syncWholesalePipeline } from "@/lib/orders/highlevel-pipeline";
+import { customerIdentityKey } from "@/lib/orders/wholesale-routes";
 
 type IngestItem = {
   product_name: string;
@@ -90,6 +91,12 @@ export async function POST(request: NextRequest) {
 
 export async function ingestOrder(body: IngestBody) {
   const supabase = createAdminClient();
+  const identityKey = customerIdentityKey(body.customer_type, {
+    businessName: body.customer.business_name,
+    name: body.customer.name,
+    phone: body.customer.phone,
+  });
+  if (!identityKey) return NextResponse.json({ error: "Could not identify customer" }, { status: 422 });
   const routeName = body.route?.trim() || "Sin clasificar";
   const { data: route } = await supabase.from("routes").select("id").eq("name", routeName).maybeSingle();
   const { data: fallbackRoute } = route
@@ -97,12 +104,13 @@ export async function ingestOrder(body: IngestBody) {
     : await supabase.from("routes").select("id").eq("name", "Sin clasificar").single();
   const routeId = route?.id ?? fallbackRoute?.id ?? null;
 
-  const { data: existingCustomer } = await supabase.from("customers").select("business_name,tax_id,email,address,neighborhood,city,route_id").eq("customer_type", body.customer_type).eq("phone", body.customer.phone.trim()).maybeSingle();
+  const { data: existingCustomer } = await supabase.from("customers").select("business_name,tax_id,email,address,neighborhood,city,route_id").eq("customer_type", body.customer_type).eq("identity_key", identityKey).maybeSingle();
 
   const { data: customer, error: customerError } = await supabase
     .from("customers")
     .upsert({
       customer_type: body.customer_type,
+      identity_key: identityKey,
       name: body.customer.name.trim(),
       phone: body.customer.phone.trim(),
       business_name: body.customer.business_name?.trim() || existingCustomer?.business_name || null,
@@ -112,7 +120,7 @@ export async function ingestOrder(body: IngestBody) {
       neighborhood: body.customer.neighborhood?.trim() || existingCustomer?.neighborhood || null,
       city: body.customer.city?.trim() || existingCustomer?.city || "Barranquilla",
       route_id: body.route ? routeId : existingCustomer?.route_id ?? routeId,
-    }, { onConflict: "customer_type,phone" })
+    }, { onConflict: "customer_type,identity_key" })
     .select("id")
     .single();
 

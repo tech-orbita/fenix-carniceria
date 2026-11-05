@@ -14,13 +14,12 @@ El cuerpo puede incluir los campos con sus etiquetas originales o los siguientes
 | Clave JSON | Campo del formulario |
 | --- | --- |
 | customer_name | Nombre Completo (cliente) |
-| business_name | Nombre del Negocio (nuevo) |
+| business_name | Nombre del Negocio / Nombre del establecimiento comercial |
 | phone | Teléfono |
 | tax_id | Nit o Cédula |
 | fulfillment_type | Domicilio o Tienda |
 | address | Dirección |
 | maps_url | Ubicación de Maps |
-| zone | Zona |
 | billing | Facturación |
 | receiver_phone | Número de Quien Recibe |
 | order_text | Coloca tu Pedido |
@@ -36,11 +35,13 @@ El parser también acepta el payload nativo anidado de HighLevel (`contact.id`, 
 `conversation.id` y arreglos de `customData`/`customFields`). Aun así, el workflow debe enviar los
 campos del formulario con sus etiquetas o con las claves estables de la tabla anterior.
 
-Nombre o negocio, teléfono, modalidad y texto del pedido son obligatorios. El formulario nuevo requiere negocio. Los campos no presentes en el formulario cliente se omiten; se conservan los datos registrados de ese teléfono. Usar el mismo formato internacional de teléfono en ambos formularios.
+Nombre o negocio, teléfono, modalidad y texto del pedido son obligatorios. El formulario nuevo requiere negocio. El establecimiento identifica al mayorista; el teléfono es un dato de contacto y puede coincidir entre pedidos sin mezclar empresas.
 
 No usar el ID de contacto como submission_id: el mismo contacto puede hacer varios pedidos. Con un identificador de envío se rechazan duplicados con 409; sin él, cada petición crea un pedido nuevo.
 
-El texto libre queda íntegro en el detalle y la comanda, sin inventar productos, pesos o precios. La zona se asigna a una ruta existente; si no coincide queda Sin clasificar. Facturación se conserva como respuesta textual. El comprobante se muestra como enlace y no acredita el pago. La app no descarga archivos externos. Original del webhook conservado en orders.source_payload.form_data.original_payload.
+El texto libre queda íntegro en el detalle y la comanda, sin inventar productos, pesos o precios. La ruta ya no se toma del formulario: se asigna manualmente en la planilla y queda guardada para pedidos futuros del establecimiento. Facturación se conserva como respuesta textual. El comprobante se muestra como enlace y no acredita el pago. La app no descarga archivos externos. Original del webhook conservado en orders.source_payload.form_data.original_payload.
+
+El panel mayorista permite crear pedidos manuales sin teléfono. Es el canal recomendado cuando el equipo de Fénix está transcribiendo los pedidos; el formulario queda como canal alternativo para pedidos enviados desde HighLevel.
 
 Verificación local: node --test --test-isolation=none tests/highlevel.test.mjs; npm run lint; npm run build.
 
