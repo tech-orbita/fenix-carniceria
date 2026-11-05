@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { customerIdentityKey } from "@/lib/orders/wholesale-routes";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   RegistrationValidationError,
@@ -52,24 +53,24 @@ export async function POST(request: Request) {
   try {
     const registration = validateWholesaleRegistration(raw);
     const supabase = createAdminClient();
-    const selectFields = "id,phone,email,ghl_contact_id";
-    const [{ data: byPhone, error: phoneError }, { data: byEmail, error: emailError }] = await Promise.all([
-      supabase.from("customers").select(selectFields).eq("customer_type", "wholesale").eq("phone", registration.phone).maybeSingle(),
+    // Un mayorista se identifica por establecimiento: varios negocios pueden compartir
+    // teléfono, así que el teléfono no sirve para decidir qué ficha actualizar.
+    const identityKey = customerIdentityKey("wholesale", { businessName: registration.businessName, name: registration.name });
+    const selectFields = "id,email";
+    const [{ data: byIdentity, error: identityError }, { data: byEmail, error: emailError }] = await Promise.all([
+      supabase.from("customers").select(selectFields).eq("customer_type", "wholesale").eq("identity_key", identityKey).maybeSingle(),
       supabase.from("customers").select(selectFields).eq("customer_type", "wholesale").ilike("email", registration.email).limit(2),
     ]);
-    if (phoneError || emailError) throw new Error("No se pudo consultar el registro de clientes");
-    if ((byEmail?.length ?? 0) > 1) {
+    if (identityError || emailError) throw new Error("No se pudo consultar el registro de clientes");
+    if (!byIdentity && (byEmail?.length ?? 0) > 1) {
       return NextResponse.json({ error: "El correo ya aparece en más de un registro. Comunícate con Fénix para actualizar tus datos." }, { status: 409 });
     }
-    const emailMatch = byEmail?.[0];
-    if (byPhone && emailMatch && byPhone.id !== emailMatch.id) {
-      return NextResponse.json({ error: "El teléfono y el correo pertenecen a registros diferentes. Comunícate con Fénix para corregirlos." }, { status: 409 });
-    }
 
-    const existing = byPhone ?? emailMatch;
+    const existing = byIdentity ?? byEmail?.[0];
     const registeredAt = new Date().toISOString();
     const customerValues = {
       customer_type: "wholesale",
+      identity_key: identityKey,
       name: registration.name,
       business_name: registration.businessName,
       tax_id: registration.taxId,
@@ -93,7 +94,7 @@ export async function POST(request: Request) {
     const { data: customer, error: customerError } = await customerQuery.select("id").single();
     if (customerError || !customer) {
       if (customerError?.code === "23505") {
-        return NextResponse.json({ error: "Ya existe una inscripción con ese teléfono o correo. Verifica los datos o comunícate con Fénix." }, { status: 409 });
+        return NextResponse.json({ error: "Ya existe una inscripción con ese negocio o correo. Verifica los datos o comunícate con Fénix." }, { status: 409 });
       }
       throw new Error("No se pudo guardar la inscripción");
     }
