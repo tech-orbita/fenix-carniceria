@@ -548,6 +548,10 @@ export function OrdersPanel({ initialOrders, loadError, viewer }: { initialOrder
   const [notice, setNotice] = useState<string | undefined>(loadError);
   const wholesale = orders.filter((order) => order.customerType === "wholesale");
   const retail = orders.filter((order) => order.customerType === "retail");
+  const today = bogotaDay.format(new Date());
+  const wholesaleTodayCount = wholesale.filter((order) => (
+    serviceDay(order) === today && !isHelpWithoutOrder(order) && !isClosed(order)
+  )).length;
   const { soundEnabled, toggleSound } = useOrdersRealtime(assignedType ? [assignedType] : ["wholesale", "retail"]);
 
   // El aviso se oculta solo tras unos segundos.
@@ -611,7 +615,7 @@ export function OrdersPanel({ initialOrders, loadError, viewer }: { initialOrder
   return (
     <div className="orders-app"><main className="dashboard-content">
       <div className="dashboard-topbar">
-        {!assignedType && <section aria-label="Tipo de cliente" className="segment-switch"><button aria-pressed={activeType === "wholesale"} onClick={() => { setActiveType("wholesale"); setNotice(undefined); }} type="button"><Icon name="truck" /><strong>Mayoristas</strong><b>{wholesale.length}</b></button><button aria-pressed={activeType === "retail"} onClick={() => { setActiveType("retail"); setNotice(undefined); }} type="button"><Icon name="shop" /><strong>Minoristas</strong><b>{retail.length}</b></button></section>}
+        {!assignedType && <section aria-label="Tipo de cliente" className="segment-switch"><button aria-pressed={activeType === "wholesale"} onClick={() => { setActiveType("wholesale"); setNotice(undefined); }} type="button"><Icon name="truck" /><strong>Mayoristas</strong><b>{wholesaleTodayCount}</b></button><button aria-pressed={activeType === "retail"} onClick={() => { setActiveType("retail"); setNotice(undefined); }} type="button"><Icon name="shop" /><strong>Minoristas</strong><b>{retail.length}</b></button></section>}
         {viewer && <div className="session-bar">
           <div className="session-identity" title={viewer.email}>
             <span className="session-avatar" aria-hidden="true">{viewer.email.slice(0, 1).toLocaleUpperCase("es")}</span>
