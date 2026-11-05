@@ -73,7 +73,7 @@ async function ghlFetch<T>(path: string, token: string, init?: RequestInit): Pro
     },
     cache: "no-store",
   });
-  if (!response.ok) throw new Error(`HighLevel respondió ${response.status}`);
+  if (!response.ok) throw new Error(`Orbita respondió ${response.status}`);
   return response.json() as Promise<T>;
 }
 
@@ -103,7 +103,7 @@ export async function syncHighLevelOrderFields(
   values: { orderNumber: string; total?: number },
 ) {
   const config = configuration(context);
-  if (!config) return { ok: false as const, skipped: true as const, message: "Integración de HighLevel sin configurar o sin contactId." };
+  if (!config) return { ok: false as const, skipped: true as const, message: "Integración de Orbita sin configurar o sin contactId." };
   try {
     const fields = await contactCustomFields(config.locationId, config.token);
     const orderFieldId = matchingField(fields, process.env.GHL_ORDER_CUSTOM_FIELD_ID?.trim(), ["orden", "numero de orden", "numero del pedido", "pedido"]);
@@ -123,7 +123,7 @@ export async function syncHighLevelOrderFields(
     console.error("[highlevel-fields] No se pudieron actualizar los campos del pedido", {
       message: error instanceof Error ? error.message : "Error desconocido",
     });
-    return { ok: false as const, skipped: false as const, message: error instanceof Error ? error.message : "No se pudieron actualizar los campos de HighLevel." };
+    return { ok: false as const, skipped: false as const, message: error instanceof Error ? error.message : "No se pudieron actualizar los campos de Orbita." };
   }
 }
 
@@ -182,7 +182,7 @@ export async function syncOrderPipeline(
   monetaryValue?: number,
 ) {
   const config = configuration(context);
-  if (!config) return { ok: false as const, skipped: true as const, message: "Integración de HighLevel sin configurar o sin contactId." };
+  if (!config) return { ok: false as const, skipped: true as const, message: "Integración de Orbita sin configurar o sin contactId." };
 
   try {
     const pipeline = await orderPipeline(config.locationId, config.token, segment);
@@ -239,7 +239,7 @@ export async function syncOrderPipeline(
       stage,
       message: error instanceof Error ? error.message : "Error desconocido",
     });
-    return { ok: false as const, skipped: false as const, message: error instanceof Error ? error.message : "No se pudo sincronizar HighLevel." };
+    return { ok: false as const, skipped: false as const, message: error instanceof Error ? error.message : "No se pudo sincronizar Orbita." };
   }
 }
 
@@ -263,7 +263,7 @@ export function syncRetailPipeline(
 
 export async function sendHighLevelMessage(context: HighLevelContext, message: string) {
   const config = configuration(context);
-  if (!config) return { ok: false as const, message: "El pedido no tiene un contacto de HighLevel asociado." };
+  if (!config) return { ok: false as const, message: "El pedido no tiene un contacto de Orbita asociado." };
   try {
     await ghlFetch("/conversations/messages", config.token, {
       method: "POST",

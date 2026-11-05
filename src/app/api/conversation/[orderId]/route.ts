@@ -41,12 +41,12 @@ export async function GET(_request: Request, context: { params: Promise<{ orderI
   if (explicitUrl) return NextResponse.redirect(explicitUrl);
   if (locationId && conversationId) return NextResponse.redirect(highLevelConversationUrl(locationId, conversationId));
   if (!locationId || !contactId) {
-    return NextResponse.json({ error: "El pedido no tiene una conversación de HighLevel asociada." }, { status: 404 });
+    return NextResponse.json({ error: "El pedido no tiene una conversación de Orbita asociada." }, { status: 404 });
   }
 
   const token = process.env.GHL_PRIVATE_INTEGRATION_TOKEN?.trim();
   if (!token) {
-    return NextResponse.json({ error: "Falta configurar la conexión con HighLevel." }, { status: 503 });
+    return NextResponse.json({ error: "Falta configurar la conexión con Orbita." }, { status: 503 });
   }
 
   const search = new URLSearchParams({ locationId, contactId });
@@ -59,13 +59,13 @@ export async function GET(_request: Request, context: { params: Promise<{ orderI
     cache: "no-store",
   });
   if (!response.ok) {
-    return NextResponse.json({ error: "HighLevel no pudo localizar la conversación del cliente." }, { status: 502 });
+    return NextResponse.json({ error: "Orbita no pudo localizar la conversación del cliente." }, { status: 502 });
   }
 
   const result = await response.json() as { conversations?: Array<{ id?: string }> };
   const foundId = result.conversations?.find((conversation) => conversation.id)?.id;
   if (!foundId) {
-    return NextResponse.json({ error: "Este cliente todavía no tiene una conversación en HighLevel." }, { status: 404 });
+    return NextResponse.json({ error: "Este cliente todavía no tiene una conversación en Orbita." }, { status: 404 });
   }
 
   return NextResponse.redirect(highLevelConversationUrl(locationId, foundId));

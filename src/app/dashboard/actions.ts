@@ -179,7 +179,7 @@ export async function sendRetailPaymentSummary(orderId: string) {
       unitPrice: Number(item.unit_price),
     })),
   }));
-  return sent.ok ? { ok: true as const, message: "Cuenta de cobro enviada por la conversación de HighLevel." } : sent;
+  return sent.ok ? { ok: true as const, message: "Cuenta de cobro enviada por la conversación de Orbita." } : sent;
 }
 
 export async function updateOrderPaymentStatus(
