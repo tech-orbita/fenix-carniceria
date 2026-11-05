@@ -7,7 +7,7 @@ test("cliente: preserva el pedido libre y aplica la regla operativa de molida", 
   assert.equal(order.form_data.order_text, base["Coloca tu Pedido"]);
   assert.deepEqual(order.items, [
     { product_name: "Costilla", quantity: 2, unit: "kg" },
-    { product_name: "Molida especial", quantity: 0, unit: "kg" },
+    { product_name: "Molida especial", quantity: 0, unit: "cantidad" },
   ]);
   assert.match(order.notes, /Por aclarar en el pedido: Molida por confirmar/);
   assert.equal(order.customer.phone, "+573001234567");
@@ -17,7 +17,7 @@ test("ninguna línea ambigua desaparece de la tabla mayorista", () => {
   const order = mapHighLevelForm({ ...base, "Coloca tu Pedido": "2 kg costilla\nproducto secreto\n3 libras corte extraterrestre" }, "mayorista-cliente");
   assert.deepEqual(order.items, [
     { product_name: "Costilla", quantity: 2, unit: "kg" },
-    { product_name: "Comodín", quantity: 0, unit: "kg", preparation: "Producto secreto" },
+    { product_name: "Comodín", quantity: 0, unit: "cantidad", preparation: "Producto secreto" },
     { product_name: "Comodín", quantity: 3, unit: "lb", preparation: "Corte extraterrestre" },
   ]);
   assert.match(order.notes, /producto secreto/i);
@@ -98,11 +98,11 @@ test("conserva todas las líneas aunque omitan o inviertan la unidad", () => {
     "Coloca tu Pedido": "10 CAPON\n2 SOBREBARRIGA\n10 MOLIDA\n15 CHURRASCO\n6 PATAS DE RES\nmolida especial 4 lib\nk carne molida 1",
   }, "mayorista-cliente");
   assert.deepEqual(order.items, [
-    { product_name: "Blanda", quantity: 10, unit: "kg", preparation: "C" },
-    { product_name: "Sobrebarriga", quantity: 2, unit: "kg" },
-    { product_name: "Molida especial", quantity: 10, unit: "kg" },
-    { product_name: "Comodín", quantity: 15, unit: "kg", preparation: "Churrasco" },
-    { product_name: "Pata", quantity: 6, unit: "und" },
+    { product_name: "Blanda", quantity: 10, unit: "cantidad", preparation: "C" },
+    { product_name: "Sobrebarriga", quantity: 2, unit: "cantidad" },
+    { product_name: "Molida especial", quantity: 10, unit: "cantidad" },
+    { product_name: "Comodín", quantity: 15, unit: "cantidad", preparation: "Churrasco" },
+    { product_name: "Pata", quantity: 6, unit: "cantidad" },
     { product_name: "Molida especial", quantity: 4, unit: "lb" },
     { product_name: "Molida especial", quantity: 1, unit: "kg" },
   ]);
@@ -129,18 +129,18 @@ test("conserva con cero todos los cortes que el mayorista pide sin cantidad", ()
     "Coloca tu Pedido": "capón, punta gorda, costillo, rabo sin hueso, sobre barriga y chocosuela",
   }, "mayorista-cliente");
   assert.deepEqual(order.items, [
-    { product_name: "Blanda", quantity: 0, unit: "kg", preparation: "C" },
-    { product_name: "Punta gorda", quantity: 0, unit: "kg" },
-    { product_name: "Costilla", quantity: 0, unit: "kg" },
-    { product_name: "Rabo res", quantity: 0, unit: "kg", preparation: "Sin hueso" },
-    { product_name: "Sobrebarriga", quantity: 0, unit: "kg" },
-    { product_name: "Chocosuela", quantity: 0, unit: "kg" },
+    { product_name: "Blanda", quantity: 0, unit: "cantidad", preparation: "C" },
+    { product_name: "Punta gorda", quantity: 0, unit: "cantidad" },
+    { product_name: "Costilla", quantity: 0, unit: "cantidad" },
+    { product_name: "Rabo res", quantity: 0, unit: "cantidad", preparation: "Sin hueso" },
+    { product_name: "Sobrebarriga", quantity: 0, unit: "cantidad" },
+    { product_name: "Chocosuela", quantity: 0, unit: "cantidad" },
   ]);
 });
 
-test("maneja patas de res por unidad aunque el cliente omita la unidad", () => {
+test("no inventa unidades para patas de res cuando el cliente las omite", () => {
   const order = mapHighLevelForm({ ...base, "Coloca tu Pedido": "3 patas de res" }, "mayorista-cliente");
-  assert.deepEqual(order.items, [{ product_name: "Pata", quantity: 3, unit: "und" }]);
+  assert.deepEqual(order.items, [{ product_name: "Pata", quantity: 3, unit: "cantidad" }]);
 });
 
 test("clasifica pescado y otros productos de la lista mayorista vigente", () => {
@@ -201,7 +201,7 @@ test("interpreta las líneas reales de blanda, cerdo y pollo sin perder producto
     { product_name: "Blanda", quantity: 4, unit: "kg", preparation: "C" },
     { product_name: "Lomo cerdo", quantity: 2, unit: "kg" },
     { product_name: "Blanda", quantity: 6, unit: "kg", preparation: "L" },
-    { product_name: "Comodín", quantity: 5, unit: "kg", preparation: "Pechugas pollo" },
-    { product_name: "Comodín", quantity: 4, unit: "kg", preparation: "Pierna pernil" },
+    { product_name: "Comodín", quantity: 5, unit: "cantidad", preparation: "Pechugas pollo" },
+    { product_name: "Comodín", quantity: 4, unit: "cantidad", preparation: "Pierna pernil" },
   ]);
 });

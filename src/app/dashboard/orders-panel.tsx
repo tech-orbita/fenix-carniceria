@@ -5,7 +5,7 @@ import type { FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-import { catalogProductFor, normalizeProductName, toKilograms, wholesaleProductCatalog, wholesaleUnitFor } from "@/lib/orders/product-parser";
+import { catalogProductFor, normalizeProductName, UNSPECIFIED_WHOLESALE_UNIT, wholesaleProductCatalog, wholesaleUnitFor } from "@/lib/orders/product-parser";
 import type { WholesaleProduct } from "@/lib/orders/product-parser";
 import { wholesaleServiceDay } from "@/lib/orders/wholesale-service-day";
 import { unassignedWholesaleRoute, wholesaleRouteLabel, wholesaleRoutes } from "@/lib/orders/wholesale-routes";
@@ -35,8 +35,8 @@ function productAmounts(order: Order, product: WholesaleProduct, into = new Map<
         ? itemCatalog?.name === productCatalog.name
         : normalizeProductName(itemLabel) === normalizeProductName(product.name);
     if (!matches) return;
-    // La operación mayorista trabaja en kilos: las libras se convierten a 0,5 kg.
-    const { quantity, unit } = toKilograms(item.actualQuantity ?? item.quantity, item.unit);
+    const quantity = item.actualQuantity ?? item.quantity;
+    const unit = item.displayUnit ?? item.unit;
     const detail = product.name === "Blanda" && /^[CLTB]$/i.test(item.preparation ?? "")
       ? item.preparation!.toUpperCase()
       : "";
@@ -50,7 +50,8 @@ function productAmounts(order: Order, product: WholesaleProduct, into = new Map<
 function formatAmounts(amounts: Map<string, number>) {
   return [...amounts.entries()].map(([unitAndDetail, quantity]) => {
     const [unit, detail] = unitAndDetail.split("|");
-    return `${quantityFormat.format(quantity)} ${unit}${detail ? ` ${detail}` : ""}`;
+    const shownUnit = unit && unit !== UNSPECIFIED_WHOLESALE_UNIT ? ` ${unit}` : "";
+    return `${quantityFormat.format(quantity)}${shownUnit}${detail ? ` ${detail}` : ""}`;
   }).join(" / ");
 }
 
@@ -270,7 +271,7 @@ function ManualWholesaleOrderForm({ orders, onClose }: { orders: Order[]; onClos
       <label>Teléfono<input onChange={(event) => update("phone", event.target.value)} placeholder="Opcional" type="tel" value={draft.phone} /></label>
       <label>Ruta<select onChange={(event) => update("routeName", event.target.value)} value={draft.routeName}><option value={unassignedWholesaleRoute}>Sin clasificar</option>{wholesaleRoutes.map((route) => <option key={route} value={route}>{wholesaleRouteLabel(route)}</option>)}</select></label>
       <label className="manual-order-wide">Dirección<input onChange={(event) => update("address", event.target.value)} placeholder="Opcional" value={draft.address} /></label>
-      <label className="manual-order-wide">Pedido<textarea onChange={(event) => update("orderText", event.target.value)} placeholder="Ejemplo: 5 kg de costilla, 2 kg de blanda capón" required rows={3} value={draft.orderText} /></label>
+      <label className="manual-order-wide">Pedido<textarea onChange={(event) => update("orderText", event.target.value)} placeholder="Ejemplo: 5 costilla, 2 blanda capón. Escribe kg o lb solo si aplica." required rows={3} value={draft.orderText} /></label>
       <label className="manual-order-wide">Observaciones<textarea onChange={(event) => update("notes", event.target.value)} placeholder="Opcional" rows={2} value={draft.notes} /></label>
     </div>
     <div className="manual-order-actions">{notice && <span role="status">{notice}</span>}<button className="outline-action" onClick={onClose} type="button">Cancelar</button><button className="primary-action" disabled={saving} type="submit">{saving ? "Creando…" : "Crear pedido"}</button></div>
@@ -463,7 +464,7 @@ function WholesaleOrdersTable({ isAdmin, orders: allOrders, pendingId, onStatusC
           {hasFilters && <button className="clear-filters" onClick={clearFilters} type="button">Limpiar filtros</button>}
         </div>
         <div className="toolbar-actions">
-          {!editing && <button className="primary-action" onClick={() => setCreatingOrder((current) => !current)} type="button">{creatingOrder ? "Cerrar nuevo pedido" : "+ Nuevo pedido"}</button>}
+          {!editing && <button className="primary-action add-order-action" onClick={() => setCreatingOrder((current) => !current)} type="button">{creatingOrder ? "Cerrar pedido" : "+ Agregar pedido"}</button>}
           <button aria-pressed={!showInfoColumns} className="outline-action" onClick={() => setShowInfoColumns((current) => !current)} type="button">{showInfoColumns ? "Ocultar datos" : "Mostrar datos"}</button>
           {editing ? <>
             {hiddenProducts.length > 0 && <label className="zone-filter"><span className="sr-only">Agregar columna de corte</span><select aria-label="Agregar columna de corte" onChange={(event) => { if (event.target.value) setExtraColumns((current) => [...current, event.target.value]); }} value=""><option value="">+ Agregar corte</option>{hiddenProducts.map((product) => <option key={product.name} value={product.name}>{product.name}</option>)}</select></label>}
@@ -487,7 +488,7 @@ function WholesaleOrdersTable({ isAdmin, orders: allOrders, pendingId, onStatusC
         <table className={`order-matrix wholesale-matrix ${showInfoColumns ? "with-order-info" : "without-order-info"}`}>
           <thead>
             <tr className="category-row"><th colSpan={showInfoColumns ? 5 : 1}>Pedido recibido</th>{categories.map((category, index) => <th colSpan={category.count} key={`${category.name}-${index}`}>{category.name}</th>)}</tr>
-            <tr><th>Cliente</th>{showInfoColumns && <><th>Teléfono</th><th>Ruta</th><th>Facturación</th><th>Comentario</th></>}{visibleProducts.map((product) => <th key={product.name} title={product.name === "Blanda" ? "C = Capón · L = Lomo · T = Tetafula · B = Calavera" : undefined}>{product.name}<small className="unit-label">{product.name === "Blanda" ? "kg · C/L/T/B" : wholesaleUnitFor(product.name)}</small></th>)}</tr>
+            <tr><th>Cliente</th>{showInfoColumns && <><th>Teléfono</th><th>Ruta</th><th>Facturación</th><th>Comentario</th></>}{visibleProducts.map((product) => <th key={product.name} title={product.name === "Blanda" ? "C = Capón · L = Lomo · T = Tetafula · B = Calavera" : undefined}>{product.name}{product.name === "Blanda" && <small className="unit-label">C/L/T/B</small>}</th>)}</tr>
           </thead>
           <tbody>
             {visibleOrders.map((order) => <tr className={isClosed(order) ? "is-dispatched" : undefined} key={order.id}>
@@ -507,9 +508,8 @@ function WholesaleOrdersTable({ isAdmin, orders: allOrders, pendingId, onStatusC
               </>}
               {visibleProducts.map((product) => {
                 const value = productQuantity(order, product);
-                const defaultUnit = wholesaleUnitFor(product.name);
-                const placeholder = product.name === "Blanda" ? "kg C/L/T/B" : product.name === "Comodín" ? "kg producto" : defaultUnit;
-                const title = product.name === "Blanda" ? "Usa C=capón, L=lomo, T=tetafula y B=calavera. Ejemplo: 5 C / 2 L." : product.name === "Comodín" ? "Escribe cantidad y nombre del producto sin columna. Ejemplo: 2 kg producto especial." : defaultUnit === "und" ? "Cantidad en unidades. Usa 0 cuando el cliente no indicó cantidad." : "Cantidad en kg. También puedes escribir “2 lb” y se guarda como 1 kg; usa 0 si está por definir.";
+                const placeholder = product.name === "Blanda" ? "5 C / 2 L" : product.name === "Comodín" ? "2 producto" : "Cantidad";
+                const title = product.name === "Blanda" ? "Usa C=capón, L=lomo, T=tetafula y B=calavera. Puedes añadir kg o lb si aplica." : product.name === "Comodín" ? "Escribe cantidad y nombre del producto. Ejemplo: 2 producto especial." : "Escribe el número y añade kg, lb o und solamente cuando corresponda.";
                 return <td className={editing ? "matrix-quantity-cell is-editing" : value ? "matrix-quantity-cell has-value" : "matrix-quantity-cell"} key={product.name}>{editing ? <input aria-label={`${product.name} de ${order.orderNumber}`} onChange={(event) => updateDraft(order.id, product.name, event.target.value)} placeholder={placeholder} title={title} value={draftRows[order.id]?.quantities[product.name] ?? ""} /> : value || ""}</td>;
               })}
             </tr>)}

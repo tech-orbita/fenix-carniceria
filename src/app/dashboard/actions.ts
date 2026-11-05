@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { requireViewer } from "@/lib/auth/viewer";
 import { createClient } from "@/lib/supabase/server";
-import { catalogProductFor, normalizeProductName, parseOrderText, toKilograms, wholesaleUnitFor } from "@/lib/orders/product-parser";
+import { catalogProductFor, normalizeProductName, normalizeWholesaleUnit, parseOrderText, toKilograms, UNSPECIFIED_WHOLESALE_UNIT } from "@/lib/orders/product-parser";
 import { retailBillMessage, retailDispatchMessage } from "@/lib/orders/retail-bill";
 import { sendHighLevelMessage, sendWholesalePaymentSummary, syncHighLevelOrderFields, syncOrderPipeline, syncWholesalePipeline } from "@/lib/orders/highlevel-pipeline";
 import { customerIdentityKey, unassignedWholesaleRoute, wholesaleRoutes } from "@/lib/orders/wholesale-routes";
@@ -485,12 +485,12 @@ type WholesaleTableRowInput = {
   quantities: Array<{ productName: string; value: string }>;
 };
 
-function parseQuantity(value: string, defaultUnit = "kg") {
+function parseQuantity(value: string) {
   const match = value.trim().match(/^(\d+(?:[.,]\d+)?)\s*([\p{L}]+)?$/u);
   if (!match) return null;
   const quantity = Number(match[1].replace(",", "."));
   if (!Number.isFinite(quantity) || quantity < 0) return null;
-  return toKilograms(quantity, match[2] ?? defaultUnit);
+  return { quantity, unit: normalizeWholesaleUnit(match[2] ?? UNSPECIFIED_WHOLESALE_UNIT) };
 }
 
 function parseWholesaleCell(productName: string, value: string) {
@@ -499,27 +499,27 @@ function parseWholesaleCell(productName: string, value: string) {
     const parts = value.split("/").map((part) => part.trim()).filter(Boolean);
     if (!parts.length) return null;
     const parsed = parts.map((part) => {
-      const match = part.match(/^(\d+(?:[.,]\d+)?)\s*(kg|kgs|kilo|kilos|lb|lbs|libra|libras)?\s+(.+)$/i);
+      const match = part.match(/^(\d+(?:[.,]\d+)?)\s*(kg|kgs|kilo|kilos|lb|lbs|libra|libras|und|unds|unidad|unidades)?\s+(.+)$/i);
       if (!match) return null;
       const quantity = Number(match[1].replace(",", "."));
       const preparation = match[3].trim();
       if (!Number.isFinite(quantity) || quantity <= 0 || !preparation) return null;
-      return { ...toKilograms(quantity, match[2] ?? "kg"), preparation: preparation.slice(0, 250) };
+      return { quantity, unit: normalizeWholesaleUnit(match[2] ?? UNSPECIFIED_WHOLESALE_UNIT), preparation: preparation.slice(0, 250) };
     });
     return parsed.every(Boolean) ? parsed as Array<{ quantity: number; unit: string; preparation: string }> : null;
   }
   if (normalizedProduct !== "blanda") {
-    const parsed = parseQuantity(value, wholesaleUnitFor(productName));
+    const parsed = parseQuantity(value);
     return parsed ? [{ ...parsed, preparation: null as string | null }] : null;
   }
   const parts = value.split("/").map((part) => part.trim()).filter(Boolean);
   if (!parts.length) return null;
   const parsed = parts.map((part) => {
-    const match = part.match(/^(\d+(?:[.,]\d+)?)\s*(kg|kgs|kilo|kilos|lb|lbs|libra|libras)?\s*([CLTB])?$/i);
+    const match = part.match(/^(\d+(?:[.,]\d+)?)\s*(kg|kgs|kilo|kilos|lb|lbs|libra|libras|und|unds|unidad|unidades)?\s*([CLTB])?$/i);
     if (!match) return null;
     const quantity = Number(match[1].replace(",", "."));
     if (!Number.isFinite(quantity) || quantity < 0) return null;
-    return { ...toKilograms(quantity, match[2] ?? "kg"), preparation: match[3]?.toUpperCase() ?? null };
+    return { quantity, unit: normalizeWholesaleUnit(match[2] ?? UNSPECIFIED_WHOLESALE_UNIT), preparation: match[3]?.toUpperCase() ?? null };
   });
   return parsed.every(Boolean) ? parsed as Array<{ quantity: number; unit: string; preparation: string | null }> : null;
 }

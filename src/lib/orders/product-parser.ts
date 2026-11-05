@@ -64,6 +64,10 @@ export const wholesaleProductCatalog: readonly WholesaleProduct[] = [
 
 export type BlandaIndicator = "C" | "L" | "T" | "B";
 
+// Valor interno para una cantidad cuyo formulario no indicó kg, lb ni unidades.
+// La interfaz lo oculta para mostrar exactamente el número escrito por el cliente.
+export const UNSPECIFIED_WHOLESALE_UNIT = "cantidad";
+
 export function blandaIndicatorFor(value: string): BlandaIndicator | undefined {
   const normalized = normalizeProductName(value);
   const explicit = normalized.match(/(?:^| )blanda ([cltb])(?: |$)/)?.[1]?.toUpperCase() as BlandaIndicator | undefined;
@@ -154,7 +158,7 @@ export function parseOrderTextDetailed(text: string): ParsedWholesaleOrder {
     items.push({
       product_name: catalogProduct?.name ?? "Comodín",
       quantity,
-      unit: normalizeWholesaleUnit(unitValue ?? catalogProduct?.defaultUnit ?? "kg"),
+      unit: normalizeWholesaleUnit(unitValue ?? UNSPECIFIED_WHOLESALE_UNIT),
       ...(preparation
         ? { preparation }
         : !catalogProduct ? { preparation: requestedName } : {}),
@@ -170,7 +174,7 @@ export function parseOrderTextDetailed(text: string): ParsedWholesaleOrder {
     if (!requestedName) return;
     unresolved.push(productValue.trim());
     if (!catalogProduct || catalogProduct.name === "Comodín") {
-      items.push({ product_name: "Comodín", quantity: 0, unit: "kg", preparation: requestedName });
+      items.push({ product_name: "Comodín", quantity: 0, unit: UNSPECIFIED_WHOLESALE_UNIT, preparation: requestedName });
       return;
     }
     addItem("0", undefined, requestedName, productValue);

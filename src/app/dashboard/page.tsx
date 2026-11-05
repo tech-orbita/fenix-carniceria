@@ -1,7 +1,7 @@
 import { requireViewer } from "@/lib/auth/viewer";
 import { hasSupabaseEnvironment } from "@/lib/supabase/config";
 import { createClient } from "@/lib/supabase/server";
-import { parseOrderText } from "@/lib/orders/product-parser";
+import { normalizeProductName, parseOrderText } from "@/lib/orders/product-parser";
 
 import "../auth.css";
 import { OrdersPanel } from "./orders-panel";
@@ -113,16 +113,23 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         const reparsedItems = row.customer_type === "wholesale" && typeof formData?.order_text === "string"
           ? parseOrderText(formData.order_text)
           : [];
+        const reparsedMatchesStored = reparsedItems.length === storedItems.length && reparsedItems.every((item, index) => (
+          normalizeProductName(item.product_name) === normalizeProductName(storedItems[index]?.productName ?? "")
+          && (item.preparation ?? "") === (storedItems[index]?.preparation ?? "")
+        ));
         const items = reparsedItems.length > storedItems.length
           ? reparsedItems.map((item, index) => ({
               id: `parsed-${row.id}-${index}`,
               productName: item.product_name,
               quantity: item.quantity,
               unit: item.unit,
+              displayUnit: item.unit,
               preparation: item.preparation,
               unitPrice: 0,
             }))
-          : storedItems;
+          : reparsedMatchesStored
+            ? storedItems.map((item, index) => ({ ...item, displayUnit: reparsedItems[index].unit }))
+            : storedItems;
         const addresses = formAddressDetails(sourcePayload);
         const storedAddress = [row.delivery_address, customer?.address]
           .map(cleanAddress)
