@@ -249,6 +249,13 @@ function ManualWholesaleOrderForm({ orders, onClose }: { orders: Order[]; onClos
   const [notice, setNotice] = useState<string>();
   const businesses = [...new Set(orders.map((order) => order.businessName ?? order.customer).filter(Boolean))].sort((a, b) => a.localeCompare(b, "es"));
   const update = (field: keyof typeof emptyManualOrder, value: string) => setDraft((current) => ({ ...current, [field]: value }));
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !saving) onClose();
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [onClose, saving]);
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setSaving(true);
@@ -262,20 +269,22 @@ function ManualWholesaleOrderForm({ orders, onClose }: { orders: Order[]; onClos
       window.setTimeout(onClose, 700);
     }
   };
-  return <form className="manual-order-form" onSubmit={(event) => void submit(event)}>
-    <div className="manual-order-heading"><div><strong>Nuevo pedido mayorista</strong><small>Regístralo directamente sin usar el formulario de HighLevel.</small></div><button aria-label="Cerrar nuevo pedido" onClick={onClose} type="button">×</button></div>
-    <div className="manual-order-grid">
-      <label>Establecimiento<input list="wholesale-businesses" onChange={(event) => update("businessName", event.target.value)} placeholder="Nombre del negocio" required value={draft.businessName} /></label>
-      <datalist id="wholesale-businesses">{businesses.map((business) => <option key={business} value={business} />)}</datalist>
-      <label>Persona que solicita<input onChange={(event) => update("customerName", event.target.value)} placeholder="Opcional" value={draft.customerName} /></label>
-      <label>Teléfono<input onChange={(event) => update("phone", event.target.value)} placeholder="Opcional" type="tel" value={draft.phone} /></label>
-      <label>Ruta<select onChange={(event) => update("routeName", event.target.value)} value={draft.routeName}><option value={unassignedWholesaleRoute}>Sin clasificar</option>{wholesaleRoutes.map((route) => <option key={route} value={route}>{wholesaleRouteLabel(route)}</option>)}</select></label>
-      <label className="manual-order-wide">Dirección<input onChange={(event) => update("address", event.target.value)} placeholder="Opcional" value={draft.address} /></label>
-      <label className="manual-order-wide">Pedido<textarea onChange={(event) => update("orderText", event.target.value)} placeholder="Ejemplo: 5 costilla, 2 blanda capón. Escribe kg o lb solo si aplica." required rows={3} value={draft.orderText} /></label>
-      <label className="manual-order-wide">Observaciones<textarea onChange={(event) => update("notes", event.target.value)} placeholder="Opcional" rows={2} value={draft.notes} /></label>
-    </div>
-    <div className="manual-order-actions">{notice && <span role="status">{notice}</span>}<button className="outline-action" onClick={onClose} type="button">Cancelar</button><button className="primary-action" disabled={saving} type="submit">{saving ? "Creando…" : "Crear pedido"}</button></div>
-  </form>;
+  return <div className="manual-order-modal" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) onClose(); }}>
+    <form aria-labelledby="manual-order-title" aria-modal="true" className="manual-order-form" onSubmit={(event) => void submit(event)} role="dialog">
+      <div className="manual-order-heading"><div><strong id="manual-order-title">Nuevo pedido mayorista</strong><small>Regístralo directamente sin usar el formulario de HighLevel.</small></div><button aria-label="Cerrar nuevo pedido" disabled={saving} onClick={onClose} type="button">×</button></div>
+      <div className="manual-order-grid">
+        <label>Establecimiento<input autoFocus list="wholesale-businesses" onChange={(event) => update("businessName", event.target.value)} placeholder="Nombre del negocio" required value={draft.businessName} /></label>
+        <datalist id="wholesale-businesses">{businesses.map((business) => <option key={business} value={business} />)}</datalist>
+        <label>Persona que solicita<input onChange={(event) => update("customerName", event.target.value)} placeholder="Opcional" value={draft.customerName} /></label>
+        <label>Teléfono<input onChange={(event) => update("phone", event.target.value)} placeholder="Opcional" type="tel" value={draft.phone} /></label>
+        <label>Ruta<select onChange={(event) => update("routeName", event.target.value)} value={draft.routeName}><option value={unassignedWholesaleRoute}>Sin clasificar</option>{wholesaleRoutes.map((route) => <option key={route} value={route}>{wholesaleRouteLabel(route)}</option>)}</select></label>
+        <label className="manual-order-wide">Dirección<input onChange={(event) => update("address", event.target.value)} placeholder="Opcional" value={draft.address} /></label>
+        <label className="manual-order-wide">Pedido<textarea onChange={(event) => update("orderText", event.target.value)} placeholder="Ejemplo: 5 costilla, 2 blanda capón. Escribe kg o lb solo si aplica." required rows={3} value={draft.orderText} /></label>
+        <label className="manual-order-wide">Observaciones<textarea onChange={(event) => update("notes", event.target.value)} placeholder="Opcional" rows={2} value={draft.notes} /></label>
+      </div>
+      <div className="manual-order-actions">{notice && <span role="status">{notice}</span>}<button className="outline-action" disabled={saving} onClick={onClose} type="button">Cancelar</button><button className="primary-action" disabled={saving} type="submit">{saving ? "Creando…" : "Crear pedido"}</button></div>
+    </form>
+  </div>;
 }
 
 function WholesaleWallet({ orders }: { orders: Order[] }) {
@@ -492,7 +501,7 @@ function WholesaleOrdersTable({ isAdmin, orders: allOrders, pendingId, onStatusC
           </thead>
           <tbody>
             {visibleOrders.map((order) => <tr className={isClosed(order) ? "is-dispatched" : undefined} key={order.id}>
-              <th scope="row"><div className="matrix-client"><span><span className="client-heading-line"><strong>{order.businessName && order.businessName !== order.customer ? order.businessName : order.customer}</strong>{order.businessName && order.businessName !== order.customer && <small className="client-contact-inline">- {order.customer}</small>}</span><small className="client-order-number">Pedido {order.orderNumber}</small><small className="client-address">{order.address}</small></span><div className="matrix-row-actions"><ConversationLink order={order} />{isAdmin && safeExternalUrl(order.formData?.payment_proof) && <a aria-label={`Abrir comprobante de ${order.orderNumber}`} className="payment-proof-link row-icon-action tooltip-icon-action" data-tooltip="Comprobante adjunto" href={safeExternalUrl(order.formData?.payment_proof)} rel="noreferrer" target="_blank"><Icon name="receipt" /><span className="sr-only">Ver comprobante adjunto</span></a>}{isHelpWithoutOrder(order)
+              <th scope="row"><div className="matrix-client"><span><span className="client-heading-line" title={[order.businessName && order.businessName !== order.customer ? order.businessName : order.customer, order.businessName && order.businessName !== order.customer ? order.customer : ""].filter(Boolean).join(" · ")}><strong>{order.businessName && order.businessName !== order.customer ? order.businessName : order.customer}</strong>{order.businessName && order.businessName !== order.customer && <small className="client-contact-inline">{order.customer}</small>}</span><small className="client-order-number">Pedido {order.orderNumber}</small><small className="client-address">{order.address}</small></span><div className="matrix-row-actions"><ConversationLink order={order} />{isAdmin && safeExternalUrl(order.formData?.payment_proof) && <a aria-label={`Abrir comprobante de ${order.orderNumber}`} className="payment-proof-link row-icon-action tooltip-icon-action" data-tooltip="Comprobante adjunto" href={safeExternalUrl(order.formData?.payment_proof)} rel="noreferrer" target="_blank"><Icon name="receipt" /><span className="sr-only">Ver comprobante adjunto</span></a>}{isHelpWithoutOrder(order)
                 ? <span className="no-order-badge">Sin pedido</span>
                 : isClosed(order)
                   ? <button aria-label="Volver a pedidos pendientes" className="dispatch-action is-done row-icon-action tooltip-icon-action" data-tooltip="Volver a pedidos" disabled={pendingId === order.id || editing} onClick={() => onStatusChange(order, "new")} type="button">{pendingId === order.id ? "…" : <Icon name="undo" />}<span className="sr-only">Volver a pedidos pendientes</span></button>
