@@ -237,7 +237,7 @@ const emptyManualOrder = {
   customerName: "",
   phone: "",
   address: "",
-  routeName: unassignedWholesaleRoute,
+  routeName: "",
   orderText: "",
   notes: "",
 };
@@ -277,7 +277,7 @@ function ManualWholesaleOrderForm({ orders, onClose }: { orders: Order[]; onClos
         <datalist id="wholesale-businesses">{businesses.map((business) => <option key={business} value={business} />)}</datalist>
         <label>Persona que solicita<input onChange={(event) => update("customerName", event.target.value)} placeholder="Opcional" value={draft.customerName} /></label>
         <label>Teléfono<input onChange={(event) => update("phone", event.target.value)} placeholder="Opcional" type="tel" value={draft.phone} /></label>
-        <label>Ruta<select onChange={(event) => update("routeName", event.target.value)} value={draft.routeName}><option value={unassignedWholesaleRoute}>Sin clasificar</option>{wholesaleRoutes.map((route) => <option key={route} value={route}>{wholesaleRouteLabel(route)}</option>)}</select></label>
+        <label>Zona o ruta<select onChange={(event) => update("routeName", event.target.value)} required value={draft.routeName}><option disabled value="">Selecciona una ruta</option>{wholesaleRoutes.map((route) => <option key={route} value={route}>{wholesaleRouteLabel(route)}</option>)}</select></label>
         <label className="manual-order-wide">Dirección<input onChange={(event) => update("address", event.target.value)} placeholder="Opcional" value={draft.address} /></label>
         <label className="manual-order-wide">Pedido<textarea onChange={(event) => update("orderText", event.target.value)} placeholder="Ejemplo: 5 costilla, 2 blanda capón. Escribe kg o lb solo si aplica." required rows={3} value={draft.orderText} /></label>
         <label className="manual-order-wide">Observaciones<textarea onChange={(event) => update("notes", event.target.value)} placeholder="Opcional" rows={2} value={draft.notes} /></label>

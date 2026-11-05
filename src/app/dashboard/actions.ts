@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { catalogProductFor, normalizeProductName, normalizeWholesaleUnit, parseOrderText, toKilograms, UNSPECIFIED_WHOLESALE_UNIT } from "@/lib/orders/product-parser";
 import { retailBillMessage, retailDispatchMessage } from "@/lib/orders/retail-bill";
 import { sendHighLevelMessage, sendWholesalePaymentSummary, syncHighLevelOrderFields, syncOrderPipeline, syncWholesalePipeline } from "@/lib/orders/highlevel-pipeline";
-import { customerIdentityKey, unassignedWholesaleRoute, wholesaleRoutes } from "@/lib/orders/wholesale-routes";
+import { customerIdentityKey, wholesaleRoutes } from "@/lib/orders/wholesale-routes";
 import type { HighLevelContext, OrderPipelineStage } from "@/lib/orders/highlevel-pipeline";
 
 import type { OrderStatus } from "./types";
@@ -254,7 +254,7 @@ export async function createManualWholesaleOrder(input: ManualWholesaleOrderInpu
   const submittedCustomerName = input.customerName?.trim();
   const phone = input.phone?.trim() || null;
   const address = input.address?.trim() || null;
-  const routeName = input.routeName?.trim() || unassignedWholesaleRoute;
+  const routeName = input.routeName?.trim();
   const orderText = input.orderText?.trim();
   const notes = input.notes?.trim() || null;
 
@@ -262,7 +262,7 @@ export async function createManualWholesaleOrder(input: ManualWholesaleOrderInpu
     !businessName || businessName.length > 160 || (submittedCustomerName?.length ?? 0) > 160 ||
     (phone?.length ?? 0) > 40 || (address?.length ?? 0) > 500 ||
     !orderText || orderText.length > 5_000 || (notes?.length ?? 0) > 2_000 ||
-    ![...wholesaleRoutes, unassignedWholesaleRoute].includes(routeName as (typeof wholesaleRoutes)[number] | typeof unassignedWholesaleRoute)
+    !wholesaleRoutes.includes(routeName as (typeof wholesaleRoutes)[number])
   ) {
     return { ok: false as const, message: "Revisa el establecimiento, la ruta y el pedido." };
   }
@@ -280,7 +280,7 @@ export async function createManualWholesaleOrder(input: ManualWholesaleOrderInpu
   ]);
   if (routeError || !route) return { ok: false as const, message: "La ruta seleccionada no está disponible." };
   const customerName = submittedCustomerName || existingCustomer?.name || businessName;
-  const routeId = routeName === unassignedWholesaleRoute && existingCustomer?.route_id ? existingCustomer.route_id : route.id;
+  const routeId = route.id;
 
   const { data: customer, error: customerError } = await supabase.from("customers").upsert({
     customer_type: "wholesale",
