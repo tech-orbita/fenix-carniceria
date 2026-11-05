@@ -1,14 +1,16 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import type { FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { catalogProductFor, normalizeProductName, toKilograms, wholesaleProductCatalog, wholesaleUnitFor } from "@/lib/orders/product-parser";
 import type { WholesaleProduct } from "@/lib/orders/product-parser";
 import { wholesaleServiceDay } from "@/lib/orders/wholesale-service-day";
+import { unassignedWholesaleRoute, wholesaleRouteLabel, wholesaleRoutes } from "@/lib/orders/wholesale-routes";
 
-import { resolveOrderHelp, scheduleWholesaleOrder, sendRetailPaymentSummary, updateOrderDetails, updateOrderPaymentStatus, updateOrderStatus, updateWholesalePayment, updateWholesaleTable } from "./actions";
+import { createManualWholesaleOrder, resolveOrderHelp, scheduleWholesaleOrder, sendRetailPaymentSummary, updateOrderDetails, updateOrderPaymentStatus, updateOrderStatus, updateWholesalePayment, updateWholesaleTable } from "./actions";
 import { addDays, bogotaDay, dateTime, dayLabel, Icon, phaseLabels, phaseStatus } from "./panel-shared";
 import type { OperationalPhase } from "./panel-shared";
 import { RetailPanel } from "./retail-panel";
@@ -229,6 +231,52 @@ async function downloadWholesaleOrders(orders: Order[], products: WholesaleProdu
 
 type TableFilter = "zones" | "cuts" | "query";
 
+const emptyManualOrder = {
+  businessName: "",
+  customerName: "",
+  phone: "",
+  address: "",
+  routeName: unassignedWholesaleRoute,
+  orderText: "",
+  notes: "",
+};
+
+function ManualWholesaleOrderForm({ orders, onClose }: { orders: Order[]; onClose: () => void }) {
+  const router = useRouter();
+  const [draft, setDraft] = useState(emptyManualOrder);
+  const [saving, setSaving] = useState(false);
+  const [notice, setNotice] = useState<string>();
+  const businesses = [...new Set(orders.map((order) => order.businessName ?? order.customer).filter(Boolean))].sort((a, b) => a.localeCompare(b, "es"));
+  const update = (field: keyof typeof emptyManualOrder, value: string) => setDraft((current) => ({ ...current, [field]: value }));
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSaving(true);
+    setNotice(undefined);
+    const result = await createManualWholesaleOrder(draft);
+    setSaving(false);
+    setNotice(result.message);
+    if (result.ok) {
+      setDraft(emptyManualOrder);
+      router.refresh();
+      window.setTimeout(onClose, 700);
+    }
+  };
+  return <form className="manual-order-form" onSubmit={(event) => void submit(event)}>
+    <div className="manual-order-heading"><div><strong>Nuevo pedido mayorista</strong><small>Regístralo directamente sin usar el formulario de HighLevel.</small></div><button aria-label="Cerrar nuevo pedido" onClick={onClose} type="button">×</button></div>
+    <div className="manual-order-grid">
+      <label>Establecimiento<input list="wholesale-businesses" onChange={(event) => update("businessName", event.target.value)} placeholder="Nombre del negocio" required value={draft.businessName} /></label>
+      <datalist id="wholesale-businesses">{businesses.map((business) => <option key={business} value={business} />)}</datalist>
+      <label>Persona que solicita<input onChange={(event) => update("customerName", event.target.value)} placeholder="Opcional" value={draft.customerName} /></label>
+      <label>Teléfono<input onChange={(event) => update("phone", event.target.value)} placeholder="Opcional" type="tel" value={draft.phone} /></label>
+      <label>Ruta<select onChange={(event) => update("routeName", event.target.value)} value={draft.routeName}><option value={unassignedWholesaleRoute}>Sin clasificar</option>{wholesaleRoutes.map((route) => <option key={route} value={route}>{wholesaleRouteLabel(route)}</option>)}</select></label>
+      <label className="manual-order-wide">Dirección<input onChange={(event) => update("address", event.target.value)} placeholder="Opcional" value={draft.address} /></label>
+      <label className="manual-order-wide">Pedido<textarea onChange={(event) => update("orderText", event.target.value)} placeholder="Ejemplo: 5 kg de costilla, 2 kg de blanda capón" required rows={3} value={draft.orderText} /></label>
+      <label className="manual-order-wide">Observaciones<textarea onChange={(event) => update("notes", event.target.value)} placeholder="Opcional" rows={2} value={draft.notes} /></label>
+    </div>
+    <div className="manual-order-actions">{notice && <span role="status">{notice}</span>}<button className="outline-action" onClick={onClose} type="button">Cancelar</button><button className="primary-action" disabled={saving} type="submit">{saving ? "Creando…" : "Crear pedido"}</button></div>
+  </form>;
+}
+
 function WholesaleWallet({ orders }: { orders: Order[] }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
@@ -266,6 +314,7 @@ function WholesaleWallet({ orders }: { orders: Order[] }) {
 
 function WholesaleOrdersTable({ isAdmin, orders: allOrders, pendingId, onStatusChange }: { isAdmin: boolean; orders: Order[]; pendingId?: string; onStatusChange: (order: Order, phase: OperationalPhase) => void }) {
   const router = useRouter();
+  const matrixScrollRef = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState("");
   const [view, setView] = useState<"orders" | "wallet">("orders");
   const [dayOffset, setDayOffset] = useState(0);
@@ -275,9 +324,10 @@ function WholesaleOrdersTable({ isAdmin, orders: allOrders, pendingId, onStatusC
   const [cuts, setCuts] = useState<string[]>([]);
   const [extraColumns, setExtraColumns] = useState<string[]>([]);
   const [editing, setEditing] = useState(false);
+  const [creatingOrder, setCreatingOrder] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editNotice, setEditNotice] = useState<string>();
-  const [draftRows, setDraftRows] = useState<Record<string, { notes: string; quantities: Record<string, string> }>>({});
+  const [draftRows, setDraftRows] = useState<Record<string, { routeName: string; notes: string; quantities: Record<string, string> }>>({});
   const searchTerms = searchText(query).split(/[\s\-()+]+/).filter(Boolean);
   // "Hoy" se recalcula en cada refresco para que el panel avance solo al cambiar el día.
   const today = bogotaDay.format(new Date());
@@ -312,7 +362,8 @@ function WholesaleOrdersTable({ isAdmin, orders: allOrders, pendingId, onStatusC
     return counts;
   };
   const zoneCounts = countBy("zones", (order) => [order.route]);
-  const zoneOptions = [...new Set(orders.map((order) => order.route))].sort((left, right) => left.localeCompare(right, "es")).map((zone) => ({ value: zone, label: zone, count: zoneCounts.get(zone) ?? 0 }));
+  const routeValues = [...new Set([...wholesaleRoutes, unassignedWholesaleRoute, ...orders.map((order) => order.route)])];
+  const zoneOptions = routeValues.map((zone) => ({ value: zone, label: wholesaleRouteLabel(zone), count: zoneCounts.get(zone) ?? 0 }));
   const cutCounts = countBy("cuts", (order) => [...(orderCuts.get(order.id) ?? [])]);
   const cutOptions = products.filter((product) => cutCounts.has(product.name) || cuts.includes(product.name)).map((product) => ({ value: product.name, label: product.name, count: cutCounts.get(product.name) ?? 0 }));
 
@@ -338,9 +389,11 @@ function WholesaleOrdersTable({ isAdmin, orders: allOrders, pendingId, onStatusC
   ].filter(Boolean).join(" · ");
   const hasFilters = zones.length > 0 || cuts.length > 0 || searchTerms.length > 0;
   const clearFilters = () => { setZones([]); setCuts([]); setQuery(""); };
+  const scrollMatrix = (left: number, top: number) => matrixScrollRef.current?.scrollBy({ left, top, behavior: "smooth" });
 
   const beginEditing = () => {
     setDraftRows(Object.fromEntries(orders.map((order) => [order.id, {
+      routeName: order.route,
       notes: order.notes ?? "",
       quantities: Object.fromEntries(products.map((product) => [product.name, productQuantity(order, product)])),
     }])));
@@ -362,6 +415,7 @@ function WholesaleOrdersTable({ isAdmin, orders: allOrders, pendingId, onStatusC
     setEditNotice(undefined);
     const result = await updateWholesaleTable(visibleOrders.map((order) => ({
       orderId: order.id,
+      routeName: draftRows[order.id]?.routeName ?? order.route,
       notes: draftRows[order.id]?.notes ?? "",
       quantities: visibleProducts.map((product) => ({ productName: product.name, value: draftRows[order.id]?.quantities[product.name] ?? "" })),
     })));
@@ -393,7 +447,7 @@ function WholesaleOrdersTable({ isAdmin, orders: allOrders, pendingId, onStatusC
             <button aria-label="Día siguiente" disabled={editing} onClick={() => setDayOffset((current) => current + 1)} title={`${pendingByDay(dayOffset + 1)} pendientes`} type="button">›</button>
             {dayOffset !== 0 && <button className="day-today" disabled={editing} onClick={() => setDayOffset(0)} type="button">Hoy</button>}
           </div>
-          <FilterMenu label="Zona" onChange={setZones} options={zoneOptions} selected={zones} />
+          <FilterMenu label="Ruta" onChange={setZones} options={zoneOptions} selected={zones} />
           <FilterMenu label="Corte" onChange={setCuts} options={cutOptions} selected={cuts} />
           <label className={query ? "table-search is-filtered" : "table-search"}>
             <Icon name="search" />
@@ -409,6 +463,7 @@ function WholesaleOrdersTable({ isAdmin, orders: allOrders, pendingId, onStatusC
           {hasFilters && <button className="clear-filters" onClick={clearFilters} type="button">Limpiar filtros</button>}
         </div>
         <div className="toolbar-actions">
+          {!editing && <button className="primary-action" onClick={() => setCreatingOrder((current) => !current)} type="button">{creatingOrder ? "Cerrar nuevo pedido" : "+ Nuevo pedido"}</button>}
           <button aria-pressed={!showInfoColumns} className="outline-action" onClick={() => setShowInfoColumns((current) => !current)} type="button">{showInfoColumns ? "Ocultar datos" : "Mostrar datos"}</button>
           {editing ? <>
             {hiddenProducts.length > 0 && <label className="zone-filter"><span className="sr-only">Agregar columna de corte</span><select aria-label="Agregar columna de corte" onChange={(event) => { if (event.target.value) setExtraColumns((current) => [...current, event.target.value]); }} value=""><option value="">+ Agregar corte</option>{hiddenProducts.map((product) => <option key={product.name} value={product.name}>{product.name}</option>)}</select></label>}
@@ -418,12 +473,21 @@ function WholesaleOrdersTable({ isAdmin, orders: allOrders, pendingId, onStatusC
           <button className="outline-action" onClick={() => void downloadWholesaleOrders(visibleOrders, visibleProducts)} type="button"><Icon name="download" /> Excel</button>
         </div>
       </div>
+      {creatingOrder && <ManualWholesaleOrderForm onClose={() => setCreatingOrder(false)} orders={allOrders} />}
       {editNotice && <div className="table-edit-notice" role="status">{editNotice}</div>}
-      <div className="matrix-scroll">
+      <div className="matrix-scroll-shell">
+        <p className="matrix-scroll-hint">Desplázate arriba o abajo para recorrer pedidos y hacia los lados para ver todos los cortes.</p>
+        <div aria-label="Controles de desplazamiento de la planilla" className="matrix-scroll-controls">
+          <button aria-label="Subir en la planilla" onClick={() => scrollMatrix(0, -320)} type="button">↑</button>
+          <button aria-label="Bajar en la planilla" onClick={() => scrollMatrix(0, 320)} type="button">↓</button>
+          <button aria-label="Mover la planilla a la izquierda" onClick={() => scrollMatrix(-520, 0)} type="button">←</button>
+          <button aria-label="Mover la planilla a la derecha" onClick={() => scrollMatrix(520, 0)} type="button">→</button>
+        </div>
+      <div aria-label="Planilla desplazable de pedidos mayoristas" className="matrix-scroll" ref={matrixScrollRef} tabIndex={0}>
         <table className={`order-matrix wholesale-matrix ${showInfoColumns ? "with-order-info" : "without-order-info"}`}>
           <thead>
             <tr className="category-row"><th colSpan={showInfoColumns ? 5 : 1}>Pedido recibido</th>{categories.map((category, index) => <th colSpan={category.count} key={`${category.name}-${index}`}>{category.name}</th>)}</tr>
-            <tr><th>Cliente</th>{showInfoColumns && <><th>Teléfono</th><th>Zona</th><th>Facturación</th><th>Comentario</th></>}{visibleProducts.map((product) => <th key={product.name} title={product.name === "Blanda" ? "C = Capón · L = Lomo · T = Tetafula · B = Calavera" : undefined}>{product.name}<small className="unit-label">{product.name === "Blanda" ? "kg · C/L/T/B" : wholesaleUnitFor(product.name)}</small></th>)}</tr>
+            <tr><th>Cliente</th>{showInfoColumns && <><th>Teléfono</th><th>Ruta</th><th>Facturación</th><th>Comentario</th></>}{visibleProducts.map((product) => <th key={product.name} title={product.name === "Blanda" ? "C = Capón · L = Lomo · T = Tetafula · B = Calavera" : undefined}>{product.name}<small className="unit-label">{product.name === "Blanda" ? "kg · C/L/T/B" : wholesaleUnitFor(product.name)}</small></th>)}</tr>
           </thead>
           <tbody>
             {visibleOrders.map((order) => <tr className={isClosed(order) ? "is-dispatched" : undefined} key={order.id}>
@@ -437,7 +501,7 @@ function WholesaleOrdersTable({ isAdmin, orders: allOrders, pendingId, onStatusC
                   </>}</div></div></th>
               {showInfoColumns && <>
                 <td>{order.phone}</td>
-                <td>{order.route}</td>
+                <td className={editing ? "matrix-route-cell is-editing" : "matrix-route-cell"}>{editing ? <select aria-label={`Ruta de ${order.businessName ?? order.customer}`} onChange={(event) => setDraftRows((current) => ({ ...current, [order.id]: { ...current[order.id], routeName: event.target.value } }))} value={draftRows[order.id]?.routeName ?? order.route}>{![...wholesaleRoutes, unassignedWholesaleRoute].includes(order.route as (typeof wholesaleRoutes)[number] | typeof unassignedWholesaleRoute) && <option value={order.route}>{order.route}</option>}<option value={unassignedWholesaleRoute}>Sin clasificar</option>{wholesaleRoutes.map((route) => <option key={route} value={route}>{wholesaleRouteLabel(route)}</option>)}</select> : wholesaleRouteLabel(order.route)}</td>
                 <td>{order.formData?.billing || "—"}</td>
                 <td className="matrix-comment-cell">{editing ? <textarea aria-label={`Comentario para ${order.orderNumber}`} onChange={(event) => updateDraft(order.id, "notes", event.target.value)} placeholder="Añade un comentario" rows={2} value={draftRows[order.id]?.notes ?? ""} /> : order.notes || "—"}</td>
               </>}
@@ -453,6 +517,7 @@ function WholesaleOrdersTable({ isAdmin, orders: allOrders, pendingId, onStatusC
           </tbody>
           {visibleOrders.length > 0 && visibleProducts.length > 0 && <tfoot><tr><th scope="row">{showInfoColumns ? "Total" : `Total · ${visibleSummary}`}</th>{showInfoColumns && <td colSpan={4}>{visibleSummary}</td>}{totals.map((total, index) => <td key={visibleProducts[index].name}>{total || "—"}</td>)}</tr></tfoot>}
         </table>
+      </div>
       </div>
     </section></>
   );

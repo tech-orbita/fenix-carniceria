@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { syncWholesalePipeline } from "@/lib/orders/highlevel-pipeline";
 import { normalizeWholesaleHelpPayload } from "@/lib/orders/wholesale-help-payload";
+import { customerIdentityKey } from "@/lib/orders/wholesale-routes";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 const openStatuses = ["needs_review", "received", "quoted", "confirmed", "preparing", "ready", "incident"];
@@ -23,6 +24,11 @@ export async function flagWholesaleHelpRequest(value: unknown) {
   const body = normalized.data;
   const supabase = createAdminClient();
   const sourceReference = body.sourceEventId ? `ghl:wholesale-help:${body.sourceEventId}` : null;
+  const identityKey = customerIdentityKey("wholesale", {
+    businessName: body.customer.businessName,
+    name: body.customer.name,
+    phone: body.customer.phone,
+  });
 
   if (sourceReference) {
     const { data: duplicate, error: duplicateError } = await supabase
@@ -39,7 +45,7 @@ export async function flagWholesaleHelpRequest(value: unknown) {
     .from("customers")
     .select("id,name,business_name,address,neighborhood,city,route_id")
     .eq("customer_type", "wholesale")
-    .eq("phone", body.customer.phone)
+    .eq("identity_key", identityKey)
     .maybeSingle();
   if (lookupError) return NextResponse.json({ error: "Could not find wholesale customer" }, { status: 500 });
 
@@ -52,7 +58,7 @@ export async function flagWholesaleHelpRequest(value: unknown) {
   };
   const customerResult = existingCustomer
     ? await supabase.from("customers").update(customerValues).eq("id", existingCustomer.id).select("id,name,business_name,address,route_id").single()
-    : await supabase.from("customers").insert({ customer_type: "wholesale", phone: body.customer.phone, ...customerValues }).select("id,name,business_name,address,route_id").single();
+    : await supabase.from("customers").insert({ customer_type: "wholesale", identity_key: identityKey, phone: body.customer.phone, ...customerValues }).select("id,name,business_name,address,route_id").single();
   if (customerResult.error || !customerResult.data) return NextResponse.json({ error: "Could not save wholesale customer" }, { status: 500 });
   const customer = customerResult.data;
 

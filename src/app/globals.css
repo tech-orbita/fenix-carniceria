@@ -1176,7 +1176,8 @@ a {
 }
 
 .matrix-comment-cell textarea,
-.matrix-quantity-cell input {
+.matrix-quantity-cell input,
+.matrix-route-cell select {
   width: 100%;
   border: 1px solid #b9c9df;
   border-radius: 7px;
@@ -1195,6 +1196,112 @@ a {
   min-width: 5rem;
   padding: 7px 6px;
   text-align: center;
+}
+
+.matrix-route-cell select {
+  min-width: 9rem;
+  padding: 7px 28px 7px 7px;
+}
+
+.matrix-route-cell.is-editing {
+  padding: 6px;
+}
+
+.manual-order-form {
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  padding: 18px 24px;
+  background: #f8fbff;
+}
+
+.manual-order-heading,
+.manual-order-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.manual-order-heading {
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.manual-order-heading > div {
+  display: grid;
+  gap: 3px;
+}
+
+.manual-order-heading strong {
+  font-size: 15px;
+}
+
+.manual-order-heading small {
+  color: var(--subtle);
+}
+
+.manual-order-heading > button {
+  border: 0;
+  background: transparent;
+  color: var(--subtle);
+  cursor: pointer;
+  font-size: 24px;
+}
+
+.manual-order-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.manual-order-grid label {
+  display: grid;
+  gap: 6px;
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.manual-order-grid input,
+.manual-order-grid select,
+.manual-order-grid textarea {
+  width: 100%;
+  border: 1px solid #b9c9df;
+  border-radius: 8px;
+  padding: 9px 10px;
+  background: white;
+  color: var(--ink);
+  font: inherit;
+  font-weight: 500;
+}
+
+.manual-order-grid textarea {
+  resize: vertical;
+}
+
+.manual-order-wide {
+  grid-column: span 2;
+}
+
+.manual-order-actions {
+  justify-content: flex-end;
+  margin-top: 14px;
+}
+
+.manual-order-actions span {
+  margin-right: auto;
+  color: #174f8f;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+@media (max-width: 900px) {
+  .manual-order-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .manual-order-wide {
+    grid-column: auto;
+  }
 }
 
 .matrix-quantity-cell.is-editing {
@@ -3404,6 +3511,195 @@ a {
 .orders-app .dashboard-content:has(.rt-panel) {
   overflow-y: auto;
   scrollbar-gutter: stable;
+}
+
+/* Planilla mayorista adaptable: mantiene encabezados y cliente visibles, y
+   ofrece desplazamiento claro en portátiles, pantallas pequeñas e iframes. */
+.orders-app .matrix-scroll-shell {
+  position: relative;
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.orders-app .matrix-scroll-shell .matrix-scroll {
+  min-height: 260px;
+  height: 100%;
+  flex: 1 1 auto;
+  overflow: scroll;
+  overscroll-behavior: contain;
+  scrollbar-color: #7f94b2 #e8eef6;
+  scrollbar-gutter: stable both-edges;
+  scrollbar-width: auto;
+}
+
+.orders-app .matrix-scroll-shell .matrix-scroll::-webkit-scrollbar {
+  width: 14px;
+  height: 14px;
+}
+
+.orders-app .matrix-scroll-shell .matrix-scroll::-webkit-scrollbar-track {
+  background: #e8eef6;
+}
+
+.orders-app .matrix-scroll-shell .matrix-scroll::-webkit-scrollbar-thumb {
+  border: 3px solid #e8eef6;
+  border-radius: 999px;
+  background: #7f94b2;
+}
+
+.orders-app .matrix-scroll-shell .wholesale-matrix {
+  width: max-content;
+  min-width: 100%;
+}
+
+.orders-app .matrix-scroll-hint {
+  display: none;
+  flex: 0 0 auto;
+  margin: 0;
+  border-top: 1px solid var(--line);
+  padding: 6px 12px;
+  background: #f4f8fd;
+  color: var(--subtle);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.orders-app .matrix-scroll-controls {
+  position: absolute;
+  z-index: 20;
+  right: 20px;
+  bottom: 20px;
+  display: grid;
+  grid-template-columns: repeat(2, 34px);
+  gap: 4px;
+  border: 1px solid #c7d4e4;
+  border-radius: 10px;
+  padding: 5px;
+  background: rgb(255 255 255 / 92%);
+  box-shadow: 0 5px 18px rgb(20 51 88 / 18%);
+  backdrop-filter: blur(6px);
+}
+
+.orders-app .matrix-scroll-controls button {
+  display: grid;
+  width: 34px;
+  height: 32px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: white;
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 17px;
+  font-weight: 900;
+}
+
+.orders-app .matrix-scroll-controls button:hover,
+.orders-app .matrix-scroll-controls button:focus-visible {
+  border-color: var(--wine);
+  background: #edf5ff;
+  color: var(--wine-dark);
+}
+
+@media (max-width: 1366px), (max-height: 760px) {
+  .orders-app .dashboard-content {
+    height: 100dvh;
+    padding: 8px 10px;
+  }
+
+  .orders-app .operation-notice,
+  .orders-app .wholesale-workspace {
+    margin-top: 7px;
+  }
+
+  .orders-app .wholesale-workspace .section-toolbar {
+    gap: 8px;
+    padding: 7px 9px;
+  }
+
+  .orders-app .matrix-scroll-hint {
+    display: block;
+  }
+
+  .orders-app .wholesale-matrix th,
+  .orders-app .wholesale-matrix td {
+    min-width: 72px;
+    padding: 7px 8px;
+  }
+
+  .orders-app .wholesale-matrix,
+  .orders-app .wholesale-matrix tbody th strong {
+    font-size: 12px;
+  }
+
+  .orders-app .wholesale-matrix thead th,
+  .orders-app .wholesale-matrix tbody th small {
+    font-size: 10px;
+  }
+
+  .orders-app .wholesale-matrix th:first-child {
+    width: 180px;
+    min-width: 180px;
+    max-width: 180px;
+  }
+
+  .orders-app .wholesale-matrix.with-order-info th:nth-child(2),
+  .orders-app .wholesale-matrix.with-order-info td:nth-child(2) {
+    width: 110px;
+    min-width: 110px;
+  }
+
+  .orders-app .wholesale-matrix.with-order-info th:nth-child(3),
+  .orders-app .wholesale-matrix.with-order-info td:nth-child(3) {
+    width: 110px;
+    min-width: 110px;
+  }
+
+  .orders-app .wholesale-matrix.with-order-info th:nth-child(4),
+  .orders-app .wholesale-matrix.with-order-info td:nth-child(4) {
+    width: 98px;
+    min-width: 98px;
+  }
+
+  .orders-app .wholesale-matrix.with-order-info th:nth-child(5),
+  .orders-app .wholesale-matrix.with-order-info td:nth-child(5) {
+    width: 130px;
+    min-width: 130px;
+  }
+}
+
+@media (max-width: 900px) {
+  .orders-app .dashboard-content {
+    height: 100dvh;
+    min-height: 540px;
+    overflow: hidden;
+  }
+
+  .orders-app .dashboard-topbar,
+  .orders-app .session-bar,
+  .orders-app .wholesale-workspace .section-toolbar,
+  .orders-app .wholesale-workspace .toolbar-actions {
+    flex-wrap: wrap;
+  }
+
+  .orders-app .wholesale-workspace .matrix-scroll {
+    max-height: none;
+  }
+
+  .orders-app .matrix-scroll-controls {
+    right: 16px;
+    bottom: 18px;
+  }
+}
+
+@media print {
+  .orders-app .matrix-scroll-hint,
+  .orders-app .matrix-scroll-controls {
+    display: none;
+  }
 }
 
 .orders-app .rt-kicker {

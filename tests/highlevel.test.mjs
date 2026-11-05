@@ -41,6 +41,14 @@ test("nuevo: usa el nombre completo si GHL no llena Company Name", () => {
   assert.equal(order.customer.business_name, "Ana");
 });
 
+test("cliente: reconoce la nueva etiqueta del establecimiento", () => {
+  const order = mapHighLevelForm({
+    ...base,
+    "Nombre del establecimiento comercial": "Mercado Central",
+  }, "mayorista-cliente");
+  assert.equal(order.customer.business_name, "Mercado Central");
+});
+
 test("clasifica el catálogo mayorista y conserva indicadores de blanda", () => {
   const order = mapHighLevelForm({
     ...base,

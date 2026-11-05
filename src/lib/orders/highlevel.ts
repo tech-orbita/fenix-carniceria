@@ -85,6 +85,7 @@ export function mapHighLevelForm(value: unknown, form: WholesaleForm) {
   const name = get("full_name", "Nombre Completo", "customer_name", "contact.name", "name") ?? [get("first_name", "contact.first_name"), get("last_name", "contact.last_name")].filter(Boolean).join(" ");
   const businessKeys = [
     "business_name", "Business_name", "Nombre del Negocio", "nombre_del_negocio",
+    "Nombre del establecimiento comercial",
     "contact.nombre_del_negocio", "company_name", "contact.company_name", "companyName",
   ];
   const hasExplicitBusinessField = businessKeys.some((key) => fields.has(normalize(key)));

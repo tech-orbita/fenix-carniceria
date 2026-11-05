@@ -95,6 +95,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
         const sourcePayload = row.source_payload && typeof row.source_payload === "object" ? row.source_payload : {};
         const formData = sourcePayload.form_data && typeof sourcePayload.form_data === "object" ? sourcePayload.form_data : undefined;
+        const submittedCustomer = objectValue(sourcePayload.customer);
+        const submittedName = typeof submittedCustomer?.name === "string" && submittedCustomer.name.trim() ? submittedCustomer.name.trim() : undefined;
+        const submittedBusiness = typeof submittedCustomer?.business_name === "string" && submittedCustomer.business_name.trim() ? submittedCustomer.business_name.trim() : undefined;
+        const submittedPhone = typeof submittedCustomer?.phone === "string" && submittedCustomer.phone.trim() ? submittedCustomer.phone.trim() : undefined;
+        const submittedAddress = cleanAddress(submittedCustomer?.address);
         const storedItems = (row.order_items ?? []).map((item) => ({
           id: String(item.id),
           productName: item.product_name,
@@ -139,13 +144,13 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           id: String(row.id),
           orderNumber: row.order_number,
           customerType: row.customer_type,
-          customer: customer?.name ?? "Cliente sin nombre",
-          businessName: customer?.business_name ?? undefined,
-          phone: customer?.phone ?? "Sin teléfono",
+          customer: submittedName ?? customer?.name ?? "Cliente sin nombre",
+          businessName: submittedBusiness ?? customer?.business_name ?? undefined,
+          phone: submittedPhone ?? customer?.phone ?? "Sin teléfono",
           receivedAt: row.received_at,
           deliveryDate: row.requested_delivery_at?.slice(0, 10) ?? "Sin fecha",
           fulfillment: row.fulfillment_type,
-          address: addresses.contact ?? storedAddress ?? "Sin dirección",
+          address: submittedAddress ?? addresses.contact ?? storedAddress ?? "Sin dirección",
           route: route?.name ?? "Sin clasificar",
           source: row.source,
           paymentMethod: canSeeWallet ? row.payment_method ?? undefined : undefined,

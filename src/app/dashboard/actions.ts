@@ -4,9 +4,10 @@ import { revalidatePath } from "next/cache";
 
 import { requireViewer } from "@/lib/auth/viewer";
 import { createClient } from "@/lib/supabase/server";
-import { catalogProductFor, normalizeProductName, toKilograms, wholesaleUnitFor } from "@/lib/orders/product-parser";
+import { catalogProductFor, normalizeProductName, parseOrderText, toKilograms, wholesaleUnitFor } from "@/lib/orders/product-parser";
 import { retailBillMessage, retailDispatchMessage } from "@/lib/orders/retail-bill";
 import { sendHighLevelMessage, sendWholesalePaymentSummary, syncHighLevelOrderFields, syncOrderPipeline, syncWholesalePipeline } from "@/lib/orders/highlevel-pipeline";
+import { customerIdentityKey, unassignedWholesaleRoute, wholesaleRoutes } from "@/lib/orders/wholesale-routes";
 import type { HighLevelContext, OrderPipelineStage } from "@/lib/orders/highlevel-pipeline";
 
 import type { OrderStatus } from "./types";
@@ -238,6 +239,98 @@ export async function scheduleWholesaleOrder(orderId: string, deliveryDay: strin
   return { ok: true, message: "Pedido autorizado para despacho hoy." };
 }
 
+type ManualWholesaleOrderInput = {
+  businessName: string;
+  customerName: string;
+  phone: string;
+  address: string;
+  routeName: string;
+  orderText: string;
+  notes: string;
+};
+
+export async function createManualWholesaleOrder(input: ManualWholesaleOrderInput) {
+  const businessName = input.businessName?.trim();
+  const submittedCustomerName = input.customerName?.trim();
+  const phone = input.phone?.trim() || null;
+  const address = input.address?.trim() || null;
+  const routeName = input.routeName?.trim() || unassignedWholesaleRoute;
+  const orderText = input.orderText?.trim();
+  const notes = input.notes?.trim() || null;
+
+  if (
+    !businessName || businessName.length > 160 || (submittedCustomerName?.length ?? 0) > 160 ||
+    (phone?.length ?? 0) > 40 || (address?.length ?? 0) > 500 ||
+    !orderText || orderText.length > 5_000 || (notes?.length ?? 0) > 2_000 ||
+    ![...wholesaleRoutes, unassignedWholesaleRoute].includes(routeName as (typeof wholesaleRoutes)[number] | typeof unassignedWholesaleRoute)
+  ) {
+    return { ok: false as const, message: "Revisa el establecimiento, la ruta y el pedido." };
+  }
+
+  const items = parseOrderText(orderText);
+  if (!items.length) {
+    return { ok: false as const, message: "No pude reconocer cantidades en el pedido. Usa formatos como “5 kg de costilla”." };
+  }
+
+  const supabase = await sessionClient();
+  const identityKey = customerIdentityKey("wholesale", { businessName, name: submittedCustomerName || businessName, phone: phone ?? undefined });
+  const [{ data: route, error: routeError }, { data: existingCustomer }] = await Promise.all([
+    supabase.from("routes").select("id").eq("name", routeName).maybeSingle(),
+    supabase.from("customers").select("name,phone,address,city,route_id").eq("customer_type", "wholesale").eq("identity_key", identityKey).maybeSingle(),
+  ]);
+  if (routeError || !route) return { ok: false as const, message: "La ruta seleccionada no está disponible." };
+  const customerName = submittedCustomerName || existingCustomer?.name || businessName;
+  const routeId = routeName === unassignedWholesaleRoute && existingCustomer?.route_id ? existingCustomer.route_id : route.id;
+
+  const { data: customer, error: customerError } = await supabase.from("customers").upsert({
+    customer_type: "wholesale",
+    identity_key: identityKey,
+    name: customerName,
+    business_name: businessName,
+    phone: phone ?? existingCustomer?.phone ?? null,
+    address: address ?? existingCustomer?.address ?? null,
+    city: existingCustomer?.city || "Barranquilla",
+    route_id: routeId,
+  }, { onConflict: "customer_type,identity_key" }).select("id").single();
+  if (customerError || !customer) return { ok: false as const, message: "No se pudo guardar el establecimiento." };
+
+  const sourcePayload = {
+    customer: { name: customerName, business_name: businessName, phone, address },
+    manual_entry: { order_text: orderText },
+  };
+  const { data: order, error: orderError } = await supabase.from("orders").insert({
+    customer_type: "wholesale",
+    customer_id: customer.id,
+    route_id: routeId,
+    source: "manual",
+    source_payload: sourcePayload,
+    status: "received",
+    fulfillment_type: "delivery",
+    delivery_address: address,
+    subtotal: 0,
+    notes,
+  }).select("id,order_number").single();
+  if (orderError || !order) return { ok: false as const, message: "No se pudo crear el pedido." };
+
+  const { error: itemsError } = await supabase.from("order_items").insert(items.map((item, index) => ({
+    order_id: order.id,
+    product_name: item.product_name,
+    quantity: item.quantity,
+    unit: item.unit,
+    preparation: item.preparation ?? null,
+    unit_price: 0,
+    sort_order: index,
+  })));
+  if (itemsError) {
+    await supabase.from("orders").delete().eq("id", order.id);
+    return { ok: false as const, message: "No se pudieron guardar los productos del pedido." };
+  }
+
+  revalidatePath("/");
+  revalidatePath("/dashboard");
+  return { ok: true as const, message: `${order.order_number} fue creado para ${businessName}.` };
+}
+
 export async function updateWholesalePayment(
   orderId: string,
   total: number,
@@ -336,7 +429,7 @@ export async function updateOrderDetails(
   const supabase = await sessionClient();
   const { data: order, error: lookupError } = await supabase
     .from("orders")
-    .select("customer_id")
+    .select("customer_id,customer_type")
     .eq("id", Number(orderId))
     .single();
 
@@ -347,7 +440,12 @@ export async function updateOrderDetails(
   const [customerResult, orderResult, ...itemResults] = await Promise.all([
     supabase
       .from("customers")
-      .update({ name: customer, phone, address })
+      .update({
+        name: customer,
+        phone,
+        address,
+        ...(order.customer_type === "retail" ? { identity_key: customerIdentityKey("retail", { name: customer, phone }) } : {}),
+      })
       .eq("id", Number(order.customer_id)),
     supabase
       .from("orders")
@@ -382,6 +480,7 @@ export async function updateOrderDetails(
 
 type WholesaleTableRowInput = {
   orderId: string;
+  routeName: string;
   notes: string;
   quantities: Array<{ productName: string; value: string }>;
 };
@@ -446,6 +545,9 @@ export async function updateWholesaleTable(rows: WholesaleTableRowInput[]) {
   for (const row of rows) {
     if (
       !/^\d+$/.test(row.orderId) ||
+      typeof row.routeName !== "string" ||
+      !row.routeName.trim() ||
+      row.routeName.length > 120 ||
       typeof row.notes !== "string" ||
       row.notes.length > 2_000 ||
       !Array.isArray(row.quantities) ||
@@ -464,7 +566,7 @@ export async function updateWholesaleTable(rows: WholesaleTableRowInput[]) {
     const orderId = Number(row.orderId);
     const { data: order, error: orderError } = await supabase
       .from("orders")
-      .select("id")
+      .select("id,customer_id")
       .eq("id", orderId)
       .eq("customer_type", "wholesale")
       .maybeSingle();
@@ -478,12 +580,15 @@ export async function updateWholesaleTable(rows: WholesaleTableRowInput[]) {
 
     if (lookupError) return { ok: false, message: "No se pudo consultar el pedido para editarlo." };
 
-    const { error: noteError } = await supabase
-      .from("orders")
-      .update({ notes: row.notes.trim() || null })
-      .eq("id", orderId);
+    const { data: route, error: routeError } = await supabase.from("routes").select("id").eq("name", row.routeName.trim()).maybeSingle();
+    if (routeError || !route) return { ok: false, message: "Selecciona una ruta válida para cada cliente." };
 
-    if (noteError) return { ok: false, message: "No se pudo guardar el comentario." };
+    const [orderUpdate, customerUpdate] = await Promise.all([
+      supabase.from("orders").update({ notes: row.notes.trim() || null, route_id: route.id }).eq("id", orderId),
+      supabase.from("customers").update({ route_id: route.id }).eq("id", order.customer_id).eq("customer_type", "wholesale"),
+    ]);
+
+    if (orderUpdate.error || customerUpdate.error) return { ok: false, message: "No se pudo guardar la ruta o el comentario." };
 
     for (const entry of row.quantities) {
       const matching = (existingItems ?? []).filter((item) => sameProduct(item, entry.productName));
@@ -520,5 +625,5 @@ export async function updateWholesaleTable(rows: WholesaleTableRowInput[]) {
 
   revalidatePath("/");
   revalidatePath("/dashboard");
-  return { ok: true, message: "La tabla y los comentarios fueron actualizados." };
+  return { ok: true, message: "La tabla, las rutas y los comentarios fueron actualizados." };
 }
