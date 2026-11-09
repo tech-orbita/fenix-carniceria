@@ -10,7 +10,7 @@ import type { WholesaleProduct } from "@/lib/orders/product-parser";
 import { wholesaleServiceDay } from "@/lib/orders/wholesale-service-day";
 import { unassignedWholesaleRoute, wholesaleRouteLabel, wholesaleRoutes } from "@/lib/orders/wholesale-routes";
 
-import { createManualWholesaleOrder, resolveOrderHelp, scheduleWholesaleOrder, sendRetailPaymentSummary, updateOrderDetails, updateOrderPaymentStatus, updateOrderStatus, updateWholesalePayment, updateWholesaleTable } from "./actions";
+import { createManualWholesaleOrder, findWholesaleCustomer, resolveOrderHelp, scheduleWholesaleOrder, sendRetailPaymentSummary, updateOrderDetails, updateOrderPaymentStatus, updateOrderStatus, updateWholesalePayment, updateWholesaleTable } from "./actions";
 import { addDays, bogotaDay, dateTime, dayLabel, Icon, phaseLabels, phaseStatus } from "./panel-shared";
 import type { OperationalPhase } from "./panel-shared";
 import { RetailPanel } from "./retail-panel";
@@ -246,9 +246,16 @@ function ManualWholesaleOrderForm({ orders, onClose }: { orders: Order[]; onClos
   const router = useRouter();
   const [draft, setDraft] = useState(emptyManualOrder);
   const [saving, setSaving] = useState(false);
+  const [lookingUpCustomer, setLookingUpCustomer] = useState(false);
+  const [customerMatch, setCustomerMatch] = useState<string>();
   const [notice, setNotice] = useState<string>();
   const businesses = [...new Set(orders.map((order) => order.businessName ?? order.customer).filter(Boolean))].sort((a, b) => a.localeCompare(b, "es"));
   const update = (field: keyof typeof emptyManualOrder, value: string) => setDraft((current) => ({ ...current, [field]: value }));
+  const updateBusinessName = (value: string) => {
+    setCustomerMatch(undefined);
+    setLookingUpCustomer(value.trim().length >= 2);
+    update("businessName", value);
+  };
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape" && !saving) onClose();
@@ -256,6 +263,25 @@ function ManualWholesaleOrderForm({ orders, onClose }: { orders: Order[]; onClos
     window.addEventListener("keydown", closeOnEscape);
     return () => window.removeEventListener("keydown", closeOnEscape);
   }, [onClose, saving]);
+  useEffect(() => {
+    const businessName = draft.businessName.trim();
+    if (businessName.length < 2) return;
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      const result = await findWholesaleCustomer(businessName);
+      if (cancelled) return;
+      setLookingUpCustomer(false);
+      if (!result.ok || !result.found) return;
+      setDraft((current) => current.businessName.trim().toLocaleLowerCase("es") === businessName.toLocaleLowerCase("es")
+        ? { ...current, ...result.customer }
+        : current);
+      setCustomerMatch(`Datos cargados de ${result.customer.businessName}.`);
+    }, 400);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [draft.businessName]);
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setSaving(true);
@@ -273,7 +299,7 @@ function ManualWholesaleOrderForm({ orders, onClose }: { orders: Order[]; onClos
     <form aria-labelledby="manual-order-title" aria-modal="true" className="manual-order-form" onSubmit={(event) => void submit(event)} role="dialog">
       <div className="manual-order-heading"><div><strong id="manual-order-title">Nuevo pedido mayorista</strong><small>Regístralo directamente sin usar el formulario de Orbita.</small></div><button aria-label="Cerrar nuevo pedido" disabled={saving} onClick={onClose} type="button">×</button></div>
       <div className="manual-order-grid">
-        <label>Establecimiento<input autoFocus list="wholesale-businesses" onChange={(event) => update("businessName", event.target.value)} placeholder="Nombre del negocio" required value={draft.businessName} /></label>
+        <label>Establecimiento<input autoComplete="off" autoFocus list="wholesale-businesses" onChange={(event) => updateBusinessName(event.target.value)} placeholder="Nombre del negocio" required value={draft.businessName} /><small aria-live="polite">{lookingUpCustomer ? "Buscando cliente…" : customerMatch}</small></label>
         <datalist id="wholesale-businesses">{businesses.map((business) => <option key={business} value={business} />)}</datalist>
         <label>Persona que solicita<input onChange={(event) => update("customerName", event.target.value)} placeholder="Opcional" value={draft.customerName} /></label>
         <label>Teléfono<input onChange={(event) => update("phone", event.target.value)} placeholder="Opcional" type="tel" value={draft.phone} /></label>

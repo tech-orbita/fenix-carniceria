@@ -249,6 +249,39 @@ type ManualWholesaleOrderInput = {
   notes: string;
 };
 
+export async function findWholesaleCustomer(businessNameInput: string) {
+  const businessName = businessNameInput?.trim();
+  if (!businessName || businessName.length > 160) {
+    return { ok: false as const, found: false as const, message: "Escribe un establecimiento válido." };
+  }
+
+  const supabase = await sessionClient();
+  const identityKey = customerIdentityKey("wholesale", { businessName, name: businessName });
+  const { data, error } = await supabase
+    .from("customers")
+    .select("name,business_name,phone,address,routes(name)")
+    .eq("customer_type", "wholesale")
+    .eq("identity_key", identityKey)
+    .maybeSingle();
+
+  if (error) return { ok: false as const, found: false as const, message: "No se pudo consultar el establecimiento." };
+  if (!data) return { ok: true as const, found: false as const };
+
+  const linkedRoute = Array.isArray(data.routes) ? data.routes[0] : data.routes;
+  const routeName = linkedRoute?.name ?? "";
+  return {
+    ok: true as const,
+    found: true as const,
+    customer: {
+      businessName: data.business_name || businessName,
+      customerName: data.name || "",
+      phone: data.phone || "",
+      address: data.address || "",
+      routeName: wholesaleRoutes.includes(routeName as (typeof wholesaleRoutes)[number]) ? routeName : "",
+    },
+  };
+}
+
 export async function createManualWholesaleOrder(input: ManualWholesaleOrderInput) {
   const businessName = input.businessName?.trim();
   const submittedCustomerName = input.customerName?.trim();
