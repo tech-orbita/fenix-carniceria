@@ -30,6 +30,10 @@ test("nuevo: mapea campos personalizados y datos de entrega", () => {
   assert.equal(order.form_data.billing, "Electrónica");
   assert.equal(order.source_reference, "ghl:nuevo-mayorista:envio-1");
 });
+test("ignora zona del formulario para que el pedido llegue sin clasificar", () => {
+  const order = mapHighLevelForm({ ...base, Zona: "Norte", zone: "Centro" }, "mayorista-cliente");
+  assert.equal("route" in order, false);
+});
 test("rechaza payload incompleto y variables sin sustituir", () => {
   assert.throws(() => mapHighLevelForm({}, "mayorista-cliente"));
   assert.throws(() => mapHighLevelForm({ ...base, "Teléfono": "{{contact.phone}}" }, "mayorista-cliente"));
@@ -166,20 +170,20 @@ test("prioriza la dirección del contacto sobre la dirección de la sede", () =>
   assert.equal(order.customer.address, "Carrera 20 # 10-15");
 });
 
-test("guarda la zona registrada en el formulario aunque GHL envíe el nombre completo del campo", () => {
+test("ignora la zona aunque GHL envíe el nombre completo del campo", () => {
   const order = mapHighLevelForm({
     ...base,
     "Contact.Custom Fields.Zona": "Barranquilla Norte",
   }, "nuevo-mayorista");
-  assert.equal(order.route, "Barranquilla Norte");
+  assert.equal("route" in order, false);
 });
 
-test("conserva una opción nueva de zona para que el panel la pueda registrar", () => {
+test("no usa opciones nuevas de zona enviadas por el formulario", () => {
   const order = mapHighLevelForm({
     ...base,
     Zona: "Suroccidente especial",
   }, "nuevo-mayorista");
-  assert.equal(order.route, "Suroccidente especial");
+  assert.equal("route" in order, false);
 });
 
 test("acepta el comprobante de pago cuando HighLevel lo envía como lista de archivos", () => {

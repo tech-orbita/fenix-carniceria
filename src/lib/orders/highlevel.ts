@@ -4,23 +4,6 @@ export type WholesaleForm = "mayorista-cliente" | "nuevo-mayorista";
 
 const normalize = (key: string) => key.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
 
-function canonicalZone(value?: string) {
-  if (!value) return undefined;
-  const normalized = normalize(value);
-  // Solo normalizamos equivalencias exactas conocidas. Las opciones del formulario
-  // pueden cambiar y sus etiquetas deben llegar intactas al panel (por ejemplo,
-  // "Barranquilla Norte" o una zona nueva), sin reducirlas por coincidencias parciales.
-  const zones: Array<[string, string]> = [
-    ["soledad", "Soledad"],
-    ["centro", "Centro"],
-    ["norte", "Norte"],
-    ["sur", "Sur"],
-    ["galapa", "Galapa"],
-    ["sinclasificar", "Sin clasificar"],
-  ];
-  return zones.find(([key]) => normalized === key)?.[1] ?? value.trim().slice(0, 80);
-}
-
 export function mapHighLevelForm(value: unknown, form: WholesaleForm) {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("El webhook debe contener un objeto JSON");
   const payload = value as Record<string, unknown>;
@@ -97,18 +80,6 @@ export function mapHighLevelForm(value: unknown, form: WholesaleForm) {
   const phone = get("phone", "Teléfono", "contact.phone");
   const text = get("order_text", "Coloca tu Pedido", "coloca_tu_pedido", "Pedido", "pedido_mayorista");
   const fulfillment = get("fulfillment_type", "¿Es a Domicilio o Recoges en Tienda?", "es_a_domicilio_o_recoges_en_tienda", "Domicilio o Tienda", "Tipo de entrega");
-  const zone = canonicalZone(get(
-    "zone",
-    "Zona",
-    "contact.zone",
-    "contact.zona",
-    "customData.zone",
-    "customData.Zona",
-    "customFields.zone",
-    "customFields.Zona",
-    "Contact.Custom Fields.Zone",
-    "Contact.Custom Fields.Zona",
-  ));
   if (!phone || !(name || business) || !text) throw new Error("Faltan nombre o negocio, teléfono o Coloca tu Pedido");
   const fulfillmentValue = fulfillment?.toLowerCase() ?? "";
   const pickup = /pickup|tienda|recog/.test(fulfillmentValue);
@@ -143,7 +114,6 @@ export function mapHighLevelForm(value: unknown, form: WholesaleForm) {
       address: customerAddress?.replace(/,\s*$/, ""),
     },
     fulfillment_type: pickup ? "pickup" as const : "delivery" as const,
-    route: zone,
     notes: [observations, clarification].filter(Boolean).join("\n") || undefined,
     items: parsedOrder.items,
     form_data: {
