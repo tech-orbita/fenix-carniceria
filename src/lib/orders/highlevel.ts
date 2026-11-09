@@ -80,7 +80,6 @@ export function mapHighLevelForm(value: unknown, form: WholesaleForm) {
       address: customerAddress?.replace(/,\s*$/, ""),
     },
     fulfillment_type: pickup ? "pickup" as const : "delivery" as const,
-    route: get("zone", "Zona"),
     notes: get("observations", "Observaciones Adicionales"),
     items: parseOrderText(text),
     form_data: {

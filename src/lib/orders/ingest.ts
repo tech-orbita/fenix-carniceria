@@ -97,7 +97,8 @@ export async function ingestOrder(body: IngestBody) {
     phone: body.customer.phone,
   });
   if (!identityKey) return NextResponse.json({ error: "Could not identify customer" }, { status: 422 });
-  const routeName = body.route?.trim() || "Sin clasificar";
+  const submittedRouteName = body.route?.trim();
+  const routeName = submittedRouteName || "Sin clasificar";
   const { data: route } = await supabase.from("routes").select("id").eq("name", routeName).maybeSingle();
   const { data: fallbackRoute } = route
     ? { data: null }
@@ -105,6 +106,12 @@ export async function ingestOrder(body: IngestBody) {
   const routeId = route?.id ?? fallbackRoute?.id ?? null;
 
   const { data: existingCustomer } = await supabase.from("customers").select("business_name,tax_id,email,address,neighborhood,city,route_id").eq("customer_type", body.customer_type).eq("identity_key", identityKey).maybeSingle();
+  // Los formularios mayoristas ya no definen la ruta. Cada pedido nuevo debe
+  // entrar a la bandeja como "Sin clasificar" para que el operador la asigne
+  // desde la tabla, incluso si el cliente conserva una ruta de pedidos previos.
+  const isUnroutedWholesaleForm = body.customer_type === "wholesale" && body.source === "form" && !submittedRouteName;
+  const customerRouteId = submittedRouteName ? routeId : existingCustomer?.route_id ?? routeId;
+  const orderRouteId = isUnroutedWholesaleForm ? routeId : customerRouteId;
 
   const { data: customer, error: customerError } = await supabase
     .from("customers")
@@ -119,7 +126,7 @@ export async function ingestOrder(body: IngestBody) {
       address: body.customer.address?.trim() || existingCustomer?.address || null,
       neighborhood: body.customer.neighborhood?.trim() || existingCustomer?.neighborhood || null,
       city: body.customer.city?.trim() || existingCustomer?.city || "Barranquilla",
-      route_id: body.route ? routeId : existingCustomer?.route_id ?? routeId,
+      route_id: customerRouteId,
     }, { onConflict: "customer_type,identity_key" })
     .select("id")
     .single();
@@ -138,7 +145,7 @@ export async function ingestOrder(body: IngestBody) {
     .insert({
       customer_type: body.customer_type,
       customer_id: customer.id,
-      route_id: body.route ? routeId : existingCustomer?.route_id ?? routeId,
+      route_id: orderRouteId,
       source: body.source,
       source_reference: body.source_reference ?? null,
       source_payload: body,

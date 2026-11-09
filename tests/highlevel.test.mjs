@@ -15,6 +15,10 @@ test("nuevo: mapea campos personalizados y datos de entrega", () => {
   assert.equal(order.form_data.billing, "Electrónica");
   assert.equal(order.source_reference, "ghl:nuevo-mayorista:envio-1");
 });
+test("ignora zona del formulario para que el pedido llegue sin clasificar", () => {
+  const order = mapHighLevelForm({ ...base, Zona: "Norte", zone: "Centro" }, "mayorista-cliente");
+  assert.equal("route" in order, false);
+});
 test("rechaza payload incompleto y variables sin sustituir", () => {
   assert.throws(() => mapHighLevelForm({}, "mayorista-cliente"));
   assert.throws(() => mapHighLevelForm({ ...base, "Teléfono": "{{contact.phone}}" }, "mayorista-cliente"));
