@@ -40,7 +40,7 @@ export default async function WholesaleCustomersPage() {
         {error ? <p className="users-notice is-error">No se pudieron cargar las inscripciones.</p> : (
           <div className="users-table-wrap">
             <table className="users-table customers-table">
-              <thead><tr><th>Negocio / contacto</th><th>Identificación</th><th>Contacto</th><th>Ubicación</th><th>Factura</th><th>HighLevel</th><th>Inscripción</th></tr></thead>
+              <thead><tr><th>Negocio / contacto</th><th>Identificación</th><th>Contacto</th><th>Ubicación</th><th>Factura</th><th>Orbita</th><th>Inscripción</th></tr></thead>
               <tbody>
                 {(customers ?? []).map((customer) => <tr key={customer.id}>
                   <td><strong>{customer.business_name}</strong><small>{customer.name}</small></td>

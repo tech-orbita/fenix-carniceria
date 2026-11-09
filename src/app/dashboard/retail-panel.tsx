@@ -297,8 +297,8 @@ function OrderDetail({ order, pending, logo, onMove, onPaymentChange, onResolveH
             <div className="rt-control-section">
               <span className="rt-control-label">Comunicación</span>
               <div className="rt-control-actions">
-                <a className="rt-button is-chat" href={`/api/highlevel/conversation/${encodeURIComponent(order.id)}`} rel="noreferrer" target="_blank"><Icon name="chat" /> Abrir conversación</a>
-                {canBill && <button className="rt-button is-bill" disabled={pending} onClick={() => onSendBill(order)} title="Envía el resumen directamente por la conversación de HighLevel" type="button"><Icon name="receipt" /> {pending ? "Enviando…" : "Enviar cobro"}</button>}
+                <a className="rt-button is-chat" href={`/api/conversation/${encodeURIComponent(order.id)}`} rel="noreferrer" target="_blank"><Icon name="chat" /> Abrir conversación</a>
+                {canBill && <button className="rt-button is-bill" disabled={pending} onClick={() => onSendBill(order)} title="Envía el resumen directamente por la conversación de Orbita" type="button"><Icon name="receipt" /> {pending ? "Enviando…" : "Enviar cobro"}</button>}
               </div>
             </div>
             <div className="rt-control-section is-order">

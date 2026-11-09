@@ -81,7 +81,7 @@ async function highLevelRequest<T>(path: string, token: string, init: RequestIni
     },
     cache: "no-store",
   });
-  if (!response.ok) throw new Error(`HighLevel respondió ${response.status}`);
+  if (!response.ok) throw new Error(`Orbita respondió ${response.status}`);
   return response.json() as Promise<T>;
 }
 
@@ -91,7 +91,7 @@ export async function syncWholesaleRegistrationToHighLevel(
 ) {
   const token = process.env.GHL_PRIVATE_INTEGRATION_TOKEN?.trim();
   const locationId = process.env.GHL_LOCATION_ID?.trim();
-  if (!token || !locationId) throw new Error("La integración de HighLevel no está configurada");
+  if (!token || !locationId) throw new Error("La integración de Orbita no está configurada");
 
   const customFields: Array<{ id: string; fieldValue: string }> = [];
   const taxIdField = process.env.GHL_TAX_ID_CUSTOM_FIELD_ID?.trim();
@@ -114,7 +114,7 @@ export async function syncWholesaleRegistrationToHighLevel(
     }),
   }, fetchImpl);
   const contactId = result.contact?.id;
-  if (!contactId) throw new Error("HighLevel no devolvió el identificador del contacto");
+  if (!contactId) throw new Error("Orbita no devolvió el identificador del contacto");
 
   const tag = process.env.GHL_WHOLESALE_CUSTOMER_TAG?.trim() || "cliente mayorista";
   await highLevelRequest(`/contacts/${encodeURIComponent(contactId)}/tags`, token, {

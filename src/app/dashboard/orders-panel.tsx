@@ -94,7 +94,7 @@ function isHelpWithoutOrder(order: Order) {
 }
 
 function highLevelConversationUrl(order: Order) {
-  return `/api/highlevel/conversation/${encodeURIComponent(order.id)}`;
+  return `/api/conversation/${encodeURIComponent(order.id)}`;
 }
 
 function hasHighLevelConversation(order: Order) {
@@ -271,7 +271,7 @@ function ManualWholesaleOrderForm({ orders, onClose }: { orders: Order[]; onClos
   };
   return <div className="manual-order-modal" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) onClose(); }}>
     <form aria-labelledby="manual-order-title" aria-modal="true" className="manual-order-form" onSubmit={(event) => void submit(event)} role="dialog">
-      <div className="manual-order-heading"><div><strong id="manual-order-title">Nuevo pedido mayorista</strong><small>Regístralo directamente sin usar el formulario de HighLevel.</small></div><button aria-label="Cerrar nuevo pedido" disabled={saving} onClick={onClose} type="button">×</button></div>
+      <div className="manual-order-heading"><div><strong id="manual-order-title">Nuevo pedido mayorista</strong><small>Regístralo directamente sin usar el formulario de Orbita.</small></div><button aria-label="Cerrar nuevo pedido" disabled={saving} onClick={onClose} type="button">×</button></div>
       <div className="manual-order-grid">
         <label>Establecimiento<input autoFocus list="wholesale-businesses" onChange={(event) => update("businessName", event.target.value)} placeholder="Nombre del negocio" required value={draft.businessName} /></label>
         <datalist id="wholesale-businesses">{businesses.map((business) => <option key={business} value={business} />)}</datalist>

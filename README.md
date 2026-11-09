@@ -83,6 +83,6 @@ Los mayoristas que solicitan atención sin enviar formulario ingresan por
 
 ## Inscripción anticipada de mayoristas
 
-`/registro-mayorista` es un formulario público para registrar o actualizar clientes antes de su primer pedido. La API normaliza el teléfono, evita duplicados por teléfono y correo, guarda el cliente en Supabase y usa el upsert oficial de HighLevel antes de agregar la etiqueta `cliente mayorista` sin reemplazar otras etiquetas.
+`/registro-mayorista` es un formulario público para registrar o actualizar clientes antes de su primer pedido. La API normaliza el teléfono, identifica cada cliente por establecimiento (varios negocios pueden compartir teléfono), evita duplicados por negocio y correo, guarda el cliente en Supabase y usa el upsert oficial de HighLevel antes de agregar la etiqueta `cliente mayorista` sin reemplazar otras etiquetas.
 
 Los usuarios del panel con acceso al segmento mayorista pueden consultar las inscripciones en `/clientes-mayoristas`. El estado de sincronización queda almacenado junto al cliente para detectar fallos de HighLevel sin perder el registro local.
