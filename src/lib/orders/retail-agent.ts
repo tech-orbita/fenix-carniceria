@@ -3,13 +3,21 @@ import { timingSafeEqual } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
-import { syncHighLevelOrderFields, syncRetailPipeline } from "@/lib/orders/highlevel-pipeline";
+import { ensureHighLevelContactTag, syncHighLevelOrderFields, syncRetailPipeline } from "@/lib/orders/highlevel-pipeline";
+import type { OrderPipelineStage } from "@/lib/orders/highlevel-pipeline";
 import { customerIdentityKey } from "@/lib/orders/wholesale-routes";
 import { normalizeRetailItems, requiresRetailHelp } from "@/lib/orders/retail-normalization";
 import type { RetailCatalogProduct, RetailInputItem } from "@/lib/orders/retail-normalization";
 import { retailOrderWindowStart } from "@/lib/orders/retail-order-window";
 
 type RetailAgentItem = RetailInputItem;
+
+function pipelineStageForRetailStatus(status: string): OrderPipelineStage {
+  if (["preparing", "ready"].includes(status)) return "preparing";
+  if (["dispatched", "delivered"].includes(status)) return "dispatched";
+  if (["incident", "needs_review"].includes(status)) return "help";
+  return "order_placed";
+}
 
 type RetailAgentPayload = {
   locationId?: string;
@@ -226,7 +234,7 @@ export async function upsertRetailOrder(value: unknown) {
   // fueran kilos. El subtotal queda pendiente hasta registrar el peso real.
   const subtotal = items.reduce((total, item) => {
     const billableQuantity = item.actual_quantity ?? (item.unit === "kg" ? item.quantity : 0);
-    return total + billableQuantity * item.unit_price;
+    return total + Math.round(billableQuantity * item.unit_price);
   }, 0);
 
   if (openOrder) {
@@ -245,17 +253,23 @@ export async function upsertRetailOrder(value: unknown) {
     if (deleteError) return NextResponse.json({ error: "Could not replace order items" }, { status: 500 });
     const { error: itemsError } = await supabase.from("order_items").insert(items.map((item, sort_order) => ({ ...item, order_id: openOrder.id, sort_order })));
     if (itemsError) return NextResponse.json({ error: "Could not save order items" }, { status: 500 });
-    const orderFields = await syncHighLevelOrderFields(
-      { contactId: body.contactId, locationId: body.locationId, conversationId: body.conversationId },
-      { orderNumber: openOrder.order_number, total: subtotal },
-    );
+    const highLevelContext = { contactId: body.contactId, locationId: body.locationId, conversationId: body.conversationId };
+    const [pipeline, orderFields, tag] = await Promise.all([
+      syncRetailPipeline(highLevelContext, pipelineStageForRetailStatus(openOrder.status), `${name} · ${openOrder.order_number}`, subtotal),
+      syncHighLevelOrderFields(highLevelContext, { orderNumber: openOrder.order_number, total: subtotal }),
+      ensureHighLevelContactTag(highLevelContext, "cliente minorista"),
+    ]);
     return NextResponse.json({
       id: openOrder.id,
       order_number: openOrder.order_number,
       status: openOrder.status,
       adjusted: true,
+      pipeline_synced: pipeline.ok,
+      pipeline_message: pipeline.ok ? undefined : pipeline.message,
       order_field_synced: orderFields.ok,
       order_field_message: orderFields.ok ? undefined : orderFields.message,
+      tag_synced: tag.ok,
+      tag_message: tag.ok ? undefined : tag.message,
     });
   }
 
@@ -302,7 +316,7 @@ export async function upsertRetailOrder(value: unknown) {
     return NextResponse.json({ error: "Could not save order items" }, { status: 500 });
   }
   const highLevelContext = { contactId: body.contactId, locationId: body.locationId, conversationId: body.conversationId };
-  const [pipeline, orderFields] = await Promise.all([
+  const [pipeline, orderFields, tag] = await Promise.all([
     syncRetailPipeline(
       highLevelContext,
       "order_placed",
@@ -310,6 +324,7 @@ export async function upsertRetailOrder(value: unknown) {
       subtotal,
     ),
     syncHighLevelOrderFields(highLevelContext, { orderNumber: order.order_number, total: subtotal }),
+    ensureHighLevelContactTag(highLevelContext, "cliente minorista"),
   ]);
   return NextResponse.json({
     ...order,
@@ -319,6 +334,8 @@ export async function upsertRetailOrder(value: unknown) {
     pipeline_message: pipeline.ok ? undefined : pipeline.message,
     order_field_synced: orderFields.ok,
     order_field_message: orderFields.ok ? undefined : orderFields.message,
+    tag_synced: tag.ok,
+    tag_message: tag.ok ? undefined : tag.message,
   }, { status: 201 });
 }
 
@@ -367,12 +384,11 @@ export async function flagRetailHelpRequest(value: unknown) {
       }).select("id,order_number").single();
   if (result.error || !result.data) return NextResponse.json({ error: "Could not register help request" }, { status: 500 });
 
-  const pipeline = await syncRetailPipeline(
-    { contactId: body.contactId, locationId: body.locationId, conversationId: body.conversationId },
-    "help",
-    `${customer.name} · ${result.data.order_number}`,
-    0,
-  );
+  const highLevelContext = { contactId: body.contactId, locationId: body.locationId, conversationId: body.conversationId };
+  const [pipeline, tag] = await Promise.all([
+    syncRetailPipeline(highLevelContext, "help", `${customer.name} · ${result.data.order_number}`, 0),
+    ensureHighLevelContactTag(highLevelContext, "cliente minorista"),
+  ]);
   return NextResponse.json({
     ok: true,
     id: result.data.id,
@@ -380,5 +396,7 @@ export async function flagRetailHelpRequest(value: unknown) {
     adjusted: Boolean(openOrder),
     pipeline_synced: pipeline.ok,
     pipeline_message: pipeline.ok ? undefined : pipeline.message,
+    tag_synced: tag.ok,
+    tag_message: tag.ok ? undefined : tag.message,
   }, { status: openOrder ? 200 : 201 });
 }

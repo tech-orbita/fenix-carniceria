@@ -123,3 +123,16 @@ test("clasifica aclaraciones, solicitudes de asesor y comprobantes como ayuda", 
   assert.equal(requiresRetailHelp("No se pudo leer el pedido automáticamente"), false);
   assert.equal(requiresRetailHelp("El panel no aceptó el pedido"), false);
 });
+
+test("asocia atravesado en posticas con Atravessado y conserva el pedido original", () => {
+  const extendedCatalog = [
+    ...catalog,
+    { id: "atravessado", name: "Atravessado", catalogKey: "res:atravessado", pricePerKg: 31_400 },
+  ];
+  const [item] = normalizeRetailItems([], "3 libras de atravesado en posticas", extendedCatalog);
+
+  assert.deepEqual(
+    { id: item.product_id, name: item.product_name, quantity: item.quantity, actual: item.actual_quantity, price: item.unit_price, notes: item.notes },
+    { id: "atravessado", name: "Atravessado", quantity: 1.5, actual: 1.5, price: 31_400, notes: "3 libras de atravesado en posticas" },
+  );
+});

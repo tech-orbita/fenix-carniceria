@@ -14,6 +14,13 @@ type Opportunity = {
   name?: string;
 };
 
+type Conversation = {
+  id?: string;
+  lastMessageType?: string;
+  conversationProviderId?: string;
+  lastChannelAccount?: Array<{ value?: string }>;
+};
+
 type CustomField = {
   id: string;
   name?: string;
@@ -61,6 +68,15 @@ function configuration(context: HighLevelContext) {
   return { token, locationId, contactId };
 }
 
+class HighLevelHttpError extends Error {
+  status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.status = status;
+  }
+}
+
 async function ghlFetch<T>(path: string, token: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`https://services.leadconnectorhq.com${path}`, {
     ...init,
@@ -73,8 +89,16 @@ async function ghlFetch<T>(path: string, token: string, init?: RequestInit): Pro
     },
     cache: "no-store",
   });
-  if (!response.ok) throw new Error(`Orbita respondió ${response.status}`);
-  return response.json() as Promise<T>;
+  const body = await response.text();
+  if (!response.ok) {
+    let detail = body;
+    try {
+      const parsed = JSON.parse(body) as { message?: string; error?: string };
+      detail = parsed.message ?? parsed.error ?? body;
+    } catch { /* La respuesta puede no ser JSON. */ }
+    throw new HighLevelHttpError(response.status, `Orbita respondió ${response.status}${detail ? `: ${detail.slice(0, 300)}` : ""}`);
+  }
+  return (body ? JSON.parse(body) : {}) as T;
 }
 
 async function contactCustomFields(locationId: string, token: string) {
@@ -227,10 +251,15 @@ export async function syncOrderPipeline(
         body: JSON.stringify(body),
       });
     } else {
-      await ghlFetch("/opportunities/", config.token, {
-        method: "POST",
-        body: JSON.stringify({ ...body, locationId: config.locationId, contactId: config.contactId }),
-      });
+      const createBody = { ...body, locationId: config.locationId, contactId: config.contactId };
+      try {
+        await ghlFetch("/opportunities/", config.token, { method: "POST", body: JSON.stringify(createBody) });
+      } catch (error) {
+        // Algunas subcuentas no permiten oportunidades duplicadas por contacto.
+        // En ese caso, upsert conserva un único registro y sí permite moverlo.
+        if (!(error instanceof HighLevelHttpError) || error.status !== 400) throw error;
+        await ghlFetch("/opportunities/upsert", config.token, { method: "POST", body: JSON.stringify(createBody) });
+      }
     }
     return { ok: true as const, skipped: false as const };
   } catch (error) {
@@ -265,14 +294,39 @@ export async function sendHighLevelMessage(context: HighLevelContext, message: s
   const config = configuration(context);
   if (!config) return { ok: false as const, message: "El pedido no tiene un contacto de Orbita asociado." };
   try {
+    const search = new URLSearchParams({ locationId: config.locationId, contactId: config.contactId });
+    const result = await ghlFetch<{ conversations?: Conversation[] }>(`/conversations/search?${search}`, config.token, { headers: { Version: "2021-04-15" } });
+    const conversation = result.conversations?.find((candidate) => candidate.id === context.conversationId) ?? result.conversations?.[0];
+    const providerId = conversation?.lastChannelAccount?.[0]?.value ?? conversation?.conversationProviderId;
+    const usesCustomProvider = conversation?.lastMessageType === "TYPE_CUSTOM_PROVIDER_SMS" && Boolean(providerId);
     await ghlFetch("/conversations/messages", config.token, {
       method: "POST",
-      headers: { Version: "2021-04-15" },
-      body: JSON.stringify({ type: "WhatsApp", contactId: config.contactId, message }),
+      headers: { Version: "v3" },
+      body: JSON.stringify({
+        type: usesCustomProvider ? "Custom" : "WhatsApp",
+        contactId: config.contactId,
+        message,
+        ...(usesCustomProvider ? { conversationProviderId: providerId } : {}),
+      }),
     });
     return { ok: true as const };
   } catch (error) {
     return { ok: false as const, message: error instanceof Error ? error.message : "No se pudo enviar el mensaje." };
+  }
+}
+
+export async function ensureHighLevelContactTag(context: HighLevelContext, tag: string) {
+  const config = configuration(context);
+  if (!config) return { ok: false as const, skipped: true as const, message: "Integración de Orbita sin configurar o sin contactId." };
+  try {
+    await ghlFetch(`/contacts/${encodeURIComponent(config.contactId)}/tags`, config.token, {
+      method: "POST",
+      headers: { Version: "v3" },
+      body: JSON.stringify({ tags: [tag] }),
+    });
+    return { ok: true as const, skipped: false as const };
+  } catch (error) {
+    return { ok: false as const, skipped: false as const, message: error instanceof Error ? error.message : "No se pudo etiquetar el contacto." };
   }
 }
 

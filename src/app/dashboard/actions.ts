@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { requireViewer } from "@/lib/auth/viewer";
 import { createClient } from "@/lib/supabase/server";
 import { catalogProductFor, normalizeProductName, normalizeWholesaleUnit, parseOrderText, toKilograms, UNSPECIFIED_WHOLESALE_UNIT } from "@/lib/orders/product-parser";
-import { retailBillMessage, retailDispatchMessage } from "@/lib/orders/retail-bill";
+import { retailBillMessage, retailDispatchMessage, retailItemHasPendingPrice, retailItemHasPendingWeight } from "@/lib/orders/retail-bill";
 import { sendHighLevelMessage, sendWholesalePaymentSummary, syncHighLevelOrderFields, syncOrderPipeline, syncWholesalePipeline } from "@/lib/orders/highlevel-pipeline";
 import { customerIdentityKey, wholesaleRoutes } from "@/lib/orders/wholesale-routes";
 import type { HighLevelContext, OrderPipelineStage } from "@/lib/orders/highlevel-pipeline";
@@ -52,6 +52,17 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus) {
   }
 
   const supabase = await sessionClient();
+  if (status === "dispatched") {
+    const { data: readiness } = await supabase
+      .from("orders")
+      .select("customer_type,order_items(quantity,actual_quantity,unit,unit_price)")
+      .eq("id", Number(orderId))
+      .maybeSingle();
+    if (readiness?.customer_type === "retail" && (readiness.order_items ?? []).some((item) =>
+      retailItemHasPendingPrice({ quantity: Number(item.quantity), actualQuantity: item.actual_quantity == null ? undefined : Number(item.actual_quantity), unit: item.unit, unitPrice: Number(item.unit_price), productName: "" })
+      || retailItemHasPendingWeight({ quantity: Number(item.quantity), actualQuantity: item.actual_quantity == null ? undefined : Number(item.actual_quantity), unit: item.unit, unitPrice: Number(item.unit_price), productName: "" }),
+    )) return { ok: false, message: "Define el peso real y el precio de todos los productos antes de despachar." };
+  }
   const { data, error } = await supabase
     .from("orders")
     .update({ status })
@@ -163,6 +174,17 @@ export async function sendRetailPaymentSummary(orderId: string) {
     .maybeSingle();
   if (error || !data || !data.order_items?.length) return { ok: false as const, message: "No se encontró una cuenta de cobro para enviar." };
 
+  const billItems = data.order_items.map((item) => ({
+    productName: item.product_name,
+    quantity: Number(item.quantity),
+    actualQuantity: item.actual_quantity == null ? undefined : Number(item.actual_quantity),
+    unit: item.unit,
+    unitPrice: Number(item.unit_price),
+  }));
+  if (billItems.some((item) => retailItemHasPendingPrice(item) || retailItemHasPendingWeight(item))) {
+    return { ok: false as const, message: "Define el peso real y el precio de todos los productos antes de enviar el cobro." };
+  }
+
   const customer = Array.isArray(data.customers) ? data.customers[0] : data.customers;
   const sent = await sendHighLevelMessage(highLevelContext(data.source_payload), retailBillMessage({
     orderNumber: data.order_number,
@@ -171,13 +193,7 @@ export async function sendRetailPaymentSummary(orderId: string) {
     paymentStatus: data.payment_status,
     deliveryFee: Number(data.delivery_fee),
     adjustments: Number(data.adjustments),
-    items: data.order_items.map((item) => ({
-      productName: item.product_name,
-      quantity: Number(item.quantity),
-      actualQuantity: item.actual_quantity == null ? undefined : Number(item.actual_quantity),
-      unit: item.unit,
-      unitPrice: Number(item.unit_price),
-    })),
+    items: billItems,
   }));
   return sent.ok ? { ok: true as const, message: "Cuenta de cobro enviada por la conversación de Orbita." } : sent;
 }
@@ -191,6 +207,18 @@ export async function updateOrderPaymentStatus(
   }
 
   const supabase = await sessionClient();
+  if (paymentStatus === "paid") {
+    const { data: readiness } = await supabase
+      .from("orders")
+      .select("order_items(quantity,actual_quantity,unit,unit_price)")
+      .eq("id", Number(orderId))
+      .eq("customer_type", "retail")
+      .maybeSingle();
+    if ((readiness?.order_items ?? []).some((item) =>
+      retailItemHasPendingPrice({ quantity: Number(item.quantity), actualQuantity: item.actual_quantity == null ? undefined : Number(item.actual_quantity), unit: item.unit, unitPrice: Number(item.unit_price), productName: "" })
+      || retailItemHasPendingWeight({ quantity: Number(item.quantity), actualQuantity: item.actual_quantity == null ? undefined : Number(item.actual_quantity), unit: item.unit, unitPrice: Number(item.unit_price), productName: "" }),
+    )) return { ok: false, message: "Define el peso real y el precio de todos los productos antes de marcar el pedido como pagado." };
+  }
   const { data, error } = await supabase
     .from("orders")
     .update({ payment_status: paymentStatus })
@@ -237,6 +265,24 @@ export async function scheduleWholesaleOrder(orderId: string, deliveryDay: strin
   if (error || !data) return { ok: false, message: "No se pudo adelantar el pedido." };
   revalidatePath("/dashboard");
   return { ok: true, message: "Pedido autorizado para despacho hoy." };
+}
+
+export async function scheduleRetailOrder(orderId: string, deliveryDay: string) {
+  if (!/^\d+$/.test(orderId) || !/^\d{4}-\d{2}-\d{2}$/.test(deliveryDay)) {
+    return { ok: false, message: "Pedido o fecha inválida." };
+  }
+  const parsed = new Date(`${deliveryDay}T12:00:00-05:00`);
+  if (Number.isNaN(parsed.getTime())) return { ok: false, message: "Fecha inválida." };
+  const supabase = await sessionClient();
+  const { data, error } = await supabase.from("orders")
+    .update({ requested_delivery_at: parsed.toISOString() })
+    .eq("id", Number(orderId))
+    .eq("customer_type", "retail")
+    .select("id")
+    .maybeSingle();
+  if (error || !data) return { ok: false, message: "No se pudo cambiar la fecha de entrega." };
+  revalidatePath("/dashboard");
+  return { ok: true, message: "Pedido minorista adelantado para entrega hoy." };
 }
 
 type ManualWholesaleOrderInput = {
@@ -446,7 +492,7 @@ export async function updateOrderDetails(
     !address ||
     !details.items.length ||
     normalizedItems.some((item) =>
-      !/^\d+$/.test(item.id) ||
+      !(/^\d+$/.test(item.id) || /^new-\d+(?:-\d+)?$/.test(item.id)) ||
       !item.productName.trim() ||
       !item.unit.trim() ||
       !Number.isFinite(item.quantity) ||
@@ -470,7 +516,21 @@ export async function updateOrderDetails(
     return { ok: false, message: "No se encontró el pedido para editar." };
   }
 
-  const [customerResult, orderResult, ...itemResults] = await Promise.all([
+  const { data: existingItems, error: itemsLookupError } = await supabase
+    .from("order_items")
+    .select("id,product_id,product_name")
+    .eq("order_id", Number(orderId));
+  if (itemsLookupError) return { ok: false, message: "No se pudieron consultar los productos del pedido." };
+  const existingIds = new Set((existingItems ?? []).map((item) => String(item.id)));
+  const keptIds = new Set(normalizedItems.filter((item) => /^\d+$/.test(item.id)).map((item) => item.id));
+  if ([...keptIds].some((id) => !existingIds.has(id))) return { ok: false, message: "Uno de los productos ya no pertenece al pedido." };
+  const removedIds = [...existingIds].filter((id) => !keptIds.has(id));
+  const currentItems = normalizedItems.filter((item) => /^\d+$/.test(item.id));
+  const newItems = normalizedItems.filter((item) => !/^\d+$/.test(item.id));
+  const existingById = new Map((existingItems ?? []).map((item) => [String(item.id), item]));
+  const subtotal = normalizedItems.reduce((total, item) => total + Math.round(item.quantity * item.unitPrice), 0);
+
+  const [customerResult, orderResult, deleteResult, insertResult, ...itemResults] = await Promise.all([
     supabase
       .from("customers")
       .update({
@@ -485,13 +545,32 @@ export async function updateOrderDetails(
       .update({
         delivery_address: address,
         notes: notes || null,
-        subtotal: normalizedItems.reduce((total, item) => total + item.quantity * item.unitPrice, 0),
+        subtotal,
       })
       .eq("id", Number(orderId)),
-    ...normalizedItems.map((item) =>
+    removedIds.length
+      ? supabase.from("order_items").delete().in("id", removedIds).eq("order_id", Number(orderId))
+      : Promise.resolve({ error: null }),
+    newItems.length
+      ? supabase.from("order_items").insert(newItems.map((item, index) => ({
+          order_id: Number(orderId),
+          product_name: item.productName.trim(),
+          quantity: item.quantity,
+          actual_quantity: item.quantity,
+          unit: item.unit,
+          unit_price: item.unitPrice,
+          preparation: item.preparation.trim() || null,
+          sort_order: (existingItems?.length ?? 0) + index,
+        })))
+      : Promise.resolve({ error: null }),
+    ...currentItems.map((item) =>
       supabase
         .from("order_items")
         .update({
+          // Al renombrar manualmente no se debe conservar la referencia al producto anterior.
+          product_id: normalizeProductName(existingById.get(item.id)?.product_name ?? "") === normalizeProductName(item.productName)
+            ? existingById.get(item.id)?.product_id ?? null
+            : null,
           product_name: item.productName.trim(),
           actual_quantity: item.quantity,
           unit: item.unit,
@@ -503,7 +582,7 @@ export async function updateOrderDetails(
     ),
   ]);
 
-  if (customerResult.error || orderResult.error || itemResults.some((result) => result.error)) {
+  if (customerResult.error || orderResult.error || deleteResult.error || insertResult.error || itemResults.some((result) => result.error)) {
     return { ok: false, message: "No se pudieron guardar todos los cambios." };
   }
 

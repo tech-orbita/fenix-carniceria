@@ -67,6 +67,10 @@ function comparable(value: string) {
     .join(" ");
   return (retailAliases[normalized] ?? retailAliases[singular] ?? retailAliases[cleaned] ?? cleaned)
     .split(" ")
+    // La lista de Fénix conserva el nombre histórico "Atravessado", mientras
+    // los clientes escriben normalmente "atravesado". Es el mismo corte y la
+    // corrección se limita a la comparación; el pedido original no se altera.
+    .map((token) => token === "atravesado" ? "atravessado" : token)
     .filter((token) => token && !["de", "del", "la", "el", "para", "carne"].includes(token))
     .join(" ");
 }
@@ -225,7 +229,9 @@ export function normalizeRetailItems(
       product_name: canonicalName.slice(0, 180),
       quantity: Math.round(normalizedQuantity * 1_000) / 1_000,
       unit: counted ? "und" : "kg",
-      actual_quantity: pricedByUnit ? Math.round(normalizedQuantity * 1_000) / 1_000 : null,
+      // Para pesos explícitos, la cantidad normalizada es también el peso real
+      // inicial. Las piezas cobradas por kilo siguen pendientes hasta pesarlas.
+      actual_quantity: pricedByUnit || !counted ? Math.round(normalizedQuantity * 1_000) / 1_000 : null,
       preparation: String(item.preparation ?? "").trim().slice(0, 250) || null,
       notes: String(item.notes ?? sourceNote).trim().slice(0, 500) || null,
       unit_price: unitPrice,

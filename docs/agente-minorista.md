@@ -87,7 +87,8 @@ En **Conversation AI > agente minorista > Goals/Intent > Setup your Actions**:
 3. Conserva nombre y teléfono en el flujo de recopilación estándar del agente. En WhatsApp, el teléfono normalmente ya pertenece al contacto; solo debe pedirse si está vacío o si se necesita otro número de recepción.
 4. Para cambios de dirección ya registrada, agrega una acción separada **Trigger Workflow** llamada `Actualizar dirección minorista`. Ese workflow debe vaciar dirección, barrio y zona, colocar `Registro Minorista Completo = No` y permitir que Contact Info capture los valores nuevos. No lo ejecutes para un cliente nuevo. Para otros tipos de cambio crea una acción específica o transfiere al equipo, evitando borrar datos que el cliente no pidió modificar.
 5. Mantén una sola acción para registrar el pedido y una sola fuente de mensajes de confirmación. Con `SEND_CONFIRMATION=false`, la confirmación la envía el agente.
-6. Configura **Human Handover/Stop Bot** para que la intervención manual pause las respuestas automáticas.
+6. En la acción que dispara `Fénix · Minoristas · Pedido IA → Panel`, incluye también esta condición explícita: **“Activa este flujo cuando el cliente envíe una imagen, documento, comprobante, soporte o recibo de pago, aunque no esté haciendo un pedido.”** El workflow ya clasifica el archivo y crea el caso en `Requiere ayuda`; si el agente solo responde en el chat pero no ejecuta la acción, el panel nunca recibirá el caso.
+7. Configura **Human Handover/Stop Bot** para que la intervención manual pause las respuestas automáticas.
 
 ## Workflow para marcar el registro completo
 

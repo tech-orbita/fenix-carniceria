@@ -10,7 +10,7 @@ import type { WholesaleProduct } from "@/lib/orders/product-parser";
 import { wholesaleServiceDay } from "@/lib/orders/wholesale-service-day";
 import { unassignedWholesaleRoute, wholesaleRouteLabel, wholesaleRoutes } from "@/lib/orders/wholesale-routes";
 
-import { createManualWholesaleOrder, findWholesaleCustomer, resolveOrderHelp, scheduleWholesaleOrder, sendRetailPaymentSummary, updateOrderDetails, updateOrderPaymentStatus, updateOrderStatus, updateWholesalePayment, updateWholesaleTable } from "./actions";
+import { createManualWholesaleOrder, findWholesaleCustomer, resolveOrderHelp, scheduleRetailOrder, scheduleWholesaleOrder, sendRetailPaymentSummary, updateOrderDetails, updateOrderPaymentStatus, updateOrderStatus, updateWholesalePayment, updateWholesaleTable } from "./actions";
 import { addDays, bogotaDay, dateTime, dayLabel, Icon, phaseLabels, phaseStatus } from "./panel-shared";
 import type { OperationalPhase } from "./panel-shared";
 import { RetailPanel } from "./retail-panel";
@@ -559,6 +559,7 @@ function WholesaleOrdersTable({ isAdmin, orders: allOrders, pendingId, onStatusC
 }
 
 export function OrdersPanel({ initialOrders, loadError, viewer }: { initialOrders: Order[]; loadError?: string; viewer?: Viewer }) {
+  const router = useRouter();
   const [orders, setOrders] = useState(initialOrders);
   // Sincroniza los datos refrescados del servidor sin remontar el panel (conserva día, filtros y edición).
   const [syncedOrders, setSyncedOrders] = useState(initialOrders);
@@ -607,12 +608,12 @@ export function OrdersPanel({ initialOrders, loadError, viewer }: { initialOrder
       phone: details.phone,
       address: details.address,
       notes: details.notes || undefined,
-      items: item.items.map((orderItem) => {
-        const edited = details.items.find((candidate) => candidate.id === orderItem.id);
-        return edited ? { ...orderItem, productName: edited.productName, actualQuantity: edited.quantity, unit: edited.unit, unitPrice: edited.unitPrice, preparation: edited.preparation || undefined } : orderItem;
+      items: details.items.map((edited) => {
+        const original = item.items.find((candidate) => candidate.id === edited.id);
+        return { ...original, id: edited.id, productName: edited.productName, quantity: original?.quantity ?? edited.quantity, actualQuantity: edited.quantity, unit: edited.unit, unitPrice: edited.unitPrice, preparation: edited.preparation || undefined };
       }),
     } : item));
-    setNotice(`Los datos de ${order.orderNumber} fueron actualizados.`); setPendingId(undefined); return true;
+    setNotice(`Los datos de ${order.orderNumber} fueron actualizados.`); setPendingId(undefined); router.refresh(); return true;
   };
 
   const changePaymentStatus = async (order: Order, paymentStatus: "paid" | "pending") => {
@@ -638,6 +639,14 @@ export function OrdersPanel({ initialOrders, loadError, viewer }: { initialOrder
     setNotice(result.message); setPendingId(undefined);
   };
 
+  const advanceRetailOrder = async (order: Order) => {
+    setPendingId(order.id); setNotice(undefined);
+    const result = await scheduleRetailOrder(order.id, today);
+    if (!result.ok) { setNotice(result.message); setPendingId(undefined); return; }
+    setOrders((current) => current.map((item) => item.id === order.id ? { ...item, deliveryDate: today } : item));
+    setNotice(result.message); setPendingId(undefined); router.refresh();
+  };
+
   return (
     <div className="orders-app"><main className="dashboard-content">
       <div className="dashboard-topbar">
@@ -649,7 +658,7 @@ export function OrdersPanel({ initialOrders, loadError, viewer }: { initialOrder
           </div>
           <nav aria-label="Opciones de cuenta" className="session-actions">
             <button aria-label={soundEnabled ? "Desactivar sonido de pedidos nuevos" : "Activar sonido de pedidos nuevos"} aria-pressed={soundEnabled} className={soundEnabled ? "sound-toggle is-enabled" : "sound-toggle"} onClick={() => void toggleSound()} title={soundEnabled ? "Sonido activo · clic para desactivar" : "Activar sonido de pedidos nuevos"} type="button"><span aria-hidden="true">{soundEnabled ? "🔔" : "🔕"}</span></button>
-            {(viewer.role === "admin" || viewer.customerType === "wholesale") && <Link href="/clientes-mayoristas">Clientes mayoristas</Link>}
+            {(viewer.role === "admin" || viewer.customerType === null || viewer.customerType === "wholesale") && <Link href="/clientes-mayoristas">Clientes mayoristas</Link>}
             <Link href="/mi-cuenta" title="Cambiar mi contraseña">Cuenta</Link>
             {viewer.role === "admin" && <Link href="/usuarios">Usuarios</Link>}
             <form action={signOut}><button type="submit">Salir</button></form>
@@ -657,7 +666,7 @@ export function OrdersPanel({ initialOrders, loadError, viewer }: { initialOrder
         </div>}
       </div>
       {notice && <div className="operation-notice" role="status">{notice}</div>}
-      {activeType === "wholesale" ? <WholesaleOrdersTable isAdmin={viewer?.role === "admin"} onStatusChange={(order, phase) => void moveOrder(order, phase)} orders={wholesale} pendingId={pendingId} /> : <RetailPanel onMove={(order, phase) => void moveOrder(order, phase)} onPaymentChange={(order, status) => void changePaymentStatus(order, status)} onResolveHelp={(order) => void resolveHelp(order)} onSave={saveOrder} onSendBill={(order) => void sendBill(order)} orders={retail} pendingId={pendingId} />}
+      {activeType === "wholesale" ? <WholesaleOrdersTable isAdmin={viewer?.role === "admin"} onStatusChange={(order, phase) => void moveOrder(order, phase)} orders={wholesale} pendingId={pendingId} /> : <RetailPanel onAdvance={(order) => void advanceRetailOrder(order)} onMove={(order, phase) => void moveOrder(order, phase)} onPaymentChange={(order, status) => void changePaymentStatus(order, status)} onResolveHelp={(order) => void resolveHelp(order)} onSave={saveOrder} onSendBill={(order) => void sendBill(order)} orders={retail} pendingId={pendingId} />}
     </main></div>
   );
 }

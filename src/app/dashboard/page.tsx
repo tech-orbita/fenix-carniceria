@@ -48,7 +48,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
   const viewer = await requireViewer();
   const supabase = await createClient();
-  const canSeeWallet = viewer.role === "admin";
+  const canSeeWholesaleWallet = viewer.role === "admin";
 
   // RLS limita las filas al segmento del usuario; el filtro explícito lo deja claro.
   let query = supabase
@@ -134,6 +134,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         const storedAddress = [row.delivery_address, customer?.address]
           .map(cleanAddress)
           .find((address) => address && !sameAddress(address, addresses.location));
+        const canSeeOrderPayments = row.customer_type === "retail" || canSeeWholesaleWallet;
         const safeFormData = formData ? {
           form: String(formData.form ?? ""),
           order_text: String(formData.order_text ?? ""),
@@ -141,7 +142,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           billing: typeof formData.billing === "string" ? formData.billing : undefined,
           maps_url: typeof formData.maps_url === "string" ? formData.maps_url : undefined,
           receiver_phone: typeof formData.receiver_phone === "string" ? formData.receiver_phone : undefined,
-          payment_proof: canSeeWallet && typeof formData.payment_proof === "string" ? formData.payment_proof : undefined,
+          payment_proof: canSeeOrderPayments && typeof formData.payment_proof === "string" ? formData.payment_proof : undefined,
           contact_id: typeof formData.contact_id === "string" ? formData.contact_id : undefined,
           location_id: typeof formData.location_id === "string" ? formData.location_id : undefined,
           conversation_id: typeof formData.conversation_id === "string" ? formData.conversation_id : undefined,
@@ -160,11 +161,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           address: submittedAddress ?? addresses.contact ?? storedAddress ?? "Sin dirección",
           route: route?.name ?? "Sin clasificar",
           source: row.source,
-          paymentMethod: canSeeWallet ? row.payment_method ?? undefined : undefined,
-          paymentStatus: canSeeWallet ? row.payment_status : "restricted",
-          deliveryFee: canSeeWallet ? Number(row.delivery_fee) : 0,
-          adjustments: canSeeWallet ? Number(row.adjustments) : 0,
-          total: canSeeWallet ? Number(row.total) : 0,
+          paymentMethod: canSeeOrderPayments ? row.payment_method ?? undefined : undefined,
+          paymentStatus: canSeeOrderPayments ? row.payment_status : "restricted",
+          deliveryFee: canSeeOrderPayments ? Number(row.delivery_fee) : 0,
+          adjustments: canSeeOrderPayments ? Number(row.adjustments) : 0,
+          total: canSeeOrderPayments ? Number(row.total) : 0,
           status: row.status,
           items,
           formData: safeFormData,

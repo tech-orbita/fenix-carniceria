@@ -2,11 +2,23 @@
 
 Fuente funcional: capacitación de Fénix J.A. del 29 de octubre de 2026. Ventana acordada de activación: miércoles 4 de noviembre de 2026 a las 5:00 a. m., hora de Bogotá. Confirmar la hora con Fénix antes de activar los agentes.
 
+## Resultado de pruebas del 10 de noviembre de 2026
+
+- Confirmado: abrir conversación desde el panel funciona.
+- Confirmado: una respuesta humana pausa el agente.
+- Confirmado: el pedido escrito llega al panel.
+- Confirmado en el historial de n8n: la nota de voz se transcribió y se anexó al pedido activo. Se corrigió el filtro del panel para mostrar los pedidos según el día operativo minorista (corte a las 2:00 p. m.).
+- Corregido en código, pendiente de desplegar y repetir: cuenta de cobro y aviso de despacho por el proveedor personalizado/QR del número minorista `573112889954`.
+- Corregido en código, pendiente de desplegar y repetir: creación o actualización de la oportunidad cuando HighLevel no permite oportunidades duplicadas.
+- Pendiente de configurar en la acción del agente: disparar el workflow al recibir imagen, documento, comprobante, soporte o recibo de pago. En la prueba el agente respondió, pero el workflow no se ejecutó y por eso no apareció `Requiere ayuda`.
+- Corregido en código, pendiente de desplegar y repetir: aplicar la etiqueta exacta `cliente minorista`.
+- Pendiente de decisión de catálogo: definir si `Huesos carnudo` corresponde a un producto existente o debe crearse. Hasta resolverlo, el panel lo muestra como `Precio pendiente` y bloquea cobro, pago, impresión y despacho.
+
 ## 1. WhatsApp y agentes
 
 - [ ] Confirmar que los dos números funcionan en modo coexistencia: uno para mayoristas y otro para minoristas.
 - [ ] Asignar el agente correcto a cada número y mantener ambos agentes inactivos hasta la ventana acordada.
-- [ ] Verificar que una respuesta humana pause el agente y que el botón de IA permita reactivarlo.
+- [x] Verificar que una respuesta humana pause el agente y que el botón de IA permita reactivarlo.
 - [ ] Activar ambos agentes en la ventana confirmada y monitorear las primeras conversaciones.
 
 ## 2. Segmentación de contactos y conversaciones
@@ -40,7 +52,7 @@ Fuente funcional: capacitación de Fénix J.A. del 29 de octubre de 2026. Ventan
 
 - [ ] Conectar la escalación mayorista sin formulario al workflow n8n `/webhook/fenix-mayoristas-ayuda` con encabezado `x-fenix-secret`.
 - [ ] Confirmar que el workflow reenvíe la solicitud a `/api/webhooks/ghl/wholesale-help-requests` y conserve `contactId`, `locationId`, `conversationId` y `sourceEventId`.
-- [ ] Probar el botón de conversación del panel con una URL válida de la conversación de HighLevel.
+- [x] Probar el botón de conversación del panel con una URL válida de la conversación de HighLevel.
 - [ ] Probar el mensaje de cobro desde Cartera y el aviso automático al marcar un pedido como despachado.
 - [ ] Mantener `SEND_CONFIRMATION=false` en n8n para evitar confirmaciones duplicadas.
 

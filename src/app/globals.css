@@ -2095,13 +2095,15 @@ a {
     inset: 0 auto auto 0;
     display: block;
     box-sizing: border-box;
-    width: 80mm;
-    padding: 3mm 4mm;
+    width: 72mm;
+    margin: 0 auto;
+    padding: 2mm;
     background: white;
     color: black;
     font-family: "Courier New", monospace;
-    font-size: 13px;
-    line-height: 1.4;
+    font-size: 14px;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
     page-break-after: avoid;
   }
 
@@ -2120,7 +2122,7 @@ a {
 
   .ticket-logo {
     display: block;
-    width: 48mm;
+    width: 40mm;
     height: auto;
     margin: 0 auto 4px;
   }
@@ -2136,7 +2138,7 @@ a {
 
   .ticket-meta div {
     display: grid;
-    grid-template-columns: 20mm 1fr;
+    grid-template-columns: 18mm minmax(0, 1fr);
     break-inside: avoid;
   }
 
@@ -2147,6 +2149,7 @@ a {
 
   .ticket-meta dd {
     text-align: right;
+    overflow-wrap: anywhere;
   }
 
   .ticket-line {
@@ -2168,8 +2171,8 @@ a {
 
   .ticket-line small {
     font-style: italic;
-    font-size: 12px;
-    line-height: 1.4;
+    font-size: 13px;
+    line-height: 1.35;
   }
 
   .ticket-total strong {
@@ -4591,6 +4594,23 @@ a {
   line-height: 1.45;
 }
 
+.orders-app .rt-price-warning {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 14px;
+  border: 1px solid #edc56f;
+  border-radius: 10px;
+  padding: 11px 14px;
+  background: #fff8e7;
+  color: #76520b;
+}
+
+.orders-app .rt-pending-copy {
+  color: #9a6500;
+  font-weight: 800;
+}
+
 .orders-app .rt-totals {
   display: flex;
   flex-wrap: wrap;
@@ -4751,6 +4771,7 @@ a {
 }
 
 .orders-app .rt-edit input,
+.orders-app .rt-edit select,
 .orders-app .rt-edit textarea {
   width: 100%;
   min-width: 0;
@@ -4766,6 +4787,7 @@ a {
 }
 
 .orders-app .rt-edit input:focus,
+.orders-app .rt-edit select:focus,
 .orders-app .rt-edit textarea:focus {
   border-color: var(--wine);
   box-shadow: 0 0 0 3px rgba(50, 132, 255, 0.12);
@@ -4786,10 +4808,40 @@ a {
 
 .orders-app .rt-edit-row {
   display: grid;
-  grid-template-columns: minmax(180px, 1.5fr) minmax(90px, 0.55fr) minmax(70px, 0.4fr) minmax(110px, 0.65fr) minmax(150px, 1.2fr);
+  grid-template-columns: minmax(180px, 1.5fr) minmax(90px, 0.55fr) minmax(80px, 0.4fr) minmax(110px, 0.65fr) minmax(140px, 1.1fr) minmax(100px, 0.55fr) auto;
   gap: 10px;
   border-top: 1px solid var(--line);
   padding: 12px 0;
+}
+
+.orders-app .rt-edit-line-total {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  color: var(--subtle);
+  font-size: 13px;
+}
+
+.orders-app .rt-edit-line-total strong {
+  color: var(--ink);
+  font-size: 15px;
+}
+
+.orders-app .rt-remove-item {
+  align-self: end;
+  min-height: 42px;
+  border: 1px solid #e7b0b0;
+  border-radius: 9px;
+  padding: 8px 10px;
+  background: #fff6f6;
+  color: #a33232;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.orders-app .rt-add-item {
+  margin: 10px 0 4px;
 }
 
 .orders-app .rt-edit-row:first-of-type {

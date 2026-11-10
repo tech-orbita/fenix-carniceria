@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { retailBillMessage, retailDispatchMessage } from "../src/lib/orders/retail-bill.ts";
+import { retailBillMessage, retailDispatchMessage, retailLineSubtotal, retailOrderHasPendingValues } from "../src/lib/orders/retail-bill.ts";
 
 test("arma la cuenta minorista con peso real, domicilio y total", () => {
   const message = retailBillMessage({
@@ -51,4 +51,23 @@ test("cobra productos vendidos por unidad", () => {
 
   assert.match(message, /2 und × \$\s?9\.000\/und = \$\s?18\.000/);
   assert.doesNotMatch(message, /peso pendiente/);
+});
+
+test("marca un producto sin precio como pendiente y no lo presenta como gratuito", () => {
+  const order = {
+    orderNumber: "FEN-6", customer: "Ana", receivedAt: "2026-11-10T12:00:00Z",
+    paymentStatus: "pending", deliveryFee: 0, adjustments: 0,
+    items: [{ productName: "Huesos carnudo", quantity: 1, actualQuantity: 1, unit: "kg", unitPrice: 0 }],
+  };
+  const message = retailBillMessage(order);
+
+  assert.equal(retailOrderHasPendingValues(order.items), true);
+  assert.equal(retailLineSubtotal(order.items[0]), null);
+  assert.match(message, /precio pendiente/i);
+  assert.match(message, /Total pendiente/i);
+  assert.doesNotMatch(message, /Huesos carnudo:.*\$\s?0\/kg/);
+});
+
+test("redondea el subtotal al peso colombiano usando el peso real", () => {
+  assert.equal(retailLineSubtotal({ productName: "Espaldilla", quantity: 1.5, actualQuantity: 1.47, unit: "kg", unitPrice: 29_000 }), 42_630);
 });
