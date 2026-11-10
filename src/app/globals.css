@@ -1208,10 +1208,25 @@ a {
 }
 
 .manual-order-form {
-  border-top: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
-  padding: 18px 24px;
+  width: min(880px, calc(100vw - 28px));
+  max-height: calc(100dvh - 28px);
+  overflow: auto;
+  border: 1px solid #b8c9df;
+  border-radius: 14px;
+  padding: 20px 22px;
   background: #f8fbff;
+  box-shadow: 0 24px 70px rgb(10 35 70 / 28%);
+}
+
+.manual-order-modal {
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 14px;
+  background: rgb(8 27 52 / 48%);
+  backdrop-filter: blur(3px);
 }
 
 .manual-order-heading,
@@ -1249,7 +1264,7 @@ a {
 
 .manual-order-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
 }
 
@@ -1295,6 +1310,10 @@ a {
 }
 
 @media (max-width: 900px) {
+  .manual-order-form {
+    padding: 16px;
+  }
+
   .manual-order-grid {
     grid-template-columns: 1fr;
   }
@@ -2052,7 +2071,8 @@ a {
 
 @media print {
   @page {
-    margin: 4mm;
+    size: 80mm auto;
+    margin: 0;
   }
 
   body {
@@ -2074,12 +2094,17 @@ a {
     position: absolute;
     inset: 0 auto auto 0;
     display: block;
+    box-sizing: border-box;
     width: 72mm;
+    margin: 0 auto;
     padding: 2mm;
     background: white;
     color: black;
     font-family: "Courier New", monospace;
-    font-size: 10px;
+    font-size: 14px;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+    page-break-after: avoid;
   }
 
   .ticket-brand {
@@ -2097,7 +2122,7 @@ a {
 
   .ticket-logo {
     display: block;
-    width: 48mm;
+    width: 40mm;
     height: auto;
     margin: 0 auto 4px;
   }
@@ -2113,7 +2138,8 @@ a {
 
   .ticket-meta div {
     display: grid;
-    grid-template-columns: 20mm 1fr;
+    grid-template-columns: 18mm minmax(0, 1fr);
+    break-inside: avoid;
   }
 
   .ticket-meta dt,
@@ -2123,13 +2149,15 @@ a {
 
   .ticket-meta dd {
     text-align: right;
+    overflow-wrap: anywhere;
   }
 
   .ticket-line {
     display: grid;
     grid-template-columns: 1fr auto;
     gap: 2px 8px;
-    padding: 4px 0;
+    padding: 6px 0;
+    break-inside: avoid;
   }
 
   .ticket-line strong,
@@ -2143,6 +2171,8 @@ a {
 
   .ticket-line small {
     font-style: italic;
+    font-size: 13px;
+    line-height: 1.35;
   }
 
   .ticket-total strong {
@@ -2258,6 +2288,9 @@ a {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  min-height: 44px;
+  border-bottom: 1px solid #e5ebf3;
+  padding: 0 2px 7px;
 }
 
 .orders-app .segment-switch {
@@ -2319,6 +2352,130 @@ a {
 .orders-app .live-badge {
   padding: 5px 10px;
   font-size: 11px;
+}
+
+.orders-app .sound-toggle {
+  display: inline-flex;
+  align-items: center;
+  width: 34px;
+  justify-content: center;
+  border: 1px solid #cbd5e1;
+  min-height: 34px;
+  border-radius: 9px;
+  padding: 0;
+  background: #fff;
+  color: #475569;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.orders-app .sound-toggle.is-enabled {
+  border-color: #e7aa28;
+  background: #fff6d8;
+  color: #7c4b00;
+}
+
+.orders-app .sound-toggle:hover {
+  border-color: var(--wine);
+}
+
+.orders-app .session-bar {
+  min-width: 0;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.orders-app .session-identity {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  padding: 0 4px;
+}
+
+.orders-app .session-avatar {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  place-items: center;
+  border-radius: 50%;
+  background: #e9f2ff;
+  color: #1769e0;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.orders-app .session-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  line-height: 1.15;
+}
+
+.orders-app .session-copy strong {
+  max-width: 190px;
+  color: #21314d;
+  font-size: 11px;
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.orders-app .session-copy small {
+  margin-top: 3px;
+  color: #7c8ba1;
+  font-size: 10px;
+}
+
+.orders-app .session-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  border: 1px solid #dfe7f1;
+  border-radius: 10px;
+  padding: 3px;
+  background: #f7f9fc;
+}
+
+.orders-app .session-actions form {
+  display: contents;
+}
+
+.orders-app .session-actions a,
+.orders-app .session-actions button {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  border: 0;
+  border-radius: 7px;
+  padding: 0 10px;
+  background: transparent;
+  color: #34445c;
+  font-size: 11px;
+  font-weight: 800;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.orders-app .session-actions .sound-toggle {
+  width: 30px;
+  min-height: 28px;
+  padding: 0;
+}
+
+.orders-app .session-actions a:hover,
+.orders-app .session-actions button:hover {
+  border-color: transparent;
+  background: #e8eef7;
+  color: #0b1736;
+}
+
+.orders-app .session-actions button {
+  color: #9b2929;
 }
 
 .orders-app .operation-notice {
@@ -2441,11 +2598,20 @@ a {
   .orders-app .wholesale-workspace .matrix-scroll {
     max-height: 70vh;
   }
+
+  .orders-app .session-copy {
+    display: none;
+  }
 }
 
 @media (max-width: 620px) {
   .orders-app .dashboard-topbar {
     flex-wrap: wrap;
+  }
+
+  .orders-app .session-bar {
+    width: 100%;
+    justify-content: space-between;
   }
 
 }
@@ -2671,9 +2837,18 @@ a {
 }
 
 .orders-app .wholesale-matrix .matrix-quantity-cell.has-value {
-  background: #eef5ff;
   color: var(--wine-dark);
   font-weight: 800;
+}
+
+.orders-app .wholesale-matrix tbody tr:nth-child(odd) td,
+.orders-app .wholesale-matrix tbody tr:nth-child(odd) th:first-child {
+  background: #fff;
+}
+
+.orders-app .wholesale-matrix tbody tr:nth-child(even) td,
+.orders-app .wholesale-matrix tbody tr:nth-child(even) th:first-child {
+  background: #faf7f1;
 }
 
 .orders-app .wholesale-matrix tfoot th,
@@ -2982,10 +3157,12 @@ a {
 }
 
 .orders-app .wallet-actions {
-  display: flex;
+  display: grid;
+  width: min(100%, 350px);
+  grid-template-columns: repeat(3, minmax(104px, 1fr));
   align-items: center;
   justify-content: center;
-  flex-wrap: nowrap;
+  margin: 0 auto;
   gap: 6px;
 }
 
@@ -3006,19 +3183,27 @@ a {
   color: #18733c;
 }
 
-.orders-app .wallet-actions .wallet-icon-action {
-  display: inline-grid;
-  width: 34px;
-  min-width: 34px;
+.orders-app .wallet-actions .wallet-action-button {
+  display: inline-flex;
+  width: 100%;
   height: 34px;
   min-height: 34px;
-  place-items: center;
-  padding: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 0 8px;
+  white-space: nowrap;
 }
 
-.orders-app .wallet-actions .wallet-icon-action svg {
+.orders-app .wallet-actions .wallet-action-button svg {
+  flex: 0 0 auto;
   width: 17px;
   height: 17px;
+}
+
+.orders-app .wallet-table th:last-child,
+.orders-app .wallet-table td:last-child {
+  min-width: 365px;
 }
 
 .orders-app .matrix-client {
@@ -3026,6 +3211,37 @@ a {
   align-items: flex-start;
   flex-direction: column;
   gap: 5px;
+}
+
+.orders-app .matrix-client .client-heading-line,
+.orders-app .wallet-client .client-heading-line {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.orders-app .matrix-client .client-heading-line strong,
+.orders-app .wallet-client .client-heading-line strong {
+  display: inline;
+  overflow: hidden;
+  min-width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.orders-app .matrix-client .client-contact-inline,
+.orders-app .wallet-client .client-contact-inline {
+  display: inline;
+  overflow: hidden;
+  min-width: 0;
+  margin: 0;
+  color: var(--subtle);
+  font-size: 11px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .orders-app .matrix-row-actions {
@@ -3042,9 +3258,29 @@ a {
   line-height: 1.25;
 }
 
+.orders-app .matrix-client .client-order-number {
+  color: var(--wine);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+}
+
 .orders-app .matrix-row-actions .conversation-link {
   width: 24px;
   height: 24px;
+}
+
+.orders-app .matrix-row-actions .payment-proof-link {
+  border: 1px solid #e7aa28;
+  border-radius: 8px;
+  background: #fff6d8;
+  color: #7c4b00;
+  text-decoration: none;
+}
+
+.orders-app .matrix-row-actions .payment-proof-link:hover {
+  border-color: #b87500;
+  background: #ffedb0;
 }
 
 .orders-app .matrix-row-actions .advance-action,
@@ -3118,6 +3354,10 @@ a {
   width: 215px;
   min-width: 215px;
   max-width: 215px;
+}
+
+.orders-app .wholesale-matrix thead tr:nth-child(2) th:first-child {
+  text-align: center;
 }
 
 .orders-app .wholesale-matrix.with-order-info th:nth-child(2),
@@ -4354,6 +4594,23 @@ a {
   line-height: 1.45;
 }
 
+.orders-app .rt-price-warning {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 14px;
+  border: 1px solid #edc56f;
+  border-radius: 10px;
+  padding: 11px 14px;
+  background: #fff8e7;
+  color: #76520b;
+}
+
+.orders-app .rt-pending-copy {
+  color: #9a6500;
+  font-weight: 800;
+}
+
 .orders-app .rt-totals {
   display: flex;
   flex-wrap: wrap;
@@ -4514,6 +4771,7 @@ a {
 }
 
 .orders-app .rt-edit input,
+.orders-app .rt-edit select,
 .orders-app .rt-edit textarea {
   width: 100%;
   min-width: 0;
@@ -4529,6 +4787,7 @@ a {
 }
 
 .orders-app .rt-edit input:focus,
+.orders-app .rt-edit select:focus,
 .orders-app .rt-edit textarea:focus {
   border-color: var(--wine);
   box-shadow: 0 0 0 3px rgba(50, 132, 255, 0.12);
@@ -4549,10 +4808,40 @@ a {
 
 .orders-app .rt-edit-row {
   display: grid;
-  grid-template-columns: minmax(180px, 1.5fr) minmax(90px, 0.55fr) minmax(70px, 0.4fr) minmax(110px, 0.65fr) minmax(150px, 1.2fr);
+  grid-template-columns: minmax(180px, 1.5fr) minmax(90px, 0.55fr) minmax(80px, 0.4fr) minmax(110px, 0.65fr) minmax(140px, 1.1fr) minmax(100px, 0.55fr) auto;
   gap: 10px;
   border-top: 1px solid var(--line);
   padding: 12px 0;
+}
+
+.orders-app .rt-edit-line-total {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  color: var(--subtle);
+  font-size: 13px;
+}
+
+.orders-app .rt-edit-line-total strong {
+  color: var(--ink);
+  font-size: 15px;
+}
+
+.orders-app .rt-remove-item {
+  align-self: end;
+  min-height: 42px;
+  border: 1px solid #e7b0b0;
+  border-radius: 9px;
+  padding: 8px 10px;
+  background: #fff6f6;
+  color: #a33232;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.orders-app .rt-add-item {
+  margin: 10px 0 4px;
 }
 
 .orders-app .rt-edit-row:first-of-type {
@@ -4732,10 +5021,10 @@ a {
   }
 }
 
-/* Comanda térmica de 80 mm (72 mm imprimibles) con logo. */
+/* Comanda térmica de 80 mm con 72 mm útiles y tipografía legible. */
 @media print {
   .orders-app .thermal-ticket {
-    font-size: 11px;
+    font-size: 13px;
   }
 
   .orders-app .ticket-subtotal {
@@ -4747,5 +5036,227 @@ a {
     margin: 6px 0 0;
     text-align: center;
     font-weight: 700;
+  }
+}
+
+/* Mayoristas: densidad adaptable con la planilla como contenido principal. */
+.orders-app .dashboard-content:has(.wholesale-workspace) {
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+  padding: clamp(4px, 0.7vw, 8px);
+}
+
+.orders-app .dashboard-content:has(.wholesale-workspace) .dashboard-topbar {
+  min-height: 34px;
+  gap: 6px;
+  padding-bottom: 4px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.orders-app .dashboard-content:has(.wholesale-workspace) .segment-switch,
+.orders-app .dashboard-content:has(.wholesale-workspace) .session-actions {
+  flex: 0 0 auto;
+  padding: 2px;
+}
+
+.orders-app .dashboard-content:has(.wholesale-workspace) .segment-switch button,
+.orders-app .dashboard-content:has(.wholesale-workspace) .session-actions a,
+.orders-app .dashboard-content:has(.wholesale-workspace) .session-actions button {
+  min-height: 27px;
+  padding-inline: 8px;
+  font-size: 10px;
+}
+
+.orders-app .dashboard-content:has(.wholesale-workspace) .session-avatar {
+  width: 27px;
+  height: 27px;
+  flex-basis: 27px;
+  font-size: 10px;
+}
+
+.orders-app .dashboard-content:has(.wholesale-workspace) .wholesale-tabs {
+  min-height: 29px;
+  margin-top: 3px;
+}
+
+.orders-app .dashboard-content:has(.wholesale-workspace) .wholesale-tabs button {
+  min-height: 28px;
+  padding: 4px 12px;
+  font-size: 11px;
+}
+
+.orders-app .dashboard-content:has(.wholesale-workspace) .wholesale-workspace {
+  min-height: 0;
+  margin-top: 3px;
+  border-radius: 7px;
+}
+
+.orders-app .dashboard-content:has(.wholesale-workspace) .section-toolbar {
+  min-height: 35px;
+  flex-wrap: nowrap;
+  gap: 5px;
+  padding: 4px 6px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.orders-app .dashboard-content:has(.wholesale-workspace) .table-filters,
+.orders-app .dashboard-content:has(.wholesale-workspace) .toolbar-actions {
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+  gap: 4px;
+}
+
+.orders-app .dashboard-content:has(.wholesale-workspace) .table-filters > *,
+.orders-app .dashboard-content:has(.wholesale-workspace) .filter-menu > .outline-action,
+.orders-app .dashboard-content:has(.wholesale-workspace) .toolbar-actions > *,
+.orders-app .dashboard-content:has(.wholesale-workspace) .toolbar-actions select,
+.orders-app .dashboard-content:has(.wholesale-workspace) .day-navigator {
+  height: 29px;
+  min-height: 29px;
+  font-size: 10px;
+}
+
+.orders-app .dashboard-content:has(.wholesale-workspace) .day-navigator > span,
+.orders-app .dashboard-content:has(.wholesale-workspace) .day-navigator > span strong,
+.orders-app .dashboard-content:has(.wholesale-workspace) .table-search input,
+.orders-app .dashboard-content:has(.wholesale-workspace) .orders-filter,
+.orders-app .dashboard-content:has(.wholesale-workspace) .help-filter,
+.orders-app .dashboard-content:has(.wholesale-workspace) .dispatched-filter,
+.orders-app .dashboard-content:has(.wholesale-workspace) .outline-action,
+.orders-app .dashboard-content:has(.wholesale-workspace) .primary-action {
+  font-size: 10px;
+}
+
+.orders-app .dashboard-content:has(.wholesale-workspace) .table-search {
+  width: clamp(150px, 14vw, 210px);
+  padding-left: 8px;
+}
+
+.orders-app .add-order-action {
+  position: sticky;
+  right: 0;
+  z-index: 4;
+  box-shadow: -8px 0 12px #fff;
+  white-space: nowrap;
+}
+
+.orders-app .dashboard-content:has(.wholesale-workspace) .matrix-scroll-hint {
+  display: none;
+}
+
+.orders-app .dashboard-content:has(.wholesale-workspace) .matrix-scroll-shell .matrix-scroll {
+  min-height: 180px;
+}
+
+.orders-app .dashboard-content:has(.wholesale-workspace) .wholesale-matrix {
+  font-size: clamp(11px, 0.84vw, 12px);
+}
+
+.orders-app .dashboard-content:has(.wholesale-workspace) .wholesale-matrix th,
+.orders-app .dashboard-content:has(.wholesale-workspace) .wholesale-matrix td {
+  min-width: 62px;
+  padding: 4px 6px;
+}
+
+.orders-app .dashboard-content:has(.wholesale-workspace) .wholesale-matrix thead th,
+.orders-app .dashboard-content:has(.wholesale-workspace) .wholesale-matrix tbody th small {
+  font-size: 9px;
+}
+
+.orders-app .dashboard-content:has(.wholesale-workspace) .wholesale-matrix tbody th strong {
+  font-size: 11px;
+}
+
+.orders-app .dashboard-content:has(.wholesale-workspace) .wholesale-matrix .category-row th {
+  height: 21px;
+  font-size: 9px;
+}
+
+.orders-app .dashboard-content:has(.wholesale-workspace) .wholesale-matrix thead tr:nth-child(2) th {
+  top: 21px;
+}
+
+.orders-app .dashboard-content:has(.wholesale-workspace) .wholesale-matrix th:first-child {
+  width: clamp(184px, 18vw, 220px);
+  min-width: clamp(184px, 18vw, 220px);
+  max-width: clamp(184px, 18vw, 220px);
+  overflow: hidden;
+}
+
+.orders-app .dashboard-content:has(.wholesale-workspace) .matrix-client,
+.orders-app .dashboard-content:has(.wholesale-workspace) .matrix-client > span,
+.orders-app .dashboard-content:has(.wholesale-workspace) .matrix-client .client-heading-line {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.orders-app .dashboard-content:has(.wholesale-workspace) .matrix-client .client-heading-line {
+  display: grid;
+  align-items: start;
+  gap: 1px;
+  white-space: normal;
+}
+
+.orders-app .dashboard-content:has(.wholesale-workspace) .matrix-client .client-heading-line strong,
+.orders-app .dashboard-content:has(.wholesale-workspace) .matrix-client .client-contact-inline {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.orders-app .dashboard-content:has(.wholesale-workspace) .matrix-client .client-contact-inline {
+  margin-top: 1px;
+  font-size: 9px;
+  line-height: 1.2;
+}
+
+.orders-app .dashboard-content:has(.wholesale-workspace) .client-address,
+.orders-app .dashboard-content:has(.wholesale-workspace) .client-order-number {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.orders-app .dashboard-content:has(.wholesale-workspace) .matrix-scroll-controls {
+  right: 12px;
+  bottom: 12px;
+  grid-template-columns: repeat(2, 28px);
+  padding: 3px;
+}
+
+.orders-app .dashboard-content:has(.wholesale-workspace) .matrix-scroll-controls button {
+  width: 28px;
+  height: 26px;
+  font-size: 14px;
+}
+
+@media (max-width: 1450px) {
+  .orders-app .dashboard-content:has(.wholesale-workspace) .session-copy {
+    display: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .orders-app .dashboard-content:has(.wholesale-workspace) .dashboard-topbar,
+  .orders-app .dashboard-content:has(.wholesale-workspace) .section-toolbar,
+  .orders-app .dashboard-content:has(.wholesale-workspace) .toolbar-actions {
+    flex-wrap: nowrap;
+  }
+
+  .orders-app .dashboard-content:has(.wholesale-workspace) .section-toolbar {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .orders-app .dashboard-content:has(.wholesale-workspace) .session-identity {
+    display: none;
   }
 }

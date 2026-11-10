@@ -10,20 +10,23 @@ import { createPanelUser, deletePanelUser, resetPanelUserPassword, updatePanelUs
 
 export type PanelUserRow = { userId: string; email: string; role: PanelRole; customerType: CustomerType | null };
 
-// Un solo selector combina rol y segmento: el operador siempre tiene uno asignado.
-type Access = "admin" | "operator:wholesale" | "operator:retail";
+// Un solo selector combina rol y alcance operativo.
+type Access = "admin" | "operator:all" | "operator:wholesale" | "operator:retail";
 const accessLabels: Record<Access, string> = {
   admin: "Administrador (ve todo)",
+  "operator:all": "Operador · Mayoristas y Minoristas",
   "operator:wholesale": "Operador · Mayoristas",
   "operator:retail": "Operador · Minoristas",
 };
 
 function toAccess(role: PanelRole, customerType: CustomerType | null): Access {
-  return role === "admin" ? "admin" : `operator:${customerType ?? "wholesale"}`;
+  return role === "admin" ? "admin" : customerType ? `operator:${customerType}` : "operator:all";
 }
 
 function fromAccess(access: Access): { role: PanelRole; customerType: CustomerType | null } {
-  return access === "admin" ? { role: "admin", customerType: null } : { role: "operator", customerType: access.split(":")[1] as CustomerType };
+  if (access === "admin") return { role: "admin", customerType: null };
+  if (access === "operator:all") return { role: "operator", customerType: null };
+  return { role: "operator", customerType: access.split(":")[1] as CustomerType };
 }
 
 function AccessSelect({ value, onChange, disabled, label }: { value: Access; onChange: (value: Access) => void; disabled?: boolean; label: string }) {

@@ -38,6 +38,7 @@ REGISTRO DEL CLIENTE
 
 PEDIDOS
 - Recibe productos, cantidades, unidades, cortes, preparación, empaque y observaciones sin perder detalles.
+- Si falta una característica que cambia el producto o su preparación, pregunta únicamente ese detalle antes de registrar. Por ejemplo, para filete pregunta si lo desean relajado o entero. No inventes la opción ni omitas la indicación original del cliente.
 - No inventes productos, precios, descuentos, unidades ni disponibilidad. No mezcles precios mayoristas.
 - Respeta la unidad de venta del catálogo; la pata de res se cotiza por unidad.
 - Cuando el cliente agregue un producto a un pedido abierto, confirma solo la modificación. Ejemplo: “Listo, agregué 1 pechuga deshuesada tajada.” No envíes de nuevo el resumen completo y no preguntes si desea algo más.
@@ -55,7 +56,8 @@ ENTREGAS Y PAGOS
 - Se reciben pedidos todos los días. Para entrega el mismo día aplican los horarios y políticas vigentes configurados por Fénix.
 - No garantices una hora exacta de entrega sin confirmación del equipo.
 - El domicilio puede ser gratuito en compras superiores a $100.000 según la zona y la política vigente; si no puedes calcularlo, indica que el equipo confirmará el valor.
-- Recibir un comprobante no confirma el pago. Solo informa que fue recibido para validación.
+- Cuando el cliente envíe por el chat una imagen o archivo que sea un comprobante, soporte o recibo de pago, ejecuta inmediatamente la acción de ayuda humana con el motivo exacto “El cliente envió un comprobante de pago para validar”. El caso debe aparecer en **Minoristas → Requiere ayuda**.
+- Recibir un comprobante no confirma el pago. Solo informa que fue recibido para validación y no lo conviertas en un pedido ni extraigas sus conceptos como productos.
 - Informa estados del pedido únicamente cuando el sistema los confirme.
 
 ATENCIÓN HUMANA
@@ -85,7 +87,8 @@ En **Conversation AI > agente minorista > Goals/Intent > Setup your Actions**:
 3. Conserva nombre y teléfono en el flujo de recopilación estándar del agente. En WhatsApp, el teléfono normalmente ya pertenece al contacto; solo debe pedirse si está vacío o si se necesita otro número de recepción.
 4. Para cambios de dirección ya registrada, agrega una acción separada **Trigger Workflow** llamada `Actualizar dirección minorista`. Ese workflow debe vaciar dirección, barrio y zona, colocar `Registro Minorista Completo = No` y permitir que Contact Info capture los valores nuevos. No lo ejecutes para un cliente nuevo. Para otros tipos de cambio crea una acción específica o transfiere al equipo, evitando borrar datos que el cliente no pidió modificar.
 5. Mantén una sola acción para registrar el pedido y una sola fuente de mensajes de confirmación. Con `SEND_CONFIRMATION=false`, la confirmación la envía el agente.
-6. Configura **Human Handover/Stop Bot** para que la intervención manual pause las respuestas automáticas.
+6. En la acción que dispara `Fénix · Minoristas · Pedido IA → Panel`, incluye también esta condición explícita: **“Activa este flujo cuando el cliente envíe una imagen, documento, comprobante, soporte o recibo de pago, aunque no esté haciendo un pedido.”** El workflow ya clasifica el archivo y crea el caso en `Requiere ayuda`; si el agente solo responde en el chat pero no ejecuta la acción, el panel nunca recibirá el caso.
+7. Configura **Human Handover/Stop Bot** para que la intervención manual pause las respuestas automáticas.
 
 ## Workflow para marcar el registro completo
 
@@ -110,5 +113,7 @@ La acción Contact Info guarda los datos; este workflow verifica que estén comp
 4. Anexo: “Agrega una pechuga tajada” recibe una confirmación breve, sin resumen completo ni pregunta genérica.
 5. Cierre: después de “exacto” registra el pedido sin pedir otra confirmación.
 6. Agradecimiento: responde “Con gusto.” sin reabrir la conversación.
-7. Pago: un comprobante queda pendiente de validación, nunca confirmado automáticamente.
+7. Pago: al enviar un comprobante por el chat, el caso aparece en **Requiere ayuda**, queda pendiente de validación y nunca se confirma automáticamente.
 8. Atención manual: cuando un empleado responde, el agente se detiene.
+9. Preparación ambigua: “quiero filete” provoca una sola pregunta concreta para definir si es relajado o entero antes de registrar.
+10. Despacho: al marcar un pedido minorista como despachado desde el panel, el cliente recibe el aviso por WhatsApp; para recogida se informa que ya está listo en tienda.

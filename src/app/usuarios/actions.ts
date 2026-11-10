@@ -15,7 +15,7 @@ const customerTypes: CustomerType[] = ["retail", "wholesale"];
 
 function validAccess(role: PanelRole, customerType: CustomerType | null) {
   if (!roles.includes(role)) return false;
-  return role === "admin" ? customerType === null : customerType !== null && customerTypes.includes(customerType);
+  return role === "admin" ? customerType === null : customerType === null || customerTypes.includes(customerType);
 }
 
 function validPassword(password: string) {
@@ -27,7 +27,7 @@ export async function createPanelUser(input: { email: string; password: string; 
   const email = input.email.trim().toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { ok: false, message: "Escribe un correo válido." };
   if (!validPassword(input.password)) return { ok: false, message: "La contraseña debe tener al menos 8 caracteres." };
-  if (!validAccess(input.role, input.customerType)) return { ok: false, message: "Elige el rol y, para operadores, el segmento." };
+  if (!validAccess(input.role, input.customerType)) return { ok: false, message: "Elige un acceso válido para el usuario." };
 
   const admin = createAdminClient();
   const { data, error } = await admin.auth.admin.createUser({ email, password: input.password, email_confirm: true });
@@ -47,7 +47,7 @@ export async function createPanelUser(input: { email: string; password: string; 
 
 export async function updatePanelUserAccess(userId: string, role: PanelRole, customerType: CustomerType | null): Promise<Result> {
   const viewer = await requireAdmin();
-  if (!validAccess(role, customerType)) return { ok: false, message: "Elige el rol y, para operadores, el segmento." };
+  if (!validAccess(role, customerType)) return { ok: false, message: "Elige un acceso válido para el usuario." };
   if (userId === viewer.userId && role !== "admin") return { ok: false, message: "No puedes quitarte tu propio rol de administrador." };
 
   const { error } = await createAdminClient()

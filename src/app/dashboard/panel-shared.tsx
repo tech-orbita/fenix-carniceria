@@ -45,7 +45,10 @@ export function phaseForStatus(status: OrderStatus): OperationalPhase {
 }
 
 export function orderTotal(order: Order) {
-  return order.items.reduce((total, item) => total + (item.actualQuantity ?? item.quantity) * item.unitPrice, order.deliveryFee + order.adjustments);
+  return order.items.reduce((total, item) => {
+    const billableQuantity = item.actualQuantity ?? (item.unit === "kg" ? item.quantity : 0);
+    return total + billableQuantity * item.unitPrice;
+  }, order.deliveryFee + order.adjustments);
 }
 
 export function whatsappUrl(phone: string, message: string) {

@@ -1,4 +1,4 @@
-import { parseOrderText } from "./product-parser.ts";
+import { parseOrderTextDetailed } from "./product-parser.ts";
 
 export type WholesaleForm = "mayorista-cliente" | "nuevo-mayorista";
 
@@ -45,9 +45,38 @@ export function mapHighLevelForm(value: unknown, form: WholesaleForm) {
     }
     return undefined;
   };
-  const name = get("customer_name", "Nombre Completo", "full_name", "contact.name", "name") ?? [get("first_name", "contact.first_name"), get("last_name", "contact.last_name")].filter(Boolean).join(" ");
-  const business = get("business_name", "Nombre del Negocio", "Nombre del establecimiento comercial", "company_name", "contact.company_name", "companyName")
-    ?? (form === "nuevo-mayorista" ? name : undefined);
+  const getFileUrl = (...keys: string[]) => {
+    const direct = get(...keys);
+    if (direct) return direct;
+    for (const key of keys) {
+      const value = fields.get(normalize(key));
+      if (Array.isArray(value)) {
+        const url = value.find((entry): entry is string => typeof entry === "string" && Boolean(entry.trim()));
+        if (url) return url.trim();
+      }
+      if (value && typeof value === "object" && !Array.isArray(value)) {
+        const file = value as Record<string, unknown>;
+        const url = file.url ?? file.fileUrl ?? file.file_url;
+        if (typeof url === "string" && url.trim()) return url.trim();
+      }
+    }
+    return undefined;
+  };
+  // Los formularios nuevos envían la persona y la empresa por separado. Se
+  // conservan los alias anteriores para que los flujos históricos sigan
+  // funcionando mientras todos los contactos se actualizan.
+  const name = get("full_name", "Nombre Completo", "customer_name", "contact.name", "name") ?? [get("first_name", "contact.first_name"), get("last_name", "contact.last_name")].filter(Boolean).join(" ");
+  const businessKeys = [
+    "business_name", "Business_name", "Nombre del Negocio", "nombre_del_negocio",
+    "Nombre del establecimiento comercial",
+    "contact.nombre_del_negocio", "company_name", "contact.company_name", "companyName",
+  ];
+  const hasExplicitBusinessField = businessKeys.some((key) => fields.has(normalize(key)));
+  const business = get(...businessKeys)
+    // Compatibilidad con el formulario anterior, que usaba el nombre del
+    // contacto como negocio. Si el flujo nuevo envía el campo vacío, no se
+    // debe inventar una empresa copiando el nombre de la persona.
+    ?? (form === "nuevo-mayorista" && !hasExplicitBusinessField ? name : undefined);
   const phone = get("phone", "Teléfono", "contact.phone");
   const text = get("order_text", "Coloca tu Pedido", "coloca_tu_pedido", "Pedido", "pedido_mayorista");
   const fulfillment = get("fulfillment_type", "¿Es a Domicilio o Recoges en Tienda?", "es_a_domicilio_o_recoges_en_tienda", "Domicilio o Tienda", "Tipo de entrega");
@@ -70,6 +99,11 @@ export function mapHighLevelForm(value: unknown, form: WholesaleForm) {
     "Dirección",
     "Agrega Dirección de Entrega",
   ) ?? directAddress;
+  const parsedOrder = parseOrderTextDetailed(text);
+  const observations = get("observations", "Observaciones Adicionales");
+  const clarification = parsedOrder.unresolved.length
+    ? `Por aclarar en el pedido: ${parsedOrder.unresolved.join(" · ")}`
+    : undefined;
   return {
     source: "form" as const,
     source_reference: submission ? `ghl:${form}:${submission}` : undefined,
@@ -80,13 +114,13 @@ export function mapHighLevelForm(value: unknown, form: WholesaleForm) {
       address: customerAddress?.replace(/,\s*$/, ""),
     },
     fulfillment_type: pickup ? "pickup" as const : "delivery" as const,
-    notes: get("observations", "Observaciones Adicionales"),
-    items: parseOrderText(text),
+    notes: [observations, clarification].filter(Boolean).join("\n") || undefined,
+    items: parsedOrder.items,
     form_data: {
       form, order_text: text, tax_id: get("tax_id", "Nit o Cédula"), billing: get("billing", "Facturación"),
       maps_url: get("maps_url", "Ubicación de Maps"),
       receiver_phone: get("receiver_phone", "Número de Quien Recibe"),
-      payment_proof: get("payment_proof", "Aqui puedes subir tu comprobante de Pago"),
+      payment_proof: getFileUrl("payment_proof", "Aqui puedes subir tu comprobante de Pago"),
       contact_id: get("contactId", "contact_id", "contact.id"),
       location_id: get("locationId", "location_id", "location.id"),
       conversation_id: get("conversationId", "conversation_id", "conversation.id"),

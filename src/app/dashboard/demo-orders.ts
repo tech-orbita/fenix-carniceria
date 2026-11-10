@@ -80,7 +80,7 @@ export function demoOrders(): Order[] {
       highLevel: { contactId: "demo-contact-2", locationId: "demo-location", conversationId: "demo-conversation-2" },
       notes: "El cliente pidió ayuda para corregir la dirección.",
       items: [
-        { id: "94021", productName: "Costilla de cerdo", quantity: 1, unit: "kg", unitPrice: 20_000 },
+        { id: "94021", productName: "Costilla de cerdo", quantity: 1, unit: "kg", unitPrice: 18_000 },
       ],
     },
   ];

@@ -4,10 +4,10 @@ import { revalidatePath } from "next/cache";
 
 import { requireViewer } from "@/lib/auth/viewer";
 import { createClient } from "@/lib/supabase/server";
-import { catalogProductFor, normalizeProductName, parseOrderText, toKilograms } from "@/lib/orders/product-parser";
-import { retailBillMessage } from "@/lib/orders/retail-bill";
+import { catalogProductFor, normalizeProductName, normalizeWholesaleUnit, parseOrderText, toKilograms, UNSPECIFIED_WHOLESALE_UNIT } from "@/lib/orders/product-parser";
+import { retailBillMessage, retailDispatchMessage } from "@/lib/orders/retail-bill";
 import { sendHighLevelMessage, sendWholesalePaymentSummary, syncHighLevelOrderFields, syncOrderPipeline, syncWholesalePipeline } from "@/lib/orders/highlevel-pipeline";
-import { customerIdentityKey, unassignedWholesaleRoute, wholesaleRoutes } from "@/lib/orders/wholesale-routes";
+import { customerIdentityKey, wholesaleRoutes } from "@/lib/orders/wholesale-routes";
 import type { HighLevelContext, OrderPipelineStage } from "@/lib/orders/highlevel-pipeline";
 
 import type { OrderStatus } from "./types";
@@ -56,7 +56,7 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus) {
     .from("orders")
     .update({ status })
     .eq("id", Number(orderId))
-    .select("id,order_number,customer_type,source_payload,total,customers(name,business_name)")
+    .select("id,order_number,customer_type,fulfillment_type,source_payload,total,customers(name,business_name)")
     .maybeSingle();
 
   if (error || !data) {
@@ -71,10 +71,29 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus) {
       highLevelContext(data.source_payload),
       data.customer_type,
       pipelineStage,
-      `${customer?.business_name || customer?.name || "Cliente"} · ${data.order_number}`,
+      `${customer?.name || "Cliente"} · ${data.order_number}`,
       Number(data.total),
     );
     if (!synced.ok) message = `Estado actualizado, pero no se pudo mover el pipeline: ${synced.message}`;
+  }
+
+  if (data.customer_type === "retail" && status === "dispatched") {
+    const customer = Array.isArray(data.customers) ? data.customers[0] : data.customers;
+    const sent = await sendHighLevelMessage(
+      highLevelContext(data.source_payload),
+      retailDispatchMessage({
+        orderNumber: data.order_number,
+        customer: customer?.name || "cliente",
+        fulfillment: data.fulfillment_type === "pickup" ? "pickup" : "delivery",
+      }),
+    );
+    if (!sent.ok) {
+      message = message === "Estado actualizado."
+        ? `Estado actualizado, pero no se pudo avisar al cliente: ${sent.message}`
+        : `${message} Tampoco se pudo avisar al cliente: ${sent.message}`;
+    } else if (message === "Estado actualizado.") {
+      message = "Estado actualizado y cliente notificado por WhatsApp.";
+    }
   }
 
   revalidatePath("/dashboard");
@@ -121,7 +140,7 @@ export async function resolveOrderHelp(orderId: string) {
     highLevelContext(current.source_payload),
     current.customer_type,
     pipelineStageFor(status)!,
-    `${customer?.business_name || customer?.name || "Cliente"} · ${current.order_number}`,
+    `${customer?.name || "Cliente"} · ${current.order_number}`,
     Number(current.total),
   );
   revalidatePath("/dashboard");
@@ -144,6 +163,13 @@ export async function sendRetailPaymentSummary(orderId: string) {
     .maybeSingle();
   if (error || !data || !data.order_items?.length) return { ok: false as const, message: "No se encontró una cuenta de cobro para enviar." };
 
+  const billItems = data.order_items.map((item) => ({
+    productName: item.product_name,
+    quantity: Number(item.quantity),
+    actualQuantity: item.actual_quantity == null ? undefined : Number(item.actual_quantity),
+    unit: item.unit,
+    unitPrice: Number(item.unit_price),
+  }));
   const customer = Array.isArray(data.customers) ? data.customers[0] : data.customers;
   const sent = await sendHighLevelMessage(highLevelContext(data.source_payload), retailBillMessage({
     orderNumber: data.order_number,
@@ -152,15 +178,9 @@ export async function sendRetailPaymentSummary(orderId: string) {
     paymentStatus: data.payment_status,
     deliveryFee: Number(data.delivery_fee),
     adjustments: Number(data.adjustments),
-    items: data.order_items.map((item) => ({
-      productName: item.product_name,
-      quantity: Number(item.quantity),
-      actualQuantity: item.actual_quantity == null ? undefined : Number(item.actual_quantity),
-      unit: item.unit,
-      unitPrice: Number(item.unit_price),
-    })),
+    items: billItems,
   }));
-  return sent.ok ? { ok: true as const, message: "Cuenta de cobro enviada por la conversación de HighLevel." } : sent;
+  return sent.ok ? { ok: true as const, message: "Cuenta de cobro enviada por la conversación de Orbita." } : sent;
 }
 
 export async function updateOrderPaymentStatus(
@@ -189,7 +209,7 @@ export async function updateOrderPaymentStatus(
     highLevelContext(data.source_payload),
     "retail",
     paymentStatus === "paid" ? "paid" : "payment_pending",
-    `${customer?.business_name || customer?.name || "Cliente"} · ${data.order_number}`,
+    `${customer?.name || "Cliente"} · ${data.order_number}`,
     Number(data.total),
   );
 
@@ -220,6 +240,24 @@ export async function scheduleWholesaleOrder(orderId: string, deliveryDay: strin
   return { ok: true, message: "Pedido autorizado para despacho hoy." };
 }
 
+export async function scheduleRetailOrder(orderId: string, deliveryDay: string) {
+  if (!/^\d+$/.test(orderId) || !/^\d{4}-\d{2}-\d{2}$/.test(deliveryDay)) {
+    return { ok: false, message: "Pedido o fecha inválida." };
+  }
+  const parsed = new Date(`${deliveryDay}T12:00:00-05:00`);
+  if (Number.isNaN(parsed.getTime())) return { ok: false, message: "Fecha inválida." };
+  const supabase = await sessionClient();
+  const { data, error } = await supabase.from("orders")
+    .update({ requested_delivery_at: parsed.toISOString() })
+    .eq("id", Number(orderId))
+    .eq("customer_type", "retail")
+    .select("id")
+    .maybeSingle();
+  if (error || !data) return { ok: false, message: "No se pudo cambiar la fecha de entrega." };
+  revalidatePath("/dashboard");
+  return { ok: true, message: "Pedido minorista adelantado para entrega hoy." };
+}
+
 type ManualWholesaleOrderInput = {
   businessName: string;
   customerName: string;
@@ -230,12 +268,45 @@ type ManualWholesaleOrderInput = {
   notes: string;
 };
 
+export async function findWholesaleCustomer(businessNameInput: string) {
+  const businessName = businessNameInput?.trim();
+  if (!businessName || businessName.length > 160) {
+    return { ok: false as const, found: false as const, message: "Escribe un establecimiento válido." };
+  }
+
+  const supabase = await sessionClient();
+  const identityKey = customerIdentityKey("wholesale", { businessName, name: businessName });
+  const { data, error } = await supabase
+    .from("customers")
+    .select("name,business_name,phone,address,routes(name)")
+    .eq("customer_type", "wholesale")
+    .eq("identity_key", identityKey)
+    .maybeSingle();
+
+  if (error) return { ok: false as const, found: false as const, message: "No se pudo consultar el establecimiento." };
+  if (!data) return { ok: true as const, found: false as const };
+
+  const linkedRoute = Array.isArray(data.routes) ? data.routes[0] : data.routes;
+  const routeName = linkedRoute?.name ?? "";
+  return {
+    ok: true as const,
+    found: true as const,
+    customer: {
+      businessName: data.business_name || businessName,
+      customerName: data.name || "",
+      phone: data.phone || "",
+      address: data.address || "",
+      routeName: wholesaleRoutes.includes(routeName as (typeof wholesaleRoutes)[number]) ? routeName : "",
+    },
+  };
+}
+
 export async function createManualWholesaleOrder(input: ManualWholesaleOrderInput) {
   const businessName = input.businessName?.trim();
   const submittedCustomerName = input.customerName?.trim();
   const phone = input.phone?.trim() || null;
   const address = input.address?.trim() || null;
-  const routeName = input.routeName?.trim() || unassignedWholesaleRoute;
+  const routeName = input.routeName?.trim();
   const orderText = input.orderText?.trim();
   const notes = input.notes?.trim() || null;
 
@@ -243,7 +314,7 @@ export async function createManualWholesaleOrder(input: ManualWholesaleOrderInpu
     !businessName || businessName.length > 160 || (submittedCustomerName?.length ?? 0) > 160 ||
     (phone?.length ?? 0) > 40 || (address?.length ?? 0) > 500 ||
     !orderText || orderText.length > 5_000 || (notes?.length ?? 0) > 2_000 ||
-    ![...wholesaleRoutes, unassignedWholesaleRoute].includes(routeName as (typeof wholesaleRoutes)[number] | typeof unassignedWholesaleRoute)
+    !wholesaleRoutes.includes(routeName as (typeof wholesaleRoutes)[number])
   ) {
     return { ok: false as const, message: "Revisa el establecimiento, la ruta y el pedido." };
   }
@@ -261,7 +332,7 @@ export async function createManualWholesaleOrder(input: ManualWholesaleOrderInpu
   ]);
   if (routeError || !route) return { ok: false as const, message: "La ruta seleccionada no está disponible." };
   const customerName = submittedCustomerName || existingCustomer?.name || businessName;
-  const routeId = routeName === unassignedWholesaleRoute && existingCustomer?.route_id ? existingCustomer.route_id : route.id;
+  const routeId = route.id;
 
   const { data: customer, error: customerError } = await supabase.from("customers").upsert({
     customer_type: "wholesale",
@@ -318,6 +389,10 @@ export async function updateWholesalePayment(
   paymentStatus: "pending" | "paid",
   sendSummary = false,
 ) {
+  const viewer = await requireViewer();
+  if (viewer.role !== "admin") {
+    return { ok: false, message: "La cartera mayorista es exclusiva de administradores." };
+  }
   if (!/^\d+$/.test(orderId) || !Number.isFinite(total) || total < 0 || total > 999_999_999 || !["pending", "paid"].includes(paymentStatus)) {
     return { ok: false, message: "Revisa el valor y el estado de pago." };
   }
@@ -335,13 +410,13 @@ export async function updateWholesalePayment(
     syncWholesalePipeline(
       context,
       paymentStatus === "paid" ? "paid" : "payment_pending",
-      `${customer?.business_name || customer?.name || "Cliente"} · ${data.order_number}`,
+      `${customer?.name || "Cliente"} · ${data.order_number}`,
       total,
     ),
     syncHighLevelOrderFields(context, { orderNumber: data.order_number, total }),
   ]);
   if (sendSummary) {
-    const sent = await sendWholesalePaymentSummary(context, customer?.business_name || customer?.name || "cliente", data.order_number, total);
+    const sent = await sendWholesalePaymentSummary(context, customer?.name || "cliente", data.order_number, total);
     if (!sent.ok) return { ok: false, message: `Se guardó la cartera, pero ${sent.message}` };
   }
   revalidatePath("/dashboard");
@@ -380,7 +455,9 @@ export async function updateOrderDetails(
   const phone = details.phone.trim();
   const address = details.address.trim();
   const notes = details.notes.trim();
-  const normalizedItems = details.items.map((item) => ({ ...item, ...toKilograms(item.quantity, item.unit) }));
+  const normalizedItems = details.items.map((item) => item.unit === "und"
+    ? { ...item, unit: "und" }
+    : { ...item, ...toKilograms(item.quantity, item.unit) });
 
   if (
     !customer ||
@@ -388,7 +465,7 @@ export async function updateOrderDetails(
     !address ||
     !details.items.length ||
     normalizedItems.some((item) =>
-      !/^\d+$/.test(item.id) ||
+      !(/^\d+$/.test(item.id) || /^new-\d+(?:-\d+)?$/.test(item.id)) ||
       !item.productName.trim() ||
       !item.unit.trim() ||
       !Number.isFinite(item.quantity) ||
@@ -412,7 +489,21 @@ export async function updateOrderDetails(
     return { ok: false, message: "No se encontró el pedido para editar." };
   }
 
-  const [customerResult, orderResult, ...itemResults] = await Promise.all([
+  const { data: existingItems, error: itemsLookupError } = await supabase
+    .from("order_items")
+    .select("id,product_id,product_name")
+    .eq("order_id", Number(orderId));
+  if (itemsLookupError) return { ok: false, message: "No se pudieron consultar los productos del pedido." };
+  const existingIds = new Set((existingItems ?? []).map((item) => String(item.id)));
+  const keptIds = new Set(normalizedItems.filter((item) => /^\d+$/.test(item.id)).map((item) => item.id));
+  if ([...keptIds].some((id) => !existingIds.has(id))) return { ok: false, message: "Uno de los productos ya no pertenece al pedido." };
+  const removedIds = [...existingIds].filter((id) => !keptIds.has(id));
+  const currentItems = normalizedItems.filter((item) => /^\d+$/.test(item.id));
+  const newItems = normalizedItems.filter((item) => !/^\d+$/.test(item.id));
+  const existingById = new Map((existingItems ?? []).map((item) => [String(item.id), item]));
+  const subtotal = normalizedItems.reduce((total, item) => total + Math.round(item.quantity * item.unitPrice), 0);
+
+  const [customerResult, orderResult, deleteResult, insertResult, ...itemResults] = await Promise.all([
     supabase
       .from("customers")
       .update({
@@ -427,16 +518,35 @@ export async function updateOrderDetails(
       .update({
         delivery_address: address,
         notes: notes || null,
-        subtotal: normalizedItems.reduce((total, item) => total + item.quantity * item.unitPrice, 0),
+        subtotal,
       })
       .eq("id", Number(orderId)),
-    ...normalizedItems.map((item) =>
+    removedIds.length
+      ? supabase.from("order_items").delete().in("id", removedIds).eq("order_id", Number(orderId))
+      : Promise.resolve({ error: null }),
+    newItems.length
+      ? supabase.from("order_items").insert(newItems.map((item, index) => ({
+          order_id: Number(orderId),
+          product_name: item.productName.trim(),
+          quantity: item.quantity,
+          actual_quantity: item.quantity,
+          unit: item.unit,
+          unit_price: item.unitPrice,
+          preparation: item.preparation.trim() || null,
+          sort_order: (existingItems?.length ?? 0) + index,
+        })))
+      : Promise.resolve({ error: null }),
+    ...currentItems.map((item) =>
       supabase
         .from("order_items")
         .update({
+          // Al renombrar manualmente no se debe conservar la referencia al producto anterior.
+          product_id: normalizeProductName(existingById.get(item.id)?.product_name ?? "") === normalizeProductName(item.productName)
+            ? existingById.get(item.id)?.product_id ?? null
+            : null,
           product_name: item.productName.trim(),
           actual_quantity: item.quantity,
-          unit: "kg",
+          unit: item.unit,
           unit_price: item.unitPrice,
           preparation: item.preparation.trim() || null,
         })
@@ -445,7 +555,7 @@ export async function updateOrderDetails(
     ),
   ]);
 
-  if (customerResult.error || orderResult.error || itemResults.some((result) => result.error)) {
+  if (customerResult.error || orderResult.error || deleteResult.error || insertResult.error || itemResults.some((result) => result.error)) {
     return { ok: false, message: "No se pudieron guardar todos los cambios." };
   }
 
@@ -464,8 +574,8 @@ function parseQuantity(value: string) {
   const match = value.trim().match(/^(\d+(?:[.,]\d+)?)\s*([\p{L}]+)?$/u);
   if (!match) return null;
   const quantity = Number(match[1].replace(",", "."));
-  if (!Number.isFinite(quantity) || quantity <= 0) return null;
-  return toKilograms(quantity, match[2] ?? "kg");
+  if (!Number.isFinite(quantity) || quantity < 0) return null;
+  return { quantity, unit: normalizeWholesaleUnit(match[2] ?? UNSPECIFIED_WHOLESALE_UNIT) };
 }
 
 function parseWholesaleCell(productName: string, value: string) {
@@ -474,12 +584,12 @@ function parseWholesaleCell(productName: string, value: string) {
     const parts = value.split("/").map((part) => part.trim()).filter(Boolean);
     if (!parts.length) return null;
     const parsed = parts.map((part) => {
-      const match = part.match(/^(\d+(?:[.,]\d+)?)\s*(kg|kgs|kilo|kilos|lb|lbs|libra|libras)?\s+(.+)$/i);
+      const match = part.match(/^(\d+(?:[.,]\d+)?)\s*(kg|kgs|kilo|kilos|lb|lbs|libra|libras|und|unds|unidad|unidades)?\s+(.+)$/i);
       if (!match) return null;
       const quantity = Number(match[1].replace(",", "."));
       const preparation = match[3].trim();
       if (!Number.isFinite(quantity) || quantity <= 0 || !preparation) return null;
-      return { ...toKilograms(quantity, match[2] ?? "kg"), preparation: preparation.slice(0, 250) };
+      return { quantity, unit: normalizeWholesaleUnit(match[2] ?? UNSPECIFIED_WHOLESALE_UNIT), preparation: preparation.slice(0, 250) };
     });
     return parsed.every(Boolean) ? parsed as Array<{ quantity: number; unit: string; preparation: string }> : null;
   }
@@ -490,11 +600,11 @@ function parseWholesaleCell(productName: string, value: string) {
   const parts = value.split("/").map((part) => part.trim()).filter(Boolean);
   if (!parts.length) return null;
   const parsed = parts.map((part) => {
-    const match = part.match(/^(\d+(?:[.,]\d+)?)\s*(kg|kgs|kilo|kilos|lb|lbs|libra|libras)?\s*([CLTB])?$/i);
+    const match = part.match(/^(\d+(?:[.,]\d+)?)\s*(kg|kgs|kilo|kilos|lb|lbs|libra|libras|und|unds|unidad|unidades)?\s*([CLTB])?$/i);
     if (!match) return null;
     const quantity = Number(match[1].replace(",", "."));
-    if (!Number.isFinite(quantity) || quantity <= 0) return null;
-    return { ...toKilograms(quantity, match[2] ?? "kg"), preparation: match[3]?.toUpperCase() ?? null };
+    if (!Number.isFinite(quantity) || quantity < 0) return null;
+    return { quantity, unit: normalizeWholesaleUnit(match[2] ?? UNSPECIFIED_WHOLESALE_UNIT), preparation: match[3]?.toUpperCase() ?? null };
   });
   return parsed.every(Boolean) ? parsed as Array<{ quantity: number; unit: string; preparation: string | null }> : null;
 }
@@ -531,7 +641,7 @@ export async function updateWholesaleTable(rows: WholesaleTableRowInput[]) {
         !productName.trim() || productName.length > 120 || value.length > 80 || (value.trim() && !parseWholesaleCell(productName, value)),
       )
     ) {
-      return { ok: false, message: "Revisa las cantidades. Usa valores en kg como “1,5” o “2 kg”." };
+      return { ok: false, message: "Revisa las cantidades. Usa valores como “1,5”, “2 kg” o “0” cuando la cantidad está por definir." };
     }
   }
 

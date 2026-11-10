@@ -34,9 +34,9 @@ las tablas de pedidos y sus políticas RLS antes de conectar información real.
 3. Instala las dependencias con `npm install`.
 4. Inicia el proyecto con `npm run dev`.
 
-El proyecto local de Supabase está enlazado al proyecto remoto
-`bmqfijttiihcjthsgmhz` (`Pedidos_Fenix`). No se han creado tablas ni aplicado
-migraciones remotas todavía.
+La operación usa el proyecto remoto de Supabase `hzyzafnkxumfvfdtpkcn`
+(`Pedidos Fenix`). Las tablas, las políticas por segmento y los usuarios del
+panel ya existen en ese proyecto.
 
 ## Base de datos y administrador
 
@@ -74,8 +74,15 @@ Las rutas `/api/webhooks/highlevel/mayorista-cliente` y
 `/api/webhooks/highlevel/nuevo-mayorista` reciben pedidos de los dos formularios.
 Requieren `Authorization: Bearer <ORDERS_INGEST_SECRET>`.
 Consulta [la configuración y el mapeo de campos](docs/highlevel-webhooks.md).
+Antes de activar los agentes, completa el [checklist de lanzamiento en GoHighLevel](docs/ghl-launch-checklist.md).
 El texto original aparece en el detalle y la comanda como pedido por cotizar.
 
 Los mayoristas que solicitan atención sin enviar formulario ingresan por
 `/api/webhooks/ghl/wholesale-help-requests`. Se registran sin productos en
 **Mayoristas → Requiere ayuda** y no pasan por el webhook minorista.
+
+## Inscripción anticipada de mayoristas
+
+`/registro-mayorista` es un formulario público para registrar o actualizar clientes antes de su primer pedido. La API normaliza el teléfono, identifica cada cliente por establecimiento (varios negocios pueden compartir teléfono), evita duplicados por negocio y correo, guarda el cliente en Supabase y usa el upsert oficial de HighLevel antes de agregar la etiqueta `cliente mayorista` sin reemplazar otras etiquetas.
+
+Los usuarios del panel con acceso al segmento mayorista pueden consultar las inscripciones en `/clientes-mayoristas`. El estado de sincronización queda almacenado junto al cliente para detectar fallos de HighLevel sin perder el registro local.

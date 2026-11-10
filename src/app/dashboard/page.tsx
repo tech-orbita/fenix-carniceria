@@ -1,7 +1,7 @@
 import { requireViewer } from "@/lib/auth/viewer";
 import { hasSupabaseEnvironment } from "@/lib/supabase/config";
 import { createClient } from "@/lib/supabase/server";
-import { parseOrderText } from "@/lib/orders/product-parser";
+import { normalizeProductName, parseOrderText } from "@/lib/orders/product-parser";
 
 import "../auth.css";
 import { OrdersPanel } from "./orders-panel";
@@ -36,13 +36,19 @@ function sameAddress(left?: string | null, right?: string | null) {
   return normalize(left) === normalize(right) || normalize(right).startsWith(normalize(left));
 }
 
-export default async function DashboardPage() {
+export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ demo?: string }> }) {
+  const { demo } = await searchParams;
+  if (process.env.NODE_ENV !== "production" && demo === "contacto") {
+    return <OrdersPanel initialOrders={demoOrders()} loadError="Vista previa local: empresa y persona de contacto separadas." />;
+  }
+
   if (!hasSupabaseEnvironment()) {
     return <OrdersPanel initialOrders={demoOrders()} loadError="Modo demostración: configura Supabase para usar pedidos reales." />;
   }
 
   const viewer = await requireViewer();
   const supabase = await createClient();
+  const canSeeWholesaleWallet = viewer.role === "admin";
 
   // RLS limita las filas al segmento del usuario; el filtro explícito lo deja claro.
   let query = supabase
@@ -107,20 +113,41 @@ export default async function DashboardPage() {
         const reparsedItems = row.customer_type === "wholesale" && typeof formData?.order_text === "string"
           ? parseOrderText(formData.order_text)
           : [];
+        const reparsedMatchesStored = reparsedItems.length === storedItems.length && reparsedItems.every((item, index) => (
+          normalizeProductName(item.product_name) === normalizeProductName(storedItems[index]?.productName ?? "")
+          && (item.preparation ?? "") === (storedItems[index]?.preparation ?? "")
+        ));
         const items = reparsedItems.length > storedItems.length
           ? reparsedItems.map((item, index) => ({
               id: `parsed-${row.id}-${index}`,
               productName: item.product_name,
               quantity: item.quantity,
               unit: item.unit,
+              displayUnit: item.unit,
               preparation: item.preparation,
               unitPrice: 0,
             }))
-          : storedItems;
+          : reparsedMatchesStored
+            ? storedItems.map((item, index) => ({ ...item, displayUnit: reparsedItems[index].unit }))
+            : storedItems;
         const addresses = formAddressDetails(sourcePayload);
         const storedAddress = [row.delivery_address, customer?.address]
           .map(cleanAddress)
           .find((address) => address && !sameAddress(address, addresses.location));
+        const canSeeOrderPayments = row.customer_type === "retail" || canSeeWholesaleWallet;
+        const safeFormData = formData ? {
+          form: String(formData.form ?? ""),
+          order_text: String(formData.order_text ?? ""),
+          tax_id: typeof formData.tax_id === "string" ? formData.tax_id : undefined,
+          billing: typeof formData.billing === "string" ? formData.billing : undefined,
+          maps_url: typeof formData.maps_url === "string" ? formData.maps_url : undefined,
+          receiver_phone: typeof formData.receiver_phone === "string" ? formData.receiver_phone : undefined,
+          payment_proof: canSeeOrderPayments && typeof formData.payment_proof === "string" ? formData.payment_proof : undefined,
+          contact_id: typeof formData.contact_id === "string" ? formData.contact_id : undefined,
+          location_id: typeof formData.location_id === "string" ? formData.location_id : undefined,
+          conversation_id: typeof formData.conversation_id === "string" ? formData.conversation_id : undefined,
+          conversation_url: typeof formData.conversation_url === "string" ? formData.conversation_url : undefined,
+        } : undefined;
         return {
           id: String(row.id),
           orderNumber: row.order_number,
@@ -134,14 +161,14 @@ export default async function DashboardPage() {
           address: submittedAddress ?? addresses.contact ?? storedAddress ?? "Sin dirección",
           route: route?.name ?? "Sin clasificar",
           source: row.source,
-          paymentMethod: row.payment_method ?? undefined,
-          paymentStatus: row.payment_status,
-          deliveryFee: Number(row.delivery_fee),
-          adjustments: Number(row.adjustments),
-          total: Number(row.total),
+          paymentMethod: canSeeOrderPayments ? row.payment_method ?? undefined : undefined,
+          paymentStatus: canSeeOrderPayments ? row.payment_status : "restricted",
+          deliveryFee: canSeeOrderPayments ? Number(row.delivery_fee) : 0,
+          adjustments: canSeeOrderPayments ? Number(row.adjustments) : 0,
+          total: canSeeOrderPayments ? Number(row.total) : 0,
           status: row.status,
           items,
-          formData,
+          formData: safeFormData,
           highLevel: {
             contactId: formData?.contact_id ?? sourcePayload.contactId,
             locationId: formData?.location_id ?? sourcePayload.locationId,

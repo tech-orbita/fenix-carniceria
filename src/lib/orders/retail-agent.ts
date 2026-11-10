@@ -3,13 +3,21 @@ import { timingSafeEqual } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { ensureHighLevelContactTag, syncHighLevelOrderFields, syncRetailPipeline } from "@/lib/orders/highlevel-pipeline";
+import type { OrderPipelineStage } from "@/lib/orders/highlevel-pipeline";
 import { customerIdentityKey } from "@/lib/orders/wholesale-routes";
-import { syncRetailPipeline } from "@/lib/orders/highlevel-pipeline";
 import { normalizeRetailItems, requiresRetailHelp } from "@/lib/orders/retail-normalization";
 import type { RetailCatalogProduct, RetailInputItem } from "@/lib/orders/retail-normalization";
-import { retailOrderWindowStart } from "@/lib/orders/retail-order-window";
+import { retailOrderDayStart } from "@/lib/orders/retail-order-window";
 
 type RetailAgentItem = RetailInputItem;
+
+function pipelineStageForRetailStatus(status: string): OrderPipelineStage {
+  if (["preparing", "ready"].includes(status)) return "preparing";
+  if (["dispatched", "delivered"].includes(status)) return "dispatched";
+  if (["incident", "needs_review"].includes(status)) return "help";
+  return "order_placed";
+}
 
 type RetailAgentPayload = {
   locationId?: string;
@@ -69,17 +77,21 @@ async function retailCatalog(): Promise<RetailCatalogProduct[]> {
   const supabase = createAdminClient();
   const [{ data: products, error: productError }, { data: prices, error: priceError }] = await Promise.all([
     supabase.from("products").select("id,name,catalog_key").eq("active", true),
-    supabase.from("product_prices").select("product_id,amount").eq("segment", "minorista").eq("unit", "kilo").is("valid_until", null),
+    supabase.from("product_prices").select("product_id,amount,unit").eq("segment", "minorista").in("unit", ["kilo", "unidad"]).is("valid_until", null),
   ]);
   if (productError || priceError) {
     console.error("[retail-order] Could not load retail catalog", { productError, priceError });
     return [];
   }
-  const amounts = new Map((prices ?? []).map((price) => [String(price.product_id), Number(price.amount)]));
-  return (products ?? []).flatMap((product) => {
-    const pricePerKg = amounts.get(String(product.id));
+  const amounts = new Map((prices ?? []).map((price) => [`${price.product_id}:${price.unit}`, Number(price.amount)]));
+  return (products ?? []).flatMap<RetailCatalogProduct>((product) => {
+    const pricePerKg = amounts.get(`${product.id}:kilo`);
+    const pricePerUnit = amounts.get(`${product.id}:unidad`);
+    if (Number.isFinite(pricePerUnit)) {
+      return [{ id: String(product.id), name: String(product.name), catalogKey: String(product.catalog_key), pricePerUnit: pricePerUnit!, saleUnit: "und" as const }];
+    }
     return Number.isFinite(pricePerKg)
-      ? [{ id: String(product.id), name: String(product.name), catalogKey: String(product.catalog_key), pricePerKg: pricePerKg! }]
+      ? [{ id: String(product.id), name: String(product.name), catalogKey: String(product.catalog_key), pricePerKg: pricePerKg!, saleUnit: "kg" as const }]
       : [];
   });
 }
@@ -126,14 +138,14 @@ async function findLatestOrderByContactId(contactId: string, from?: string) {
 }
 
 function findCurrentOrder(customerId: number) {
-  return findLatestOrder(customerId, retailOrderWindowStart());
+  return findLatestOrder(customerId, retailOrderDayStart());
 }
 
 export async function retailOrderContext(value: unknown) {
   const body = value && typeof value === "object" ? value as RetailAgentPayload : {};
   const phone = cleanPhone(body.customer?.phone);
   const customerId = await findCustomerId(phone);
-  const cutoff = retailOrderWindowStart();
+  const cutoff = retailOrderDayStart();
   const [currentByCustomer, latestByCustomer] = customerId
     ? await Promise.all([findLatestOrder(customerId, cutoff), findLatestOrder(customerId)])
     : [null, null];
@@ -200,8 +212,8 @@ export async function upsertRetailOrder(value: unknown) {
     .single();
   if (customerError || !customer) return NextResponse.json({ error: "Could not save customer" }, { status: 500 });
 
-  // "new" siempre crea otro pedido. "update" solo puede tocar el pedido de la
-  // ventana operativa vigente; después de las 2 p. m. se inicia otra ventana.
+  // "new" siempre crea otro pedido. "update" solo puede tocar un pedido creado
+  // en la fecha calendario vigente de Bogotá. El día de entrega se organiza aparte.
   const openOrder = body.orderAction === "new" ? null : await findCurrentOrder(customer.id);
   const previousPayload = openOrder?.source_payload && typeof openOrder.source_payload === "object"
     ? openOrder.source_payload as Record<string, unknown>
@@ -216,9 +228,14 @@ export async function upsertRetailOrder(value: unknown) {
     rawOrderText: String(body.rawOrderText).trim(),
     sourceEventId: body.sourceEventId ?? null,
     orderAction: body.orderAction ?? null,
-    orderWindowStart: retailOrderWindowStart(),
+    orderWindowStart: retailOrderDayStart(),
   };
-  const subtotal = items.reduce((total, item) => total + item.quantity * item.unit_price, 0);
+  // Las piezas conservan la cantidad solicitada, pero no se cobran como si
+  // fueran kilos. El subtotal queda pendiente hasta registrar el peso real.
+  const subtotal = items.reduce((total, item) => {
+    const billableQuantity = item.actual_quantity ?? (item.unit === "kg" ? item.quantity : 0);
+    return total + Math.round(billableQuantity * item.unit_price);
+  }, 0);
 
   if (openOrder) {
     const { error: updateError } = await supabase.from("orders").update({
@@ -236,7 +253,24 @@ export async function upsertRetailOrder(value: unknown) {
     if (deleteError) return NextResponse.json({ error: "Could not replace order items" }, { status: 500 });
     const { error: itemsError } = await supabase.from("order_items").insert(items.map((item, sort_order) => ({ ...item, order_id: openOrder.id, sort_order })));
     if (itemsError) return NextResponse.json({ error: "Could not save order items" }, { status: 500 });
-    return NextResponse.json({ id: openOrder.id, order_number: openOrder.order_number, status: openOrder.status, adjusted: true });
+    const highLevelContext = { contactId: body.contactId, locationId: body.locationId, conversationId: body.conversationId };
+    const [pipeline, orderFields, tag] = await Promise.all([
+      syncRetailPipeline(highLevelContext, pipelineStageForRetailStatus(openOrder.status), `${name} · ${openOrder.order_number}`, subtotal),
+      syncHighLevelOrderFields(highLevelContext, { orderNumber: openOrder.order_number, total: subtotal }),
+      ensureHighLevelContactTag(highLevelContext, "cliente minorista"),
+    ]);
+    return NextResponse.json({
+      id: openOrder.id,
+      order_number: openOrder.order_number,
+      status: openOrder.status,
+      adjusted: true,
+      pipeline_synced: pipeline.ok,
+      pipeline_message: pipeline.ok ? undefined : pipeline.message,
+      order_field_synced: orderFields.ok,
+      order_field_message: orderFields.ok ? undefined : orderFields.message,
+      tag_synced: tag.ok,
+      tag_message: tag.ok ? undefined : tag.message,
+    });
   }
 
   const sourceReference = body.sourceEventId ? `ghl:retail:${body.sourceEventId}` : null;
@@ -281,13 +315,28 @@ export async function upsertRetailOrder(value: unknown) {
     await supabase.from("orders").delete().eq("id", order.id);
     return NextResponse.json({ error: "Could not save order items" }, { status: 500 });
   }
-  const pipeline = await syncRetailPipeline(
-    { contactId: body.contactId, locationId: body.locationId, conversationId: body.conversationId },
-    "order_placed",
-    `${name} · ${order.order_number}`,
-    subtotal,
-  );
-  return NextResponse.json({ ...order, adjusted: false, duplicate: false, pipeline_synced: pipeline.ok, pipeline_message: pipeline.ok ? undefined : pipeline.message }, { status: 201 });
+  const highLevelContext = { contactId: body.contactId, locationId: body.locationId, conversationId: body.conversationId };
+  const [pipeline, orderFields, tag] = await Promise.all([
+    syncRetailPipeline(
+      highLevelContext,
+      "order_placed",
+      `${name} · ${order.order_number}`,
+      subtotal,
+    ),
+    syncHighLevelOrderFields(highLevelContext, { orderNumber: order.order_number, total: subtotal }),
+    ensureHighLevelContactTag(highLevelContext, "cliente minorista"),
+  ]);
+  return NextResponse.json({
+    ...order,
+    adjusted: false,
+    duplicate: false,
+    pipeline_synced: pipeline.ok,
+    pipeline_message: pipeline.ok ? undefined : pipeline.message,
+    order_field_synced: orderFields.ok,
+    order_field_message: orderFields.ok ? undefined : orderFields.message,
+    tag_synced: tag.ok,
+    tag_message: tag.ok ? undefined : tag.message,
+  }, { status: 201 });
 }
 
 export async function flagRetailHelpRequest(value: unknown) {
@@ -335,12 +384,11 @@ export async function flagRetailHelpRequest(value: unknown) {
       }).select("id,order_number").single();
   if (result.error || !result.data) return NextResponse.json({ error: "Could not register help request" }, { status: 500 });
 
-  const pipeline = await syncRetailPipeline(
-    { contactId: body.contactId, locationId: body.locationId, conversationId: body.conversationId },
-    "help",
-    `${customer.name} · ${result.data.order_number}`,
-    0,
-  );
+  const highLevelContext = { contactId: body.contactId, locationId: body.locationId, conversationId: body.conversationId };
+  const [pipeline, tag] = await Promise.all([
+    syncRetailPipeline(highLevelContext, "help", `${customer.name} · ${result.data.order_number}`, 0),
+    ensureHighLevelContactTag(highLevelContext, "cliente minorista"),
+  ]);
   return NextResponse.json({
     ok: true,
     id: result.data.id,
@@ -348,5 +396,7 @@ export async function flagRetailHelpRequest(value: unknown) {
     adjusted: Boolean(openOrder),
     pipeline_synced: pipeline.ok,
     pipeline_message: pipeline.ok ? undefined : pipeline.message,
+    tag_synced: tag.ok,
+    tag_message: tag.ok ? undefined : tag.message,
   }, { status: openOrder ? 200 : 201 });
 }

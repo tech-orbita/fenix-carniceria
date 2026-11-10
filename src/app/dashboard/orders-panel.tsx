@@ -5,12 +5,12 @@ import type { FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-import { catalogProductFor, normalizeProductName, toKilograms, wholesaleProductCatalog } from "@/lib/orders/product-parser";
+import { catalogProductFor, normalizeProductName, UNSPECIFIED_WHOLESALE_UNIT, wholesaleProductCatalog, wholesaleUnitFor } from "@/lib/orders/product-parser";
 import type { WholesaleProduct } from "@/lib/orders/product-parser";
 import { wholesaleServiceDay } from "@/lib/orders/wholesale-service-day";
 import { unassignedWholesaleRoute, wholesaleRouteLabel, wholesaleRoutes } from "@/lib/orders/wholesale-routes";
 
-import { createManualWholesaleOrder, resolveOrderHelp, scheduleWholesaleOrder, sendRetailPaymentSummary, updateOrderDetails, updateOrderPaymentStatus, updateOrderStatus, updateWholesalePayment, updateWholesaleTable } from "./actions";
+import { createManualWholesaleOrder, findWholesaleCustomer, resolveOrderHelp, scheduleRetailOrder, scheduleWholesaleOrder, sendRetailPaymentSummary, updateOrderDetails, updateOrderPaymentStatus, updateOrderStatus, updateWholesalePayment, updateWholesaleTable } from "./actions";
 import { addDays, bogotaDay, dateTime, dayLabel, Icon, phaseLabels, phaseStatus } from "./panel-shared";
 import type { OperationalPhase } from "./panel-shared";
 import { RetailPanel } from "./retail-panel";
@@ -35,8 +35,8 @@ function productAmounts(order: Order, product: WholesaleProduct, into = new Map<
         ? itemCatalog?.name === productCatalog.name
         : normalizeProductName(itemLabel) === normalizeProductName(product.name);
     if (!matches) return;
-    // La operación mayorista trabaja en kilos: las libras se convierten a 0,5 kg.
-    const { quantity, unit } = toKilograms(item.actualQuantity ?? item.quantity, item.unit);
+    const quantity = item.actualQuantity ?? item.quantity;
+    const unit = item.displayUnit ?? item.unit;
     const detail = product.name === "Blanda" && /^[CLTB]$/i.test(item.preparation ?? "")
       ? item.preparation!.toUpperCase()
       : "";
@@ -50,7 +50,8 @@ function productAmounts(order: Order, product: WholesaleProduct, into = new Map<
 function formatAmounts(amounts: Map<string, number>) {
   return [...amounts.entries()].map(([unitAndDetail, quantity]) => {
     const [unit, detail] = unitAndDetail.split("|");
-    return `${quantityFormat.format(quantity)} ${unit}${detail ? ` ${detail}` : ""}`;
+    const shownUnit = unit && unit !== UNSPECIFIED_WHOLESALE_UNIT ? ` ${unit}` : "";
+    return `${quantityFormat.format(quantity)}${shownUnit}${detail ? ` ${detail}` : ""}`;
   }).join(" / ");
 }
 
@@ -58,7 +59,7 @@ function productQuantity(order: Order, product: WholesaleProduct) {
   return formatAmounts(productAmounts(order, product));
 }
 
-// Los pedidos recibidos entre las 3 a. m. del día anterior y las 3 a. m. del día D (hora Bogotá) se despachan el día D.
+// Los pedidos recibidos entre las 5 a. m. del día anterior y las 5 a. m. del día D (hora Bogotá) se despachan el día D.
 function serviceDay(order: Order) {
   // Una solicitud de ayuda sin formulario debe ser visible el mismo día en que llegó.
   if (isHelpWithoutOrder(order)) return bogotaDay.format(new Date(order.receivedAt));
@@ -93,15 +94,25 @@ function isHelpWithoutOrder(order: Order) {
 }
 
 function highLevelConversationUrl(order: Order) {
-  return `/api/highlevel/conversation/${encodeURIComponent(order.id)}`;
+  return `/api/conversation/${encodeURIComponent(order.id)}`;
 }
 
 function hasHighLevelConversation(order: Order) {
   return Boolean(order.highLevel?.conversationUrl || order.highLevel?.conversationId || order.highLevel?.contactId);
 }
 
+function safeExternalUrl(value?: string) {
+  if (!value) return undefined;
+  try {
+    const url = new URL(value);
+    return ["http:", "https:"].includes(url.protocol) ? url.toString() : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function ConversationLink({ order }: { order: Order }) {
-  const customer = order.businessName ?? order.customer;
+  const customer = order.customer;
   if (!hasHighLevelConversation(order)) {
     return <button aria-label={`Conversación no disponible para ${customer}`} className="conversation-link is-disabled" disabled title="Este pedido no tiene una conversación asociada" type="button"><Icon name="chat" /><span className="sr-only">Conversación no disponible</span></button>;
   }
@@ -180,12 +191,18 @@ async function downloadWholesaleOrders(orders: Order[], products: WholesaleProdu
     { header: "Estado", key: "status", width: 20 },
     { header: "Observaciones", key: "notes", width: 42 },
     { header: "NIT o cédula", key: "taxId", width: 20 },
-    ...products.map((product, index) => ({ header: product.name === "Blanda" ? "Blanda (kg; C=Capón, L=Lomo, T=Tetafula, B=Calavera)" : `${product.name} (kg)`, key: `product${index}`, width: product.name === "Blanda" ? 28 : 20 })),
+    ...products.map((product, index) => ({
+      header: product.name === "Blanda"
+        ? "Blanda (kg; C=Capón, L=Lomo, T=Tetafula, B=Calavera)"
+        : `${product.name} (${wholesaleUnitFor(product.name)})`,
+      key: `product${index}`,
+      width: product.name === "Blanda" ? 28 : 20,
+    })),
   ];
   orders.forEach((order) => worksheet.addRow({
     orderNumber: order.orderNumber,
     receivedAt: dateTime.format(new Date(order.receivedAt)),
-    customer: order.businessName ?? order.customer,
+    customer: order.customer,
     phone: order.phone,
     address: order.address,
     zone: order.route,
@@ -220,7 +237,7 @@ const emptyManualOrder = {
   customerName: "",
   phone: "",
   address: "",
-  routeName: unassignedWholesaleRoute,
+  routeName: "",
   orderText: "",
   notes: "",
 };
@@ -229,9 +246,42 @@ function ManualWholesaleOrderForm({ orders, onClose }: { orders: Order[]; onClos
   const router = useRouter();
   const [draft, setDraft] = useState(emptyManualOrder);
   const [saving, setSaving] = useState(false);
+  const [lookingUpCustomer, setLookingUpCustomer] = useState(false);
+  const [customerMatch, setCustomerMatch] = useState<string>();
   const [notice, setNotice] = useState<string>();
   const businesses = [...new Set(orders.map((order) => order.businessName ?? order.customer).filter(Boolean))].sort((a, b) => a.localeCompare(b, "es"));
   const update = (field: keyof typeof emptyManualOrder, value: string) => setDraft((current) => ({ ...current, [field]: value }));
+  const updateBusinessName = (value: string) => {
+    setCustomerMatch(undefined);
+    setLookingUpCustomer(value.trim().length >= 2);
+    update("businessName", value);
+  };
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !saving) onClose();
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [onClose, saving]);
+  useEffect(() => {
+    const businessName = draft.businessName.trim();
+    if (businessName.length < 2) return;
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      const result = await findWholesaleCustomer(businessName);
+      if (cancelled) return;
+      setLookingUpCustomer(false);
+      if (!result.ok || !result.found) return;
+      setDraft((current) => current.businessName.trim().toLocaleLowerCase("es") === businessName.toLocaleLowerCase("es")
+        ? { ...current, ...result.customer }
+        : current);
+      setCustomerMatch(`Datos cargados de ${result.customer.businessName}.`);
+    }, 400);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [draft.businessName]);
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setSaving(true);
@@ -245,20 +295,22 @@ function ManualWholesaleOrderForm({ orders, onClose }: { orders: Order[]; onClos
       window.setTimeout(onClose, 700);
     }
   };
-  return <form className="manual-order-form" onSubmit={(event) => void submit(event)}>
-    <div className="manual-order-heading"><div><strong>Nuevo pedido mayorista</strong><small>Regístralo directamente sin usar el formulario de HighLevel.</small></div><button aria-label="Cerrar nuevo pedido" onClick={onClose} type="button">×</button></div>
-    <div className="manual-order-grid">
-      <label>Establecimiento<input list="wholesale-businesses" onChange={(event) => update("businessName", event.target.value)} placeholder="Nombre del negocio" required value={draft.businessName} /></label>
-      <datalist id="wholesale-businesses">{businesses.map((business) => <option key={business} value={business} />)}</datalist>
-      <label>Persona que solicita<input onChange={(event) => update("customerName", event.target.value)} placeholder="Opcional" value={draft.customerName} /></label>
-      <label>Teléfono<input onChange={(event) => update("phone", event.target.value)} placeholder="Opcional" type="tel" value={draft.phone} /></label>
-      <label>Ruta<select onChange={(event) => update("routeName", event.target.value)} value={draft.routeName}><option value={unassignedWholesaleRoute}>Sin clasificar</option>{wholesaleRoutes.map((route) => <option key={route} value={route}>{wholesaleRouteLabel(route)}</option>)}</select></label>
-      <label className="manual-order-wide">Dirección<input onChange={(event) => update("address", event.target.value)} placeholder="Opcional" value={draft.address} /></label>
-      <label className="manual-order-wide">Pedido<textarea onChange={(event) => update("orderText", event.target.value)} placeholder="Ejemplo: 5 kg de costilla, 2 kg de blanda capón" required rows={3} value={draft.orderText} /></label>
-      <label className="manual-order-wide">Observaciones<textarea onChange={(event) => update("notes", event.target.value)} placeholder="Opcional" rows={2} value={draft.notes} /></label>
-    </div>
-    <div className="manual-order-actions">{notice && <span role="status">{notice}</span>}<button className="outline-action" onClick={onClose} type="button">Cancelar</button><button className="primary-action" disabled={saving} type="submit">{saving ? "Creando…" : "Crear pedido"}</button></div>
-  </form>;
+  return <div className="manual-order-modal" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) onClose(); }}>
+    <form aria-labelledby="manual-order-title" aria-modal="true" className="manual-order-form" onSubmit={(event) => void submit(event)} role="dialog">
+      <div className="manual-order-heading"><div><strong id="manual-order-title">Nuevo pedido mayorista</strong><small>Regístralo directamente sin usar el formulario de Orbita.</small></div><button aria-label="Cerrar nuevo pedido" disabled={saving} onClick={onClose} type="button">×</button></div>
+      <div className="manual-order-grid">
+        <label>Establecimiento<input autoComplete="off" autoFocus list="wholesale-businesses" onChange={(event) => updateBusinessName(event.target.value)} placeholder="Nombre del negocio" required value={draft.businessName} /><small aria-live="polite">{lookingUpCustomer ? "Buscando cliente…" : customerMatch}</small></label>
+        <datalist id="wholesale-businesses">{businesses.map((business) => <option key={business} value={business} />)}</datalist>
+        <label>Persona que solicita<input onChange={(event) => update("customerName", event.target.value)} placeholder="Opcional" value={draft.customerName} /></label>
+        <label>Teléfono<input onChange={(event) => update("phone", event.target.value)} placeholder="Opcional" type="tel" value={draft.phone} /></label>
+        <label>Zona o ruta<select onChange={(event) => update("routeName", event.target.value)} required value={draft.routeName}><option disabled value="">Selecciona una ruta</option>{wholesaleRoutes.map((route) => <option key={route} value={route}>{wholesaleRouteLabel(route)}</option>)}</select></label>
+        <label className="manual-order-wide">Dirección<input onChange={(event) => update("address", event.target.value)} placeholder="Opcional" value={draft.address} /></label>
+        <label className="manual-order-wide">Pedido<textarea onChange={(event) => update("orderText", event.target.value)} placeholder="Ejemplo: 5 costilla, 2 blanda capón. Escribe kg o lb solo si aplica." required rows={3} value={draft.orderText} /></label>
+        <label className="manual-order-wide">Observaciones<textarea onChange={(event) => update("notes", event.target.value)} placeholder="Opcional" rows={2} value={draft.notes} /></label>
+      </div>
+      <div className="manual-order-actions">{notice && <span role="status">{notice}</span>}<button className="outline-action" disabled={saving} onClick={onClose} type="button">Cancelar</button><button className="primary-action" disabled={saving} type="submit">{saving ? "Creando…" : "Crear pedido"}</button></div>
+    </form>
+  </div>;
 }
 
 function WholesaleWallet({ orders }: { orders: Order[] }) {
@@ -290,13 +342,13 @@ function WholesaleWallet({ orders }: { orders: Order[] }) {
     </div>
     {notice && <div className="table-edit-notice" role="status">{notice}</div>}
     <div className="matrix-scroll"><table className="order-matrix wallet-table"><thead><tr><th>Cliente</th><th>Pedido</th><th>Fecha</th><th>Valor</th><th>Estado</th><th>Acciones</th></tr></thead><tbody>
-      {shown.map((order) => <tr key={order.id}><th scope="row"><div className="wallet-client"><span><strong>{order.businessName ?? order.customer}</strong><small>{order.phone}</small></span><ConversationLink order={order} /></div></th><td>{order.orderNumber}</td><td>{dateTime.format(new Date(order.receivedAt))}</td><td><label className="wallet-value"><span>$</span><input aria-label={`Valor de ${order.orderNumber}`} inputMode="numeric" onChange={(event) => setValues((current) => ({ ...current, [order.id]: event.target.value }))} placeholder="0" value={values[order.id] ?? ""} /></label></td><td><span className={order.paymentStatus === "paid" ? "wallet-status is-paid" : "wallet-status"}>{order.paymentStatus === "paid" ? "Pago realizado" : "Pendiente por pago"}</span></td><td><div className="wallet-actions"><button aria-label="Marcar pago como pendiente" className="tooltip-icon-action wallet-icon-action" data-tooltip="Pendiente" disabled={pendingId === order.id} onClick={() => void save(order, "pending")} type="button"><Icon name="clock" /><span className="sr-only">Marcar pago como pendiente</span></button><button aria-label="Marcar como pagado" className="is-paid tooltip-icon-action wallet-icon-action" data-tooltip="Pagado" disabled={pendingId === order.id} onClick={() => void save(order, "paid")} type="button"><Icon name="check" /><span className="sr-only">Marcar como pagado</span></button><button aria-label="Enviar resumen de pago" className="tooltip-icon-action wallet-icon-action" data-tooltip="Enviar resumen" disabled={pendingId === order.id} onClick={() => void save(order, "pending", true)} type="button"><Icon name="receipt" /><span className="sr-only">Enviar resumen de pago</span></button></div></td></tr>)}
+      {shown.map((order) => <tr key={order.id}><th scope="row"><div className="wallet-client"><span><span className="client-heading-line"><strong>{order.businessName && order.businessName !== order.customer ? order.businessName : order.customer}</strong>{order.businessName && order.businessName !== order.customer && <small className="client-contact-inline">- {order.customer}</small>}</span><small>{order.phone}</small></span><ConversationLink order={order} /></div></th><td>{order.orderNumber}</td><td>{dateTime.format(new Date(order.receivedAt))}</td><td><label className="wallet-value"><span>$</span><input aria-label={`Valor de ${order.orderNumber}`} inputMode="numeric" onChange={(event) => setValues((current) => ({ ...current, [order.id]: event.target.value }))} placeholder="0" value={values[order.id] ?? ""} /></label></td><td><span className={order.paymentStatus === "paid" ? "wallet-status is-paid" : "wallet-status"}>{order.paymentStatus === "paid" ? "Pago realizado" : "Pendiente por pago"}</span></td><td><div className="wallet-actions"><button aria-label="Marcar pago como pendiente" className="wallet-action-button" disabled={pendingId === order.id} onClick={() => void save(order, "pending")} type="button"><Icon name="clock" /><span>Pendiente</span></button><button aria-label="Marcar como pagado" className="is-paid wallet-action-button" disabled={pendingId === order.id} onClick={() => void save(order, "paid")} type="button"><Icon name="check" /><span>Pagado</span></button><button aria-label="Enviar resumen de pago" className="wallet-action-button" disabled={pendingId === order.id} onClick={() => void save(order, "pending", true)} type="button"><Icon name="receipt" /><span>Enviar resumen</span></button></div></td></tr>)}
       {!shown.length && <tr><td className="matrix-empty" colSpan={6}>No hay pedidos que coincidan con la búsqueda.</td></tr>}
     </tbody><tfoot><tr><th colSpan={3}>Total visible</th><td>{money.format(shown.reduce((sum, order) => sum + order.total, 0))}</td><td colSpan={2}>{shown.length} pedidos</td></tr></tfoot></table></div>
   </section>;
 }
 
-function WholesaleOrdersTable({ orders: allOrders, pendingId, onStatusChange }: { orders: Order[]; pendingId?: string; onStatusChange: (order: Order, phase: OperationalPhase) => void }) {
+function WholesaleOrdersTable({ isAdmin, orders: allOrders, pendingId, onStatusChange }: { isAdmin: boolean; orders: Order[]; pendingId?: string; onStatusChange: (order: Order, phase: OperationalPhase) => void }) {
   const router = useRouter();
   const matrixScrollRef = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState("");
@@ -418,10 +470,10 @@ function WholesaleOrdersTable({ orders: allOrders, pendingId, onStatusChange }: 
     setEditNotice(result.message);
     if (result.ok) router.refresh();
   };
-  if (view === "wallet") return <><div className="wholesale-tabs"><button onClick={() => setView("orders")} type="button">Pedidos</button><button aria-current="page" type="button">Cartera</button></div><WholesaleWallet orders={allOrders} /></>;
+  if (view === "wallet" && isAdmin) return <><div className="wholesale-tabs"><button onClick={() => setView("orders")} type="button">Pedidos</button><button aria-current="page" type="button">Cartera</button></div><WholesaleWallet orders={allOrders} /></>;
   return (
     <>
-    <div className="wholesale-tabs"><button aria-current="page" type="button">Pedidos</button><button onClick={() => setView("wallet")} type="button">Cartera</button></div>
+    {isAdmin && <div className="wholesale-tabs"><button aria-current="page" type="button">Pedidos</button><button onClick={() => setView("wallet")} type="button">Cartera</button></div>}
     <section className="wholesale-workspace">
       <div className="section-toolbar">
         <div className="table-filters">
@@ -447,7 +499,7 @@ function WholesaleOrdersTable({ orders: allOrders, pendingId, onStatusChange }: 
           {hasFilters && <button className="clear-filters" onClick={clearFilters} type="button">Limpiar filtros</button>}
         </div>
         <div className="toolbar-actions">
-          {!editing && <button className="primary-action" onClick={() => setCreatingOrder((current) => !current)} type="button">{creatingOrder ? "Cerrar nuevo pedido" : "+ Nuevo pedido"}</button>}
+          {!editing && <button className="primary-action add-order-action" onClick={() => setCreatingOrder((current) => !current)} type="button">{creatingOrder ? "Cerrar pedido" : "+ Agregar pedido"}</button>}
           <button aria-pressed={!showInfoColumns} className="outline-action" onClick={() => setShowInfoColumns((current) => !current)} type="button">{showInfoColumns ? "Ocultar datos" : "Mostrar datos"}</button>
           {editing ? <>
             {hiddenProducts.length > 0 && <label className="zone-filter"><span className="sr-only">Agregar columna de corte</span><select aria-label="Agregar columna de corte" onChange={(event) => { if (event.target.value) setExtraColumns((current) => [...current, event.target.value]); }} value=""><option value="">+ Agregar corte</option>{hiddenProducts.map((product) => <option key={product.name} value={product.name}>{product.name}</option>)}</select></label>}
@@ -471,16 +523,15 @@ function WholesaleOrdersTable({ orders: allOrders, pendingId, onStatusChange }: 
         <table className={`order-matrix wholesale-matrix ${showInfoColumns ? "with-order-info" : "without-order-info"}`}>
           <thead>
             <tr className="category-row"><th colSpan={showInfoColumns ? 5 : 1}>Pedido recibido</th>{categories.map((category, index) => <th colSpan={category.count} key={`${category.name}-${index}`}>{category.name}</th>)}</tr>
-            <tr><th>Cliente</th>{showInfoColumns && <><th>Teléfono</th><th>Ruta</th><th>Facturación</th><th>Comentario</th></>}{visibleProducts.map((product) => <th key={product.name} title={product.name === "Blanda" ? "C = Capón · L = Lomo · T = Tetafula · B = Calavera" : undefined}>{product.name}<small className="unit-label">{product.name === "Blanda" ? "kg · C/L/T/B" : "kg"}</small></th>)}</tr>
+            <tr><th>Cliente</th>{showInfoColumns && <><th>Teléfono</th><th>Ruta</th><th>Facturación</th><th>Comentario</th></>}{visibleProducts.map((product) => <th key={product.name} title={product.name === "Blanda" ? "C = Capón · L = Lomo · T = Tetafula · B = Calavera" : undefined}>{product.name}{product.name === "Blanda" && <small className="unit-label">C/L/T/B</small>}</th>)}</tr>
           </thead>
           <tbody>
             {visibleOrders.map((order) => <tr className={isClosed(order) ? "is-dispatched" : undefined} key={order.id}>
-              <th scope="row"><div className="matrix-client"><span><strong>{order.businessName ?? order.customer}</strong><small className="client-address" title={`Pedido ${order.orderNumber}`}>{order.address || order.orderNumber}</small></span><div className="matrix-row-actions"><ConversationLink order={order} />{isHelpWithoutOrder(order)
+              <th scope="row"><div className="matrix-client"><span><span className="client-heading-line" title={[order.businessName && order.businessName !== order.customer ? order.businessName : order.customer, order.businessName && order.businessName !== order.customer ? order.customer : ""].filter(Boolean).join(" · ")}><strong>{order.businessName && order.businessName !== order.customer ? order.businessName : order.customer}</strong>{order.businessName && order.businessName !== order.customer && <small className="client-contact-inline">{order.customer}</small>}</span><small className="client-order-number">Pedido {order.orderNumber}</small><small className="client-address">{order.address}</small></span><div className="matrix-row-actions"><ConversationLink order={order} />{isAdmin && safeExternalUrl(order.formData?.payment_proof) && <a aria-label={`Abrir comprobante de ${order.orderNumber}`} className="payment-proof-link row-icon-action tooltip-icon-action" data-tooltip="Comprobante adjunto" href={safeExternalUrl(order.formData?.payment_proof)} rel="noreferrer" target="_blank"><Icon name="receipt" /><span className="sr-only">Ver comprobante adjunto</span></a>}{isHelpWithoutOrder(order)
                 ? <span className="no-order-badge">Sin pedido</span>
                 : isClosed(order)
                   ? <button aria-label="Volver a pedidos pendientes" className="dispatch-action is-done row-icon-action tooltip-icon-action" data-tooltip="Volver a pedidos" disabled={pendingId === order.id || editing} onClick={() => onStatusChange(order, "new")} type="button">{pendingId === order.id ? "…" : <Icon name="undo" />}<span className="sr-only">Volver a pedidos pendientes</span></button>
                   : <>
-                    {!['preparing', 'ready'].includes(order.status) && <button aria-label="Mover a Preparación" className="advance-action row-icon-action tooltip-icon-action" data-tooltip="Preparación" disabled={pendingId === order.id || editing} onClick={() => onStatusChange(order, "preparing")} type="button"><Icon name="receipt" /><span className="sr-only">Mover a Preparación</span></button>}
                     <button aria-label="Marcar como despachado" className="dispatch-action row-icon-action tooltip-icon-action" data-tooltip="Despachado" disabled={pendingId === order.id || editing} onClick={() => onStatusChange(order, "dispatched")} type="button">{pendingId === order.id ? "…" : <Icon name="truck" />}<span className="sr-only">Marcar como despachado</span></button>
                     {dayOffset === 1 && <button aria-label="Adelantar pedido a hoy" className="advance-action row-icon-action tooltip-icon-action" data-tooltip="Adelantar a hoy" disabled={saving || editing} onClick={() => void advanceOrder(order)} type="button"><Icon name="calendar" /><span className="sr-only">Adelantar pedido a hoy</span></button>}
                   </>}</div></div></th>
@@ -492,8 +543,8 @@ function WholesaleOrdersTable({ orders: allOrders, pendingId, onStatusChange }: 
               </>}
               {visibleProducts.map((product) => {
                 const value = productQuantity(order, product);
-                const placeholder = product.name === "Blanda" ? "kg C/L/T/B" : product.name === "Comodín" ? "kg producto" : "kg";
-                const title = product.name === "Blanda" ? "Usa C=capón, L=lomo, T=tetafula y B=calavera. Ejemplo: 5 C / 2 L." : product.name === "Comodín" ? "Escribe cantidad y nombre del producto sin columna. Ejemplo: 2 kg producto especial." : "Cantidad en kg. También puedes escribir “2 lb” y se guarda como 1 kg.";
+                const placeholder = product.name === "Blanda" ? "5 C / 2 L" : product.name === "Comodín" ? "2 producto" : "Cantidad";
+                const title = product.name === "Blanda" ? "Usa C=capón, L=lomo, T=tetafula y B=calavera. Puedes añadir kg o lb si aplica." : product.name === "Comodín" ? "Escribe cantidad y nombre del producto. Ejemplo: 2 producto especial." : "Escribe el número y añade kg, lb o und solamente cuando corresponda.";
                 return <td className={editing ? "matrix-quantity-cell is-editing" : value ? "matrix-quantity-cell has-value" : "matrix-quantity-cell"} key={product.name}>{editing ? <input aria-label={`${product.name} de ${order.orderNumber}`} onChange={(event) => updateDraft(order.id, product.name, event.target.value)} placeholder={placeholder} title={title} value={draftRows[order.id]?.quantities[product.name] ?? ""} /> : value || ""}</td>;
               })}
             </tr>)}
@@ -508,6 +559,7 @@ function WholesaleOrdersTable({ orders: allOrders, pendingId, onStatusChange }: 
 }
 
 export function OrdersPanel({ initialOrders, loadError, viewer }: { initialOrders: Order[]; loadError?: string; viewer?: Viewer }) {
+  const router = useRouter();
   const [orders, setOrders] = useState(initialOrders);
   // Sincroniza los datos refrescados del servidor sin remontar el panel (conserva día, filtros y edición).
   const [syncedOrders, setSyncedOrders] = useState(initialOrders);
@@ -523,7 +575,11 @@ export function OrdersPanel({ initialOrders, loadError, viewer }: { initialOrder
   const [notice, setNotice] = useState<string | undefined>(loadError);
   const wholesale = orders.filter((order) => order.customerType === "wholesale");
   const retail = orders.filter((order) => order.customerType === "retail");
-  useOrdersRealtime(assignedType ? [assignedType] : ["wholesale", "retail"]);
+  const today = bogotaDay.format(new Date());
+  const wholesaleTodayCount = wholesale.filter((order) => (
+    serviceDay(order) === today && !isHelpWithoutOrder(order) && !isClosed(order)
+  )).length;
+  const { soundEnabled, toggleSound } = useOrdersRealtime(assignedType ? [assignedType] : ["wholesale", "retail"]);
 
   // El aviso se oculta solo tras unos segundos.
   useEffect(() => {
@@ -536,7 +592,10 @@ export function OrdersPanel({ initialOrders, loadError, viewer }: { initialOrder
     const status = phaseStatus[phase]; setPendingId(order.id); setNotice(undefined);
     const result = await updateOrderStatus(order.id, status); if (!result.ok) { setNotice(result.message); setPendingId(undefined); return; }
     setOrders((current) => current.map((item) => item.id === order.id ? { ...item, status } : item));
-    setNotice(result.message.includes("pipeline") ? result.message : `${order.orderNumber} pasó a “${phaseLabels[phase]}” y se sincronizó con el pipeline.`); setPendingId(undefined);
+    setNotice(result.message === "Estado actualizado."
+      ? `${order.orderNumber} pasó a “${phaseLabels[phase]}” y se sincronizó con el pipeline.`
+      : result.message);
+    setPendingId(undefined);
   };
 
   const saveOrder = async (order: Order, details: EditableOrderDetails) => {
@@ -549,12 +608,12 @@ export function OrdersPanel({ initialOrders, loadError, viewer }: { initialOrder
       phone: details.phone,
       address: details.address,
       notes: details.notes || undefined,
-      items: item.items.map((orderItem) => {
-        const edited = details.items.find((candidate) => candidate.id === orderItem.id);
-        return edited ? { ...orderItem, productName: edited.productName, actualQuantity: edited.quantity, unit: edited.unit, unitPrice: edited.unitPrice, preparation: edited.preparation || undefined } : orderItem;
+      items: details.items.map((edited) => {
+        const original = item.items.find((candidate) => candidate.id === edited.id);
+        return { ...original, id: edited.id, productName: edited.productName, quantity: original?.quantity ?? edited.quantity, actualQuantity: edited.quantity, unit: edited.unit, unitPrice: edited.unitPrice, preparation: edited.preparation || undefined };
       }),
     } : item));
-    setNotice(`Los datos de ${order.orderNumber} fueron actualizados.`); setPendingId(undefined); return true;
+    setNotice(`Los datos de ${order.orderNumber} fueron actualizados.`); setPendingId(undefined); router.refresh(); return true;
   };
 
   const changePaymentStatus = async (order: Order, paymentStatus: "paid" | "pending") => {
@@ -580,18 +639,34 @@ export function OrdersPanel({ initialOrders, loadError, viewer }: { initialOrder
     setNotice(result.message); setPendingId(undefined);
   };
 
+  const advanceRetailOrder = async (order: Order) => {
+    setPendingId(order.id); setNotice(undefined);
+    const result = await scheduleRetailOrder(order.id, today);
+    if (!result.ok) { setNotice(result.message); setPendingId(undefined); return; }
+    setOrders((current) => current.map((item) => item.id === order.id ? { ...item, deliveryDate: today } : item));
+    setNotice(result.message); setPendingId(undefined); router.refresh();
+  };
+
   return (
     <div className="orders-app"><main className="dashboard-content">
       <div className="dashboard-topbar">
-        {!assignedType && <section aria-label="Tipo de cliente" className="segment-switch"><button aria-pressed={activeType === "wholesale"} onClick={() => { setActiveType("wholesale"); setNotice(undefined); }} type="button"><Icon name="truck" /><strong>Mayoristas</strong><b>{wholesale.length}</b></button><button aria-pressed={activeType === "retail"} onClick={() => { setActiveType("retail"); setNotice(undefined); }} type="button"><Icon name="shop" /><strong>Minoristas</strong><b>{retail.length}</b></button></section>}
+        {!assignedType && <section aria-label="Tipo de cliente" className="segment-switch"><button aria-pressed={activeType === "wholesale"} onClick={() => { setActiveType("wholesale"); setNotice(undefined); }} type="button"><Icon name="truck" /><strong>Mayoristas</strong><b>{wholesaleTodayCount}</b></button><button aria-pressed={activeType === "retail"} onClick={() => { setActiveType("retail"); setNotice(undefined); }} type="button"><Icon name="shop" /><strong>Minoristas</strong><b>{retail.length}</b></button></section>}
         {viewer && <div className="session-bar">
-          <span>{viewer.email}{assignedType ? ` · ${assignedType === "wholesale" ? "Mayoristas" : "Minoristas"}` : " · Administrador"}</span>
-          {viewer.role === "admin" && <Link href="/usuarios">Usuarios</Link>}
-          <form action={signOut}><button type="submit">Salir</button></form>
+          <div className="session-identity" title={viewer.email}>
+            <span className="session-avatar" aria-hidden="true">{viewer.email.slice(0, 1).toLocaleUpperCase("es")}</span>
+            <span className="session-copy"><strong>{viewer.email}</strong><small>{viewer.role === "admin" ? "Administrador" : assignedType ? assignedType === "wholesale" ? "Equipo mayoristas" : "Equipo minoristas" : "Equipo mayoristas y minoristas"}</small></span>
+          </div>
+          <nav aria-label="Opciones de cuenta" className="session-actions">
+            <button aria-label={soundEnabled ? "Desactivar sonido de pedidos nuevos" : "Activar sonido de pedidos nuevos"} aria-pressed={soundEnabled} className={soundEnabled ? "sound-toggle is-enabled" : "sound-toggle"} onClick={() => void toggleSound()} title={soundEnabled ? "Sonido activo · clic para desactivar" : "Activar sonido de pedidos nuevos"} type="button"><span aria-hidden="true">{soundEnabled ? "🔔" : "🔕"}</span></button>
+            {(viewer.role === "admin" || viewer.customerType === null || viewer.customerType === "wholesale") && <Link href="/clientes-mayoristas">Clientes mayoristas</Link>}
+            <Link href="/mi-cuenta" title="Cambiar mi contraseña">Cuenta</Link>
+            {viewer.role === "admin" && <Link href="/usuarios">Usuarios</Link>}
+            <form action={signOut}><button type="submit">Salir</button></form>
+          </nav>
         </div>}
       </div>
       {notice && <div className="operation-notice" role="status">{notice}</div>}
-      {activeType === "wholesale" ? <WholesaleOrdersTable onStatusChange={(order, phase) => void moveOrder(order, phase)} orders={wholesale} pendingId={pendingId} /> : <RetailPanel onMove={(order, phase) => void moveOrder(order, phase)} onPaymentChange={(order, status) => void changePaymentStatus(order, status)} onResolveHelp={(order) => void resolveHelp(order)} onSave={saveOrder} onSendBill={(order) => void sendBill(order)} orders={retail} pendingId={pendingId} />}
+      {activeType === "wholesale" ? <WholesaleOrdersTable isAdmin={viewer?.role === "admin"} onStatusChange={(order, phase) => void moveOrder(order, phase)} orders={wholesale} pendingId={pendingId} /> : <RetailPanel onAdvance={(order) => void advanceRetailOrder(order)} onMove={(order, phase) => void moveOrder(order, phase)} onPaymentChange={(order, status) => void changePaymentStatus(order, status)} onResolveHelp={(order) => void resolveHelp(order)} onSave={saveOrder} onSendBill={(order) => void sendBill(order)} orders={retail} pendingId={pendingId} />}
     </main></div>
   );
 }

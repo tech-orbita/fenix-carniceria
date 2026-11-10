@@ -51,7 +51,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ locationId: $('Validar extracción').item.json.payload.locationId, contactId: $('Validar extracción').item.json.payload.contactId, conversationId: $('Validar extracción').item.json.conversationId || undefined, customer: { name: $('Validar extracción').item.json.payload.customer.name, phone: $('Validar extracción').item.json.payload.customer.phone }, reason: 'El cliente solicita atención humana: ' + ($('Contexto de audio').item.json.transcript || $('Validar extracción').item.json.problem) }) }}",
+        "jsonBody": "={{ JSON.stringify({ locationId: $('Validar extracción').item.json.payload.locationId, contactId: $('Validar extracción').item.json.payload.contactId, conversationId: $('Validar extracción').item.json.conversationId || undefined, sourceEventId: $('Validar extracción').item.json.idempotencySeed || undefined, customer: { name: $('Validar extracción').item.json.payload.customer.name, phone: $('Validar extracción').item.json.payload.customer.phone }, reason: $('Contexto visual').item.json.paymentProof ? 'El cliente envió un comprobante de pago para validar' : /\\[ARCHIVO ADJUNTO\\]/.test($('Contexto de audio').item.json.transcript || '') ? 'El cliente envió un archivo adjunto para validar como posible comprobante de pago' : 'El cliente solicita atención humana: ' + ($('Contexto de audio').item.json.transcript || $('Validar extracción').item.json.problem) }) }}",
         "options": {
           "response": {
             "response": {
@@ -299,7 +299,7 @@
           "conditions": [
             {
               "id": "e1611a1c-c2de-48aa-888c-58c9c3df3084",
-              "leftValue": "={{ !/(asesor|asesoria|humano|persona|aclar|aclaracion|duda|confirmar|confirmacion|no\\s+entiend|ayuda)/i.test($('Contexto de audio').item.json.transcript || '') }}",
+              "leftValue": "={{ !$('Contexto visual').item.json.paymentProof && !/(asesor|asesoria|humano|persona|aclar|aclaracion|duda|confirmar|confirmacion|no\\s+entiend|ayuda|comprobante(?:\\s+de)?\\s+pago|soporte\\s+de\\s+pago|recibo\\s+de\\s+pago|\\[ARCHIVO ADJUNTO\\])/i.test($('Contexto de audio').item.json.transcript || '') }}",
               "rightValue": "",
               "operator": {
                 "type": "boolean",
@@ -323,7 +323,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const transcript = $('Armar transcripción').first().json;\nconst response = $input.first().json;\nif (!transcript.imageUrls.length) {\n  return [{ json: { imageText: '', visualStatus: 'not_needed', visualProblem: null } }];\n}\n\nlet imageText = '';\nlet visualProblem = null;\nif (response.statusCode !== 200) {\n  visualProblem = `OpenAI visual respondió ${response.statusCode || \"sin estado\"}`;\n} else {\n  try {\n    const rawContent = response.body?.choices?.[0]?.message?.content;\n    const parsed = typeof rawContent === 'string' ? JSON.parse(rawContent) : rawContent;\n    imageText = String(parsed?.imageText || '').trim();\n    if (!imageText) visualProblem = 'La lectura visual no devolvió texto';\n  } catch (error) {\n    visualProblem = 'La lectura visual no devolvió JSON válido';\n  }\n}\nreturn [{ json: { imageText, visualStatus: visualProblem ? 'failed' : 'extracted', visualProblem } }];"
+        "jsCode": "const transcript = $('Armar transcripción').first().json;\nconst response = $input.first().json;\nif (!transcript.imageUrls.length) {\n  return [{ json: { imageText: '', paymentProof: false, visualStatus: 'not_needed', visualProblem: null } }];\n}\n\nlet imageText = '';\nlet paymentProof = false;\nlet visualProblem = null;\nif (response.statusCode !== 200) {\n  visualProblem = `OpenAI visual respondió ${response.statusCode || \"sin estado\"}`;\n} else {\n  try {\n    const rawContent = response.body?.choices?.[0]?.message?.content;\n    const parsed = typeof rawContent === 'string' ? JSON.parse(rawContent) : rawContent;\n    imageText = String(parsed?.imageText || '').trim();\n    paymentProof = parsed?.paymentProof === true;\n    if (!imageText && !paymentProof) visualProblem = 'La lectura visual no devolvió texto ni una clasificación válida';\n  } catch (error) {\n    visualProblem = 'La lectura visual no devolvió JSON válido';\n  }\n}\nreturn [{ json: { imageText, paymentProof, visualStatus: visualProblem ? 'failed' : paymentProof ? 'payment_proof' : 'extracted', visualProblem } }];"
       },
       "id": "dda498c5-e251-41e0-9b0c-f14490825b33",
       "name": "Contexto visual",
@@ -342,7 +342,7 @@
         "nodeCredentialType": "openAiApi",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ (() => {\n  const transcript = $('Armar transcripción').item.json;\n  const instruction = 'Transcribe fielmente todo el texto legible de estas imágenes de una lista de mercado. Devuelve todos los renglones de productos en el orden visible. Conserva ortografía, cantidades, unidades, marcas, presentaciones, precios escritos y anotaciones; no normalices ni corrijas productos. Si una parte no es segura, márcala como [lectura dudosa: ...]. No inventes texto. Si hay varias imágenes, separa su contenido con IMAGEN 1, IMAGEN 2, etc.';\n  const content = [{ type: 'text', text: instruction }, ...transcript.imageUrls.map((url) => ({ type: 'image_url', image_url: { url, detail: 'high' } }))];\n  const responseSchema = { type: 'object', additionalProperties: false, required: ['imageText'], properties: { imageText: { type: 'string' } } };\n  return JSON.stringify({ model: $('Config').item.json.OPENAI_MODEL, messages: [{ role: 'user', content }], response_format: { type: 'json_schema', json_schema: { name: 'transcripcion_imagenes', strict: true, schema: responseSchema } } });\n})() }}",
+        "jsonBody": "={{ (() => {\n  const transcript = $('Armar transcripción').item.json;\n  const instruction = 'Clasifica primero las imágenes. Marca paymentProof=true si alguna muestra un comprobante, soporte o recibo de pago, una transferencia bancaria o una confirmación de billetera digital. Un comprobante no es una lista de mercado y sus conceptos nunca deben convertirse en productos. Para las imágenes que sí sean listas de mercado, transcribe fielmente todo el texto legible y devuelve todos los renglones de productos en el orden visible. Conserva ortografía, cantidades, unidades, marcas, presentaciones, precios escritos y anotaciones; no normalices ni corrijas productos. Si una parte no es segura, márcala como [lectura dudosa: ...]. No inventes texto. Si hay varias imágenes, separa su contenido con IMAGEN 1, IMAGEN 2, etc. Si solo hay comprobantes, devuelve imageText vacío.';\n  const content = [{ type: 'text', text: instruction }, ...transcript.imageUrls.map((url) => ({ type: 'image_url', image_url: { url, detail: 'high' } }))];\n  const responseSchema = { type: 'object', additionalProperties: false, required: ['imageText', 'paymentProof'], properties: { imageText: { type: 'string' }, paymentProof: { type: 'boolean' } } };\n  return JSON.stringify({ model: $('Config').item.json.OPENAI_MODEL, messages: [{ role: 'user', content }], response_format: { type: 'json_schema', json_schema: { name: 'clasificacion_imagenes', strict: true, schema: responseSchema } } });\n})() }}",
         "options": {
           "response": {
             "response": {
@@ -763,7 +763,7 @@
           "conditions": [
             {
               "id": "03c839be-22f0-4115-9461-22766c27b57c",
-              "leftValue": "={{ $json.valid }}",
+              "leftValue": "={{ $json.valid && !$('Contexto visual').item.json.paymentProof && !/\\[ARCHIVO ADJUNTO\\]/.test($('Contexto de audio').item.json.transcript || '') }}",
               "rightValue": "",
               "operator": {
                 "type": "boolean",

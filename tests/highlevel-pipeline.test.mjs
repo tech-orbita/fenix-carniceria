@@ -67,6 +67,43 @@ test("crea la oportunidad minorista en Realizo Pedido cuando aún no existe", as
   });
 });
 
+test("crea otra oportunidad cuando el contacto hace un pedido nuevo", async () => {
+  configure();
+  const requests = [];
+  globalThis.fetch = async (input, init = {}) => {
+    requests.push({ url: String(input), init });
+    if (String(input).includes("/opportunities/pipelines?")) return Response.json({ pipelines: [{ id: "retail-pipeline", name: "Minoristas", stages: [{ id: "placed-stage", name: "Realizo Pedido" }] }] });
+    if (String(input).includes("/opportunities/search?")) return Response.json({ opportunities: [{ id: "old-opportunity", name: "Luis · FEN-000001" }] });
+    return Response.json({ opportunity: { id: "new-opportunity" } }, { status: 201 });
+  };
+
+  const result = await syncRetailPipeline({ locationId: "location-new-order", contactId: "contact-2" }, "order_placed", "Luis · FEN-000002", 0);
+
+  assert.equal(result.ok, true);
+  assert.ok(requests.some((request) => request.url.endsWith("/opportunities/") && request.init.method === "POST"));
+  assert.ok(!requests.some((request) => request.url.endsWith("/opportunities/old-opportunity")));
+});
+
+test("actualiza la oportunidad que corresponde al número de pedido", async () => {
+  configure();
+  const requests = [];
+  globalThis.fetch = async (input, init = {}) => {
+    requests.push({ url: String(input), init });
+    if (String(input).includes("/opportunities/pipelines?")) return Response.json({ pipelines: [{ id: "retail-pipeline", name: "Minoristas", stages: [{ id: "paid-stage", name: "Pago" }] }] });
+    if (String(input).includes("/opportunities/search?")) return Response.json({ opportunities: [
+      { id: "old-opportunity", name: "Luis · FEN-000001" },
+      { id: "current-opportunity", name: "Luis · FEN-000002" },
+    ] });
+    return Response.json({ opportunity: { id: "current-opportunity" } });
+  };
+
+  const result = await syncRetailPipeline({ locationId: "location-current-order", contactId: "contact-2" }, "paid", "Luis · FEN-000002", 10);
+
+  assert.equal(result.ok, true);
+  assert.ok(requests.some((request) => request.url.endsWith("/opportunities/current-opportunity") && request.init.method === "PUT"));
+  assert.ok(!requests.some((request) => request.url.endsWith("/opportunities/old-opportunity")));
+});
+
 test("reconoce todas las etapas visibles del pipeline Minoristas", async () => {
   configure();
   const stages = [
@@ -112,13 +149,55 @@ test("envía un mensaje de WhatsApp al contacto por HighLevel", async () => {
   });
 });
 
-test("llena Orden y Valor del pedido en los campos del contacto", async () => {
+test("envía por el proveedor personalizado cuando el número está conectado por QR", async () => {
+  configure();
+  const requests = [];
+  globalThis.fetch = async (input, init = {}) => {
+    requests.push({ url: String(input), init });
+    if (String(input).includes("/conversations/search?")) return Response.json({ conversations: [{
+      id: "conversation-qr",
+      lastMessageType: "TYPE_CUSTOM_PROVIDER_SMS",
+      lastChannelAccount: [{ value: "provider-qr" }],
+    }] });
+    return Response.json({ messageId: "message-qr" });
+  };
+
+  const result = await sendHighLevelMessage({ locationId: "location-qr", contactId: "contact-qr", conversationId: "conversation-qr" }, "Pedido listo");
+
+  assert.equal(result.ok, true);
+  const sent = requests.find((request) => request.url.endsWith("/conversations/messages"));
+  assert.deepEqual(JSON.parse(String(sent.init.body)), {
+    type: "Custom",
+    contactId: "contact-qr",
+    message: "Pedido listo",
+    conversationProviderId: "provider-qr",
+  });
+});
+
+test("usa upsert si la subcuenta no permite oportunidades duplicadas", async () => {
+  configure();
+  const requests = [];
+  globalThis.fetch = async (input, init = {}) => {
+    requests.push({ url: String(input), init });
+    if (String(input).includes("/opportunities/pipelines?")) return Response.json({ pipelines: [{ id: "retail-pipeline", name: "Minoristas", stages: [{ id: "placed-stage", name: "Realizo Pedido" }] }] });
+    if (String(input).includes("/opportunities/search?")) return Response.json({ opportunities: [] });
+    if (String(input).endsWith("/opportunities/")) return Response.json({ message: "duplicate opportunities disabled" }, { status: 400 });
+    return Response.json({ opportunity: { id: "upserted-opportunity" } });
+  };
+
+  const result = await syncRetailPipeline({ locationId: "location-upsert", contactId: "contact-upsert" }, "order_placed", "Ana · FEN-7", 10_000);
+
+  assert.equal(result.ok, true);
+  assert.ok(requests.some((request) => request.url.endsWith("/opportunities/upsert") && request.init.method === "POST"));
+});
+
+test("llena Pedido y Valor del pedido en los campos del contacto", async () => {
   configure();
   const requests = [];
   globalThis.fetch = async (input, init = {}) => {
     requests.push({ url: String(input), init });
     if (String(input).includes("/customFields?")) return Response.json({ customFields: [
-      { id: "order-field", name: "Orden", fieldKey: "contact.orden" },
+      { id: "order-field", name: "Pedido", fieldKey: "contact.pedido" },
       { id: "total-field", name: "Valor del pedido", fieldKey: "contact.valor_del_pedido" },
     ] });
     return Response.json({ contact: { id: "contact-order-fields" } });

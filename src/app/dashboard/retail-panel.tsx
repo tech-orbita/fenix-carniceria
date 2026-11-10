@@ -4,9 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 
 import { toKilograms } from "@/lib/orders/product-parser";
-import { retailBillMessage } from "@/lib/orders/retail-bill";
+import { retailBillMessage, retailItemHasPendingPrice, retailItemHasPendingWeight, retailItemQuantity, retailLineSubtotal, retailOrderHasPendingValues, retailOrderSubtotal } from "@/lib/orders/retail-bill";
+import { retailDeliveryDay } from "@/lib/orders/retail-order-window";
 
-import { addDays, bogotaDay, dateTime, dayLabel, Icon, isPaid, money, orderTotal, phaseForStatus, phaseLabels, phaseOrder } from "./panel-shared";
+import { addDays, bogotaDay, dateTime, dayLabel, Icon, isPaid, money, phaseForStatus, phaseLabels, phaseOrder } from "./panel-shared";
 import type { OperationalPhase } from "./panel-shared";
 import type { Order } from "./types";
 
@@ -23,12 +24,12 @@ export type EditableOrderDetails = Pick<Order, "customer" | "phone" | "address">
 };
 
 type PaymentFilter = "all" | "paid" | "pending";
-type RangePreset = "today" | "yesterday" | "week" | "month" | "custom";
+type RangePreset = "today" | "tomorrow" | "yesterday" | "week" | "month" | "custom";
 type DateRange = { from: string; to: string };
 
 const LOGO_SRC = "/logo-fenix.png";
 const quantityFormat = new Intl.NumberFormat("es-CO", { maximumFractionDigits: 3 });
-const rangeLabels: Record<RangePreset, string> = { today: "Hoy", yesterday: "Ayer", week: "Últimos 7 días", month: "Este mes", custom: "Elegir fechas" };
+const rangeLabels: Record<RangePreset, string> = { today: "Hoy", tomorrow: "Mañana", yesterday: "Ayer", week: "Últimos 7 días", month: "Este mes", custom: "Elegir fechas" };
 const phaseHints: Record<OperationalPhase, string> = {
   new: "Recién ingresados",
   preparing: "En alistamiento",
@@ -39,11 +40,12 @@ const paymentFilterLabels: Record<PaymentFilter, string> = { all: "Todos", paid:
 const paymentMethodLabels: Record<string, string> = { cash: "Efectivo", transfer: "Transferencia", credit: "Crédito", other: "Otro" };
 
 function receivedDay(order: Order) {
-  return bogotaDay.format(new Date(order.receivedAt));
+  return retailDeliveryDay(order.receivedAt, order.deliveryDate);
 }
 
 function presetRange(preset: RangePreset, today: string, custom: DateRange): DateRange {
   if (preset === "today") return { from: today, to: today };
+  if (preset === "tomorrow") return { from: addDays(today, 1), to: addDays(today, 1) };
   if (preset === "yesterday") return { from: addDays(today, -1), to: addDays(today, -1) };
   if (preset === "week") return { from: addDays(today, -6), to: today };
   if (preset === "month") return { from: `${today.slice(0, 8)}01`, to: today };
@@ -63,11 +65,27 @@ function paymentMethodLabel(order: Order) {
 }
 
 function itemQuantity(item: Order["items"][number]) {
-  return item.actualQuantity ?? item.quantity;
+  return retailItemQuantity(item);
+}
+
+function pendingWeight(item: Order["items"][number]) {
+  return retailItemHasPendingWeight(item);
+}
+
+function itemUnit(item: Order["items"][number]) {
+  return item.unit === "und" ? "und" : "kg";
 }
 
 function itemsSubtotal(order: Order) {
-  return order.items.reduce((total, item) => total + itemQuantity(item) * item.unitPrice, 0);
+  return retailOrderSubtotal(order.items);
+}
+
+function hasPendingValues(order: Order) {
+  return retailOrderHasPendingValues(order.items);
+}
+
+function retailTotal(order: Order) {
+  return itemsSubtotal(order) + order.deliveryFee + order.adjustments;
 }
 
 function isQuote(order: Order) {
@@ -94,6 +112,7 @@ async function downloadRetailOrders(orders: Order[], range: DateRange) {
     { header: "Pago", key: "payment", width: 16 },
     { header: "Método de pago", key: "method", width: 16 },
     { header: "Productos", key: "products", width: 52 },
+    { header: "Validación", key: "validation", width: 20 },
     { header: "Subtotal", key: "subtotal", width: 14, style: { numFmt: currency } },
     { header: "Domicilio", key: "deliveryFee", width: 12, style: { numFmt: currency } },
     { header: "Total", key: "total", width: 14, style: { numFmt: currency } },
@@ -108,17 +127,18 @@ async function downloadRetailOrders(orders: Order[], range: DateRange) {
     phase: phaseLabels[phaseForStatus(order.status)],
     payment: isPaid(order) ? "Pagado" : "Pendiente",
     method: paymentMethodLabel(order),
-    products: order.items.map((item) => `${item.productName} ${quantityFormat.format(itemQuantity(item))} ${item.unit}`).join("; "),
+    products: order.items.map((item) => `${item.productName} ${quantityFormat.format(itemQuantity(item))} ${itemUnit(item)}`).join("; "),
+    validation: hasPendingValues(order) ? "Precio o peso pendiente" : "Listo para cobrar",
     subtotal: itemsSubtotal(order),
     deliveryFee: order.deliveryFee,
-    total: orderTotal(order),
+    total: hasPendingValues(order) ? "" : retailTotal(order),
   }));
   const totalRow = worksheet.addRow({
     orderNumber: "TOTAL",
     customer: `${orders.length} ${orders.length === 1 ? "pedido" : "pedidos"}`,
     subtotal: orders.reduce((sum, order) => sum + itemsSubtotal(order), 0),
     deliveryFee: orders.reduce((sum, order) => sum + order.deliveryFee, 0),
-    total: orders.reduce((sum, order) => sum + orderTotal(order), 0),
+    total: orders.reduce((sum, order) => sum + (hasPendingValues(order) ? 0 : retailTotal(order)), 0),
   });
   totalRow.font = { bold: true };
   worksheet.getRow(1).font = { bold: true, color: { argb: "FFFFFFFF" } };
@@ -150,7 +170,7 @@ function OrderCard({ order, selected, onSelect }: { order: Order; selected: bool
   const paid = isPaid(order);
   return (
     <button aria-pressed={selected} className={selected ? "rt-card is-selected" : "rt-card"} onClick={onSelect} type="button">
-      <span className="rt-card-top"><strong>{order.businessName ?? order.customer}</strong><b>{isQuote(order) ? "Por cotizar" : money.format(orderTotal(order))}</b></span>
+      <span className="rt-card-top"><strong>{order.businessName ?? order.customer}</strong><b>{isQuote(order) ? "Por cotizar" : hasPendingValues(order) ? "Valor pendiente" : money.format(retailTotal(order))}</b></span>
       <span className="rt-card-meta"><span>{order.orderNumber} · {dateTime.format(new Date(order.receivedAt))}</span><span className={paid ? "rt-pill is-paid" : "rt-pill is-pending"}>{paid ? "Pagado" : "Por cobrar"}</span></span>
       <span className="rt-card-address"><Icon name="address" /><span>{order.address}</span></span>
       <span className="rt-card-foot"><span>{isQuote(order) ? "Pedido por cotizar" : `${order.items.length} ${order.items.length === 1 ? "producto" : "productos"}`}</span><span>{order.fulfillment === "delivery" ? order.route : "Recoge en tienda"}</span></span>
@@ -170,11 +190,11 @@ function ThermalTicket({ order, logo }: { order: Order; logo: boolean }) {
         <div><dt>Entrega</dt><dd>{order.fulfillment === "delivery" ? "Domicilio" : "Recoge"}</dd></div><div><dt>Dirección</dt><dd>{order.address}</dd></div>
       </dl>
       <div className="ticket-rule" />
-      {order.items.map((item) => <div className="ticket-line" key={item.id}><strong>{item.productName}</strong><span>{quantityFormat.format(itemQuantity(item))} {item.unit} × {money.format(item.unitPrice)}/{item.unit}</span><b>{money.format(itemQuantity(item) * item.unitPrice)}</b>{item.preparation && <small>{item.preparation}</small>}</div>)}
+      {order.items.map((item) => <div className="ticket-line" key={item.id}><strong>{item.productName}</strong>{retailItemHasPendingPrice(item) ? <><span>{quantityFormat.format(itemQuantity(item))} {itemUnit(item)}</span><b>Precio pendiente</b></> : pendingWeight(item) ? <><span>{quantityFormat.format(item.quantity)} und · peso pendiente</span><b>Por pesar</b></> : <><span>{quantityFormat.format(itemQuantity(item))} {itemUnit(item)} × {money.format(item.unitPrice)}/{itemUnit(item)}</span><b>{money.format(retailLineSubtotal(item) ?? 0)}</b></>}{item.notes && <small><b>Pedido:</b> {item.notes}</small>}{item.preparation && <small><b>Preparación:</b> {item.preparation}</small>}</div>)}
       <div className="ticket-rule" />
       {order.deliveryFee > 0 && <div className="ticket-subtotal"><span>Domicilio</span><span>{money.format(order.deliveryFee)}</span></div>}
       {order.adjustments !== 0 && <div className="ticket-subtotal"><span>Ajustes</span><span>{money.format(order.adjustments)}</span></div>}
-      <div className="ticket-total"><span>TOTAL</span><strong>{isQuote(order) ? "Por cotizar" : money.format(orderTotal(order))}</strong></div>
+      <div className="ticket-total"><span>TOTAL</span><strong>{isQuote(order) || hasPendingValues(order) ? "Pendiente" : money.format(retailTotal(order))}</strong></div>
       <p className="ticket-payment">Pago: {paymentMethodLabel(order)} · {isPaid(order) ? "PAGADO" : "PENDIENTE"}</p>
       {order.formData && <p className="ticket-notes" style={{ whiteSpace: "pre-wrap" }}><b>Pedido por cotizar:</b> {order.formData.order_text}</p>}
       {order.notes && <p className="ticket-notes"><b>Nota:</b> {order.notes}</p>}
@@ -190,12 +210,12 @@ function EditOrderForm({ order, saving, onCancel, onSave }: { order: Order; savi
     address: order.address,
     notes: order.notes ?? "",
     items: order.items.map((item) => {
-      const normalized = toKilograms(itemQuantity(item), item.unit);
+      const normalized = pendingWeight(item) ? { quantity: 0, unit: "kg" } : item.unit === "und" ? { quantity: itemQuantity(item), unit: "und" } : toKilograms(itemQuantity(item), item.unit);
       return {
         id: item.id,
         productName: item.productName,
         quantity: normalized.quantity,
-        unit: "kg",
+        unit: normalized.unit,
         unitPrice: item.unitPrice,
         preparation: item.preparation ?? "",
       };
@@ -204,6 +224,15 @@ function EditOrderForm({ order, saving, onCancel, onSave }: { order: Order; savi
   const updateItem = (index: number, values: Partial<EditableOrderDetails["items"][number]>) => {
     setDetails((current) => ({ ...current, items: current.items.map((item, itemIndex) => itemIndex === index ? { ...item, ...values } : item) }));
   };
+  const removeItem = (index: number) => setDetails((current) => ({ ...current, items: current.items.filter((_, itemIndex) => itemIndex !== index) }));
+  const addItem = () => setDetails((current) => ({ ...current, items: [...current.items, {
+    id: `new-${Date.now()}`,
+    productName: "",
+    quantity: 0,
+    unit: "kg",
+    unitPrice: 0,
+    preparation: "",
+  }] }));
   const submit = async (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); if (await onSave(details)) onCancel(); };
   return (
     <form className="rt-edit" onSubmit={(event) => void submit(event)}>
@@ -215,14 +244,17 @@ function EditOrderForm({ order, saving, onCancel, onSave }: { order: Order; savi
         <label className="rt-wide">Indicaciones<textarea onChange={(event) => setDetails((current) => ({ ...current, notes: event.target.value }))} rows={3} value={details.notes} /></label>
       </div>
       <fieldset className="rt-edit-items">
-        <legend>Productos · ajusta el gramaje y el precio real</legend>
+        <legend>Productos · ajusta el peso real y conserva el precio por kilo</legend>
         {details.items.map((item, index) => <div className="rt-edit-row" key={item.id}>
-          <label>Producto<input onChange={(event) => updateItem(index, { productName: event.target.value })} required value={item.productName} />{order.items[index]?.notes && <small>Pedido: {order.items[index].notes}</small>}</label>
-          <label>Cantidad<input min="0.001" onChange={(event) => updateItem(index, { quantity: Number(event.target.value) })} required step="0.001" type="number" value={item.quantity} /></label>
-          <label>Unidad<input aria-label="Unidad fija en kilogramos" readOnly value="kg" /></label>
-          <label>Precio por kg<input min="0" onChange={(event) => updateItem(index, { unitPrice: Number(event.target.value) })} required step="100" type="number" value={item.unitPrice} /></label>
+          <label>Producto<input onChange={(event) => updateItem(index, { productName: event.target.value })} required value={item.productName} />{order.items.find((candidate) => candidate.id === item.id)?.notes && <small>Pedido: {order.items.find((candidate) => candidate.id === item.id)?.notes}</small>}</label>
+          <label>{item.unit === "und" ? "Cantidad real" : "Peso real"}<input min="0.001" onChange={(event) => updateItem(index, { quantity: Number(event.target.value) })} placeholder="0" required step="0.001" type="number" value={item.quantity || ""} /></label>
+          <label>Unidad<select aria-label="Unidad de cobro" onChange={(event) => updateItem(index, { unit: event.target.value })} value={item.unit}><option value="kg">kg</option><option value="und">und</option></select></label>
+          <label>Precio por {item.unit}<input min="0" onChange={(event) => updateItem(index, { unitPrice: Number(event.target.value) })} required step="100" type="number" value={item.unitPrice} />{item.unitPrice <= 0 && <small className="rt-pending-copy">Precio pendiente</small>}</label>
           <label>Preparación<input onChange={(event) => updateItem(index, { preparation: event.target.value })} placeholder="Sin indicaciones" value={item.preparation} /></label>
+          <div className="rt-edit-line-total"><span>Subtotal</span><strong>{item.unitPrice > 0 && item.quantity > 0 ? money.format(Math.round(item.quantity * item.unitPrice)) : "Pendiente"}</strong></div>
+          <button aria-label={`Eliminar ${item.productName || "producto"}`} className="rt-remove-item" onClick={() => removeItem(index)} type="button">Eliminar</button>
         </div>)}
+        <button className="rt-button rt-add-item" onClick={addItem} type="button">+ Agregar producto</button>
       </fieldset>
       <div className="rt-edit-actions"><button className="rt-button" onClick={onCancel} type="button">Cancelar</button><button className="rt-button is-primary" disabled={saving} type="submit">{saving ? "Guardando…" : "Guardar cambios"}</button></div>
     </form>
@@ -250,12 +282,14 @@ function FormDetails({ order }: { order: Order }) {
   </div>;
 }
 
-function OrderDetail({ order, pending, logo, onMove, onPaymentChange, onResolveHelp, onSave, onSendBill }: { order: Order; pending: boolean; logo: boolean; onMove: (order: Order, phase: OperationalPhase) => void; onPaymentChange: (order: Order, status: "paid" | "pending") => void; onResolveHelp: (order: Order) => void; onSave: (order: Order, details: EditableOrderDetails) => Promise<boolean>; onSendBill: (order: Order) => void }) {
+function OrderDetail({ order, pending, logo, today, onAdvance, onMove, onPaymentChange, onResolveHelp, onSave, onSendBill }: { order: Order; pending: boolean; logo: boolean; today: string; onAdvance: (order: Order) => void; onMove: (order: Order, phase: OperationalPhase) => void; onPaymentChange: (order: Order, status: "paid" | "pending") => void; onResolveHelp: (order: Order) => void; onSave: (order: Order, details: EditableOrderDetails) => Promise<boolean>; onSendBill: (order: Order) => void }) {
   const [editing, setEditing] = useState(false);
   const [copied, setCopied] = useState(false);
   const phase = phaseForStatus(order.status);
   const paid = isPaid(order);
   const canBill = order.items.length > 0;
+  const pendingValues = hasPendingValues(order);
+  const scheduledDay = receivedDay(order);
   const copyBill = async () => {
     try {
       await navigator.clipboard.writeText(retailBillMessage(order));
@@ -285,8 +319,8 @@ function OrderDetail({ order, pending, logo, onMove, onPaymentChange, onResolveH
             <div className="rt-control-section">
               <span className="rt-control-label">Comunicación</span>
               <div className="rt-control-actions">
-                <a className="rt-button is-chat" href={`/api/highlevel/conversation/${encodeURIComponent(order.id)}`} rel="noreferrer" target="_blank"><Icon name="chat" /> Abrir conversación</a>
-                {canBill && <button className="rt-button is-bill" disabled={pending} onClick={() => onSendBill(order)} title="Envía el resumen directamente por la conversación de HighLevel" type="button"><Icon name="receipt" /> {pending ? "Enviando…" : "Enviar cobro"}</button>}
+                <a className="rt-button is-chat" href={`/api/conversation/${encodeURIComponent(order.id)}`} rel="noreferrer" target="_blank"><Icon name="chat" /> Abrir conversación</a>
+                {canBill && <button className="rt-button is-bill" disabled={pending} onClick={() => onSendBill(order)} title="Envía el resumen directamente por la conversación de Orbita" type="button"><Icon name="receipt" /> {pending ? "Enviando…" : "Enviar cobro"}</button>}
               </div>
             </div>
             <div className="rt-control-section is-order">
@@ -294,7 +328,7 @@ function OrderDetail({ order, pending, logo, onMove, onPaymentChange, onResolveH
               <div className="rt-control-actions">
                 {canBill && <button className="rt-button is-quiet" onClick={() => void copyBill()} title="Copia el resumen para pegarlo en otra conversación" type="button"><Icon name={copied ? "check" : "copy"} /> {copied ? "Copiado" : "Copiar"}</button>}
                 <button className="rt-button is-quiet" onClick={() => setEditing(true)} type="button"><Icon name="edit" /> Editar</button>
-                <button className="rt-button is-quiet" onClick={() => window.print()} type="button"><Icon name="print" /> Imprimir</button>
+                <button className="rt-button is-quiet" onClick={() => window.print()} title="Imprimir comanda" type="button"><Icon name="print" /> Imprimir</button>
               </div>
             </div>
             <button className={paid ? "rt-button rt-payment-action is-paid" : "rt-button rt-payment-action is-pay"} disabled={pending} onClick={() => onPaymentChange(order, paid ? "pending" : "paid")} type="button">{pending ? "Guardando…" : paid ? "Marcar pendiente" : "Marcar como pagado"}</button>
@@ -308,14 +342,16 @@ function OrderDetail({ order, pending, logo, onMove, onPaymentChange, onResolveH
             </div>
           </div>
         </div>
+        {scheduledDay > today && <div className="rt-alert rt-delivery-alert" role="status"><Icon name="calendar" /><span>Entrega programada para <b>{scheduledDay === addDays(today, 1) ? "mañana" : formatDay(scheduledDay)}</b>.</span><button disabled={pending} onClick={() => onAdvance(order)} type="button">{pending ? "Guardando…" : "Adelantar a hoy"}</button></div>}
+        {pendingValues && <div className="rt-price-warning" role="status"><strong>Pedido pendiente de completar</strong><span>Hay pesos o precios pendientes. Puedes continuar con cualquier acción y completar estos datos cuando corresponda.</span></div>}
         <FormDetails order={order} />
         {order.items.length > 0 && <table className="rt-lines">
-          <thead><tr><th scope="col">Producto</th><th scope="col">Cantidad</th><th scope="col">Precio</th><th scope="col">Subtotal</th></tr></thead>
+          <thead><tr><th scope="col">Producto</th><th scope="col">Peso real</th><th scope="col">Precio/kg</th><th scope="col">Subtotal</th></tr></thead>
           <tbody>{order.items.map((item) => <tr key={item.id}>
             <th scope="row">{item.productName}{item.notes && <small>Pedido: {item.notes}</small>}{item.preparation && <small>Preparación: {item.preparation}</small>}</th>
-            <td>{quantityFormat.format(itemQuantity(item))} {item.unit}</td>
-            <td>{money.format(item.unitPrice)}<small>por {item.unit}</small></td>
-            <td>{money.format(itemQuantity(item) * item.unitPrice)}</td>
+            <td>{pendingWeight(item) ? <>{quantityFormat.format(item.quantity)} und<small>Peso pendiente</small></> : <>{quantityFormat.format(itemQuantity(item))} {itemUnit(item)}</>}</td>
+            <td>{retailItemHasPendingPrice(item) ? <strong className="rt-pending-copy">Precio pendiente</strong> : <>{money.format(item.unitPrice)}<small>por {itemUnit(item)}</small></>}</td>
+            <td>{retailItemHasPendingPrice(item) ? "Pendiente" : pendingWeight(item) ? "Por pesar" : money.format(retailLineSubtotal(item) ?? 0)}</td>
           </tr>)}</tbody>
         </table>}
         {order.notes && <div className="rt-note"><strong>Indicaciones</strong><p>{order.notes}</p></div>}
@@ -328,7 +364,7 @@ function OrderDetail({ order, pending, logo, onMove, onPaymentChange, onResolveH
             {order.items.length > 0 && <div><dt>Subtotal</dt><dd>{money.format(itemsSubtotal(order))}</dd></div>}
             {order.deliveryFee > 0 && <div><dt>Domicilio</dt><dd>{money.format(order.deliveryFee)}</dd></div>}
             {order.adjustments !== 0 && <div><dt>Ajustes</dt><dd>{money.format(order.adjustments)}</dd></div>}
-            <div className="rt-grand-total"><dt>Total</dt><dd>{isQuote(order) ? "Por cotizar" : money.format(orderTotal(order))}</dd></div>
+            <div className="rt-grand-total"><dt>Total</dt><dd>{isQuote(order) || pendingValues ? "Pendiente" : money.format(retailTotal(order))}</dd></div>
           </dl>
         </section>
       </div>
@@ -337,7 +373,7 @@ function OrderDetail({ order, pending, logo, onMove, onPaymentChange, onResolveH
   );
 }
 
-export function RetailPanel({ orders, pendingId, onMove, onPaymentChange, onResolveHelp, onSave, onSendBill }: { orders: Order[]; pendingId?: string; onMove: (order: Order, phase: OperationalPhase) => void; onPaymentChange: (order: Order, status: "paid" | "pending") => void; onResolveHelp: (order: Order) => void; onSave: (order: Order, details: EditableOrderDetails) => Promise<boolean>; onSendBill: (order: Order) => void }) {
+export function RetailPanel({ orders, pendingId, onAdvance, onMove, onPaymentChange, onResolveHelp, onSave, onSendBill }: { orders: Order[]; pendingId?: string; onAdvance: (order: Order) => void; onMove: (order: Order, phase: OperationalPhase) => void; onPaymentChange: (order: Order, status: "paid" | "pending") => void; onResolveHelp: (order: Order) => void; onSave: (order: Order, details: EditableOrderDetails) => Promise<boolean>; onSendBill: (order: Order) => void }) {
   // "Hoy" se recalcula en cada refresco para que el periodo avance solo al cambiar el día.
   const today = bogotaDay.format(new Date());
   const [preset, setPreset] = useState<RangePreset>("today");
@@ -349,6 +385,8 @@ export function RetailPanel({ orders, pendingId, onMove, onPaymentChange, onReso
   const logo = useLogoAvailable();
   const range = presetRange(preset, today, custom);
   const normalized = query.trim().toLocaleLowerCase("es");
+  const tomorrow = addDays(today, 1);
+  const tomorrowOrders = orders.filter((order) => receivedDay(order) === tomorrow && order.status !== "cancelled");
 
   const rangeOrders = useMemo(() => orders.filter((order) => {
     const day = receivedDay(order);
@@ -363,10 +401,12 @@ export function RetailPanel({ orders, pendingId, onMove, onPaymentChange, onReso
 
   // Resumen del periodo: los cancelados no suman ventas.
   const billable = rangeOrders.filter((order) => order.status !== "cancelled");
-  const sales = billable.reduce((sum, order) => sum + orderTotal(order), 0);
-  const paidOrders = billable.filter(isPaid);
-  const collected = paidOrders.reduce((sum, order) => sum + orderTotal(order), 0);
+  const valuedOrders = billable.filter((order) => !hasPendingValues(order));
+  const sales = valuedOrders.reduce((sum, order) => sum + retailTotal(order), 0);
+  const paidOrders = valuedOrders.filter(isPaid);
+  const collected = paidOrders.reduce((sum, order) => sum + retailTotal(order), 0);
   const deliveries = billable.filter((order) => order.fulfillment === "delivery").length;
+  const pendingValueOrders = billable.length - valuedOrders.length;
 
   // Pedidos sin despachar de días anteriores al periodo, para que no se queden olvidados.
   const staleOpen = orders.filter((order) => phaseForStatus(order.status) !== "dispatched" && order.status !== "cancelled" && receivedDay(order) < range.from);
@@ -381,11 +421,11 @@ export function RetailPanel({ orders, pendingId, onMove, onPaymentChange, onReso
       <div className="rt-toolbar">
         <div aria-label="Periodo" className="rt-range" role="group">
           <Icon name="calendar" />
-          {(Object.keys(rangeLabels) as RangePreset[]).map((option) => <button aria-pressed={preset === option} key={option} onClick={() => { if (option === "custom") setCustom(range); setPreset(option); }} type="button">{rangeLabels[option]}</button>)}
+          {(Object.keys(rangeLabels) as RangePreset[]).map((option) => <button aria-pressed={preset === option} key={option} onClick={() => { if (option === "custom") setCustom(range); setPreset(option); }} type="button">{rangeLabels[option]}{option === "tomorrow" ? ` (${tomorrowOrders.length})` : ""}</button>)}
         </div>
         {preset === "custom" && <div className="rt-dates">
-          <label>Desde<input max={today} onChange={(event) => event.target.value && setCustom((current) => ({ ...current, from: event.target.value }))} type="date" value={custom.from} /></label>
-          <label>Hasta<input max={today} onChange={(event) => event.target.value && setCustom((current) => ({ ...current, to: event.target.value }))} type="date" value={custom.to} /></label>
+          <label>Desde<input onChange={(event) => event.target.value && setCustom((current) => ({ ...current, from: event.target.value }))} type="date" value={custom.from} /></label>
+          <label>Hasta<input onChange={(event) => event.target.value && setCustom((current) => ({ ...current, to: event.target.value }))} type="date" value={custom.to} /></label>
         </div>}
         <label className="rt-search"><Icon name="search" /><span className="sr-only">Buscar pedido</span><input onChange={(event) => setQuery(event.target.value)} placeholder="Buscar cliente, pedido, teléfono o dirección" type="search" value={query} /></label>
         <button className="rt-button" disabled={!rangeOrders.length} onClick={() => void downloadRetailOrders(rangeOrders, range)} title="Descarga todos los pedidos del periodo" type="button"><Icon name="download" /> Descargar Excel</button>
@@ -394,12 +434,13 @@ export function RetailPanel({ orders, pendingId, onMove, onPaymentChange, onReso
       <div aria-label={`Resumen · ${rangeTitle(range)}`} className="rt-summary" role="group">
         <div className="rt-stat rt-stat-period"><span>Periodo</span><strong>{preset === "custom" ? "Personalizado" : rangeLabels[preset]}</strong><small>{rangeTitle(range)}</small></div>
         <div className="rt-stat"><span>Pedidos</span><strong>{billable.length}</strong><small>{deliveries} {deliveries === 1 ? "domicilio" : "domicilios"}</small></div>
-        <div className="rt-stat"><span>Ventas</span><strong>{money.format(sales)}</strong><small>Total del periodo</small></div>
+        <div className="rt-stat"><span>Ventas</span><strong>{money.format(sales)}</strong><small>{pendingValueOrders ? `${pendingValueOrders} con valor pendiente` : "Total del periodo"}</small></div>
         <div className="rt-stat is-paid"><span>Cobrado</span><strong>{money.format(collected)}</strong><small>{paidOrders.length} {paidOrders.length === 1 ? "pedido pagado" : "pedidos pagados"}</small></div>
-        <div className="rt-stat is-pending"><span>Por cobrar</span><strong>{money.format(sales - collected)}</strong><small>{billable.length - paidOrders.length} {billable.length - paidOrders.length === 1 ? "pedido pendiente" : "pedidos pendientes"}</small></div>
+        <div className="rt-stat is-pending"><span>Por cobrar</span><strong>{money.format(sales - collected)}</strong><small>{valuedOrders.length - paidOrders.length} {valuedOrders.length - paidOrders.length === 1 ? "pedido pendiente" : "pedidos pendientes"}</small></div>
       </div>
 
       {staleOpen.length > 0 && <div className="rt-alert" role="status"><Icon name="help" /><span>Hay <b>{staleOpen.length}</b> {staleOpen.length === 1 ? "pedido sin despachar" : "pedidos sin despachar"} de días anteriores a este periodo.</span><button onClick={showStale} type="button">Verlos</button></div>}
+      {preset === "today" && tomorrowOrders.length > 0 && <div className="rt-alert rt-delivery-alert" role="status"><Icon name="calendar" /><span>Hay <b>{tomorrowOrders.length}</b> {tomorrowOrders.length === 1 ? "pedido programado" : "pedidos programados"} para mañana.</span><button onClick={() => setPreset("tomorrow")} type="button">Ver mañana</button></div>}
 
       <nav aria-label="Estado de los pedidos" className="rt-phases">
         {(Object.keys(phaseLabels) as OperationalPhase[]).map((phase) => <button aria-pressed={activePhase === phase} className={`phase-${phase}`} key={phase} onClick={() => setActivePhase(phase)} type="button">
@@ -420,7 +461,7 @@ export function RetailPanel({ orders, pendingId, onMove, onPaymentChange, onReso
           </div>
         </aside>
         <div className="rt-detail-panel">{selected
-          ? <OrderDetail key={selected.id} logo={logo} onMove={onMove} onPaymentChange={onPaymentChange} onResolveHelp={onResolveHelp} onSave={onSave} onSendBill={onSendBill} order={selected} pending={pendingId === selected.id} />
+          ? <OrderDetail key={selected.id} logo={logo} onAdvance={onAdvance} onMove={onMove} onPaymentChange={onPaymentChange} onResolveHelp={onResolveHelp} onSave={onSave} onSendBill={onSendBill} order={selected} pending={pendingId === selected.id} today={today} />
           : <div className="rt-empty is-detail"><strong>Selecciona un pedido</strong><span>Cambia el periodo, la fase o el filtro de pago para ver otros pedidos.</span></div>}</div>
       </div>
     </section>

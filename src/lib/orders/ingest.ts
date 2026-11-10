@@ -64,7 +64,8 @@ function isValidBody(value: unknown): value is IngestBody {
     body.items.every((item) =>
       Boolean(item?.product_name?.trim()) &&
       Number.isFinite(item?.quantity) &&
-      Number(item.quantity) > 0 &&
+      Number(item.quantity) >= 0 &&
+      (Number(item.quantity) > 0 || body.customer_type === "wholesale") &&
       Boolean(item?.unit?.trim()),
     )
   );
@@ -99,7 +100,20 @@ export async function ingestOrder(body: IngestBody) {
   if (!identityKey) return NextResponse.json({ error: "Could not identify customer" }, { status: 422 });
   const submittedRouteName = body.route?.trim();
   const routeName = submittedRouteName || "Sin clasificar";
-  const { data: route } = await supabase.from("routes").select("id").eq("name", routeName).maybeSingle();
+  let { data: route } = await supabase.from("routes").select("id").eq("name", routeName).maybeSingle();
+  // Fuentes distintas al formulario todavía pueden proponer una ruta nueva.
+  if (!route && submittedRouteName) {
+    const { data: createdRoute, error: routeError } = await supabase
+      .from("routes")
+      .insert({ name: routeName, sort_order: 900 })
+      .select("id")
+      .maybeSingle();
+    if (createdRoute) route = createdRoute;
+    else if (routeError?.code === "23505") {
+      const concurrentRoute = await supabase.from("routes").select("id").eq("name", routeName).maybeSingle();
+      route = concurrentRoute.data;
+    }
+  }
   const { data: fallbackRoute } = route
     ? { data: null }
     : await supabase.from("routes").select("id").eq("name", "Sin clasificar").single();
@@ -191,7 +205,7 @@ export async function ingestOrder(body: IngestBody) {
         syncWholesalePipeline(
           highLevelContext,
           "order_placed",
-          `${body.customer.business_name || body.customer.name} · ${order.order_number}`,
+          `${body.customer.name} · ${order.order_number}`,
           subtotal,
         ),
         syncHighLevelOrderFields(highLevelContext, { orderNumber: order.order_number, total: subtotal }),

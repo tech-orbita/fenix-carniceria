@@ -2,11 +2,26 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mapHighLevelForm } from "../src/lib/orders/highlevel.ts";
 const base = { "Nombre Completo": "Ana", "Teléfono": "+57 300 123 4567", "Coloca tu Pedido": "2 kg de costilla\nMolida por confirmar", "¿Es a Domicilio o Recoges en Tienda?": "Domicilio" };
-test("cliente: preserva pedido libre y solo clasifica partidas inequívocas", () => {
+test("cliente: preserva el pedido libre y aplica la regla operativa de molida", () => {
   const order = mapHighLevelForm(base, "mayorista-cliente");
   assert.equal(order.form_data.order_text, base["Coloca tu Pedido"]);
-  assert.deepEqual(order.items, [{ product_name: "Costilla", quantity: 2, unit: "kg" }]);
+  assert.deepEqual(order.items, [
+    { product_name: "Costilla", quantity: 2, unit: "kg" },
+    { product_name: "Molida especial", quantity: 0, unit: "cantidad" },
+  ]);
+  assert.match(order.notes, /Por aclarar en el pedido: Molida por confirmar/);
   assert.equal(order.customer.phone, "+573001234567");
+});
+
+test("ninguna línea ambigua desaparece de la tabla mayorista", () => {
+  const order = mapHighLevelForm({ ...base, "Coloca tu Pedido": "2 kg costilla\nproducto secreto\n3 libras corte extraterrestre" }, "mayorista-cliente");
+  assert.deepEqual(order.items, [
+    { product_name: "Costilla", quantity: 2, unit: "kg" },
+    { product_name: "Comodín", quantity: 0, unit: "cantidad", preparation: "Producto secreto" },
+    { product_name: "Comodín", quantity: 3, unit: "lb", preparation: "Corte extraterrestre" },
+  ]);
+  assert.match(order.notes, /producto secreto/i);
+  assert.match(order.notes, /3 libras corte extraterrestre/i);
 });
 test("nuevo: mapea campos personalizados y datos de entrega", () => {
   const order = mapHighLevelForm({ ...base, customData: { "Nombre del Negocio": "Asados", "Nit o Cédula": "123", "Facturación": "Electrónica", "Ubicación de Maps": "https://maps.google.com/", "Número de Quien Recibe": "3001234568" }, submission_id: "envio-1" }, "nuevo-mayorista");
@@ -87,13 +102,61 @@ test("conserva todas las líneas aunque omitan o inviertan la unidad", () => {
     "Coloca tu Pedido": "10 CAPON\n2 SOBREBARRIGA\n10 MOLIDA\n15 CHURRASCO\n6 PATAS DE RES\nmolida especial 4 lib\nk carne molida 1",
   }, "mayorista-cliente");
   assert.deepEqual(order.items, [
-    { product_name: "Blanda", quantity: 10, unit: "kg", preparation: "C" },
-    { product_name: "Sobrebarriga", quantity: 2, unit: "kg" },
-    { product_name: "Comodín", quantity: 10, unit: "kg", preparation: "Molida" },
-    { product_name: "Comodín", quantity: 15, unit: "kg", preparation: "Churrasco" },
-    { product_name: "Pata", quantity: 6, unit: "kg" },
+    { product_name: "Blanda", quantity: 10, unit: "cantidad", preparation: "C" },
+    { product_name: "Sobrebarriga", quantity: 2, unit: "cantidad" },
+    { product_name: "Molida especial", quantity: 10, unit: "cantidad" },
+    { product_name: "Comodín", quantity: 15, unit: "cantidad", preparation: "Churrasco" },
+    { product_name: "Pata", quantity: 6, unit: "cantidad" },
     { product_name: "Molida especial", quantity: 4, unit: "lb" },
-    { product_name: "Comodín", quantity: 1, unit: "kg", preparation: "Carne molida" },
+    { product_name: "Molida especial", quantity: 1, unit: "kg" },
+  ]);
+});
+
+test("separa molida corriente y pata de cerdo de los valores mayoristas por defecto", () => {
+  const order = mapHighLevelForm({
+    ...base,
+    "Coloca tu Pedido": "3 kg molida; 2 kg carne molida; 4 kg molida corriente; 5 kg cerdo; 6 kg cerdo pata; 7 kg pata de cerdo",
+  }, "mayorista-cliente");
+  assert.deepEqual(order.items, [
+    { product_name: "Molida especial", quantity: 3, unit: "kg" },
+    { product_name: "Molida especial", quantity: 2, unit: "kg" },
+    { product_name: "Molida corriente", quantity: 4, unit: "kg" },
+    { product_name: "Lomo cerdo", quantity: 5, unit: "kg" },
+    { product_name: "Pata cerdo", quantity: 6, unit: "kg" },
+    { product_name: "Pata cerdo", quantity: 7, unit: "kg" },
+  ]);
+});
+
+test("conserva con cero todos los cortes que el mayorista pide sin cantidad", () => {
+  const order = mapHighLevelForm({
+    ...base,
+    "Coloca tu Pedido": "capón, punta gorda, costillo, rabo sin hueso, sobre barriga y chocosuela",
+  }, "mayorista-cliente");
+  assert.deepEqual(order.items, [
+    { product_name: "Blanda", quantity: 0, unit: "cantidad", preparation: "C" },
+    { product_name: "Punta gorda", quantity: 0, unit: "cantidad" },
+    { product_name: "Costilla", quantity: 0, unit: "cantidad" },
+    { product_name: "Rabo res", quantity: 0, unit: "cantidad", preparation: "Sin hueso" },
+    { product_name: "Sobrebarriga", quantity: 0, unit: "cantidad" },
+    { product_name: "Chocosuela", quantity: 0, unit: "cantidad" },
+  ]);
+});
+
+test("no inventa unidades para patas de res cuando el cliente las omite", () => {
+  const order = mapHighLevelForm({ ...base, "Coloca tu Pedido": "3 patas de res" }, "mayorista-cliente");
+  assert.deepEqual(order.items, [{ product_name: "Pata", quantity: 3, unit: "cantidad" }]);
+});
+
+test("clasifica pescado y otros productos de la lista mayorista vigente", () => {
+  const order = mapHighLevelForm({
+    ...base,
+    "Coloca tu Pedido": "2 kg bassa selecta, 1 kg bassa, 3 libras butifarra y 4 libras chorizo",
+  }, "mayorista-cliente");
+  assert.deepEqual(order.items, [
+    { product_name: "Bassa selecta", quantity: 2, unit: "kg" },
+    { product_name: "Bassa", quantity: 1, unit: "kg" },
+    { product_name: "Butifarra", quantity: 3, unit: "lb" },
+    { product_name: "Chorizo", quantity: 4, unit: "lb" },
   ]);
 });
 
@@ -107,6 +170,32 @@ test("prioriza la dirección del contacto sobre la dirección de la sede", () =>
   assert.equal(order.customer.address, "Carrera 20 # 10-15");
 });
 
+test("ignora la zona aunque GHL envíe el nombre completo del campo", () => {
+  const order = mapHighLevelForm({
+    ...base,
+    "Contact.Custom Fields.Zona": "Barranquilla Norte",
+  }, "nuevo-mayorista");
+  assert.equal("route" in order, false);
+});
+
+test("no usa opciones nuevas de zona enviadas por el formulario", () => {
+  const order = mapHighLevelForm({
+    ...base,
+    Zona: "Suroccidente especial",
+  }, "nuevo-mayorista");
+  assert.equal("route" in order, false);
+});
+
+test("acepta el comprobante de pago cuando HighLevel lo envía como lista de archivos", () => {
+  const order = mapHighLevelForm({
+    ...base,
+    customData: [
+      { fieldKey: "Aqui puedes subir tu comprobante de Pago", value: ["https://files.example/comprobante.jpg"] },
+    ],
+  }, "mayorista-cliente");
+  assert.equal(order.form_data.payment_proof, "https://files.example/comprobante.jpg");
+});
+
 test("interpreta las líneas reales de blanda, cerdo y pollo sin perder productos", () => {
   const order = mapHighLevelForm({
     ...base,
@@ -116,7 +205,7 @@ test("interpreta las líneas reales de blanda, cerdo y pollo sin perder producto
     { product_name: "Blanda", quantity: 4, unit: "kg", preparation: "C" },
     { product_name: "Lomo cerdo", quantity: 2, unit: "kg" },
     { product_name: "Blanda", quantity: 6, unit: "kg", preparation: "L" },
-    { product_name: "Comodín", quantity: 5, unit: "kg", preparation: "Pechugas pollo" },
-    { product_name: "Comodín", quantity: 4, unit: "kg", preparation: "Pierna pernil" },
+    { product_name: "Comodín", quantity: 5, unit: "cantidad", preparation: "Pechugas pollo" },
+    { product_name: "Comodín", quantity: 4, unit: "cantidad", preparation: "Pierna pernil" },
   ]);
 });

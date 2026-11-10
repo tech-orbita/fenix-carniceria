@@ -4,7 +4,9 @@ export type RetailCatalogProduct = {
   id: string;
   name: string;
   catalogKey: string;
-  pricePerKg: number;
+  pricePerKg?: number;
+  pricePerUnit?: number;
+  saleUnit?: "kg" | "und";
 };
 
 export type RetailInputItem = {
@@ -22,7 +24,8 @@ export type NormalizedRetailItem = {
   product_id: string | null;
   product_name: string;
   quantity: number;
-  unit: "kg";
+  unit: "kg" | "und";
+  actual_quantity: number | null;
   preparation: string | null;
   notes: string | null;
   unit_price: number;
@@ -37,6 +40,9 @@ const retailAliases: Record<string, string> = {
   "muslos colombia": "muslo colombina",
   "pechuga completa": "pechuga congelada",
   pechuga: "pechuga congelada",
+  "pierna pernil": "pernil mixto contramuslo",
+  "pierna y pernil": "pernil mixto contramuslo",
+  "pierna perniles": "pernil mixto contramuslo",
   sobrebarriga: "sobre barriga delgada",
   "sobre barriga": "sobre barriga delgada",
   churrasco: "lomo ancho",
@@ -50,10 +56,22 @@ function singularToken(token: string) {
 
 function comparable(value: string) {
   const normalized = normalizeProductName(value);
-  return (retailAliases[normalized] ?? normalized)
+  const singular = normalized
     .split(" ")
-    .filter((token) => token && !["de", "del", "la", "el", "para", "carne"].includes(token))
+    .filter(Boolean)
     .map(singularToken)
+    .join(" ");
+  const cleaned = singular
+    .split(" ")
+    .filter((token) => token && !["porfavor", "porfa", "xfa", "por", "favor"].includes(token))
+    .join(" ");
+  return (retailAliases[normalized] ?? retailAliases[singular] ?? retailAliases[cleaned] ?? cleaned)
+    .split(" ")
+    // La lista de Fénix conserva el nombre histórico "Atravessado", mientras
+    // los clientes escriben normalmente "atravesado". Es el mismo corte y la
+    // corrección se limita a la comparación; el pedido original no se altera.
+    .map((token) => token === "atravesado" ? "atravessado" : token)
+    .filter((token) => token && !["de", "del", "la", "el", "para", "carne"].includes(token))
     .join(" ");
 }
 
@@ -78,6 +96,22 @@ function numericValue(value: string) {
 export function matchRetailProduct(value: string, catalog: readonly RetailCatalogProduct[]) {
   const wanted = comparable(value);
   if (!wanted) return undefined;
+
+  // Regla operativa de Fénix: cuando el cliente pide simplemente "carne
+  // molida" se despacha la súper especial. La corriente solo se selecciona
+  // cuando el cliente la menciona expresamente. Esta prioridad evita que el
+  // orden del catálogo o el emparejamiento aproximado cambien la decisión.
+  if (/\bmolida\b/.test(wanted)) {
+    const requestedCurrent = /\bcorriente\b/.test(wanted);
+    const preferredGroundBeef = catalog.find((product) => {
+      const candidate = comparable(`${product.name} ${product.catalogKey}`);
+      if (!/\bmolida\b/.test(candidate)) return false;
+      return requestedCurrent
+        ? /\bcorriente\b/.test(candidate)
+        : /\b(?:super\s+)?especial\b/.test(candidate) && !/\bcorriente\b/.test(candidate);
+    });
+    if (preferredGroundBeef) return preferredGroundBeef;
+  }
 
   const exact = catalog.find((product) => comparable(product.name) === wanted);
   if (exact) return exact;
@@ -143,19 +177,21 @@ function parsedLine(item: RetailInputItem) {
     return {
       rawText,
       productText: counted[1].trim(),
-      quantity: 1,
-      unit: "kg",
+      quantity: numericValue(counted[2]),
+      unit: "und",
       amount: null,
     };
   }
 
   const plainQuantity = rawText.match(/^(\d+(?:[.,]\d+)?)\s+(?:de\s+)?(.+)$/i);
   if (plainQuantity) {
+    const productText = plainQuantity[2].trim();
+    const countedProduct = /\b(?:pechugas?|piernas?\s+(?:y\s+)?pernil(?:es)?)\b/i.test(productText);
     return {
       rawText,
-      productText: plainQuantity[2].trim(),
+      productText,
       quantity: numericValue(plainQuantity[1]),
-      unit: "kg",
+      unit: countedProduct ? "und" : "kg",
       amount: null,
     };
   }
@@ -165,11 +201,13 @@ function parsedLine(item: RetailInputItem) {
   if (isAmount && Number.isFinite(structuredQuantity) && structuredQuantity > 0) {
     return { rawText, productText: String(item.product_name ?? item.name ?? rawText).trim(), quantity: null, unit: "COP", amount: structuredQuantity };
   }
+  const suppliedUnit = normalizeProductName(String(item.unit ?? "kg"));
+  const countedUnit = ["unidad", "unidades", "und", "unds", "pieza", "piezas"].includes(suppliedUnit);
   return {
     rawText,
     productText: String(item.product_name ?? item.name ?? rawText).trim(),
     quantity: Number.isFinite(structuredQuantity) && structuredQuantity > 0 ? structuredQuantity : 1,
-    unit: String(item.unit ?? "kg").trim() || "kg",
+    unit: countedUnit ? "und" : String(item.unit ?? "kg").trim() || "kg",
     amount: null,
   };
 }
@@ -190,10 +228,12 @@ export function normalizeRetailItems(
     const parsed = parsedLine(item);
     if (!parsed.productText) return null;
     const product = matchRetailProduct(parsed.productText, catalog);
-    const unitPrice = product?.pricePerKg ?? 0;
+    const pricedByUnit = product?.saleUnit === "und";
+    const unitPrice = pricedByUnit ? product.pricePerUnit ?? 0 : product?.pricePerKg ?? 0;
+    const counted = parsed.unit === "und" || pricedByUnit;
     const normalizedQuantity = parsed.amount != null
       ? (unitPrice > 0 ? parsed.amount / unitPrice : 1)
-      : toKilograms(Number(parsed.quantity), parsed.unit).quantity;
+      : counted ? Number(parsed.quantity) : toKilograms(Number(parsed.quantity), parsed.unit).quantity;
     if (!Number.isFinite(normalizedQuantity) || normalizedQuantity <= 0) return null;
 
     const canonicalName = product?.name ?? title(parsed.productText);
@@ -204,7 +244,10 @@ export function normalizeRetailItems(
       product_id: product?.id ?? null,
       product_name: canonicalName.slice(0, 180),
       quantity: Math.round(normalizedQuantity * 1_000) / 1_000,
-      unit: "kg",
+      unit: counted ? "und" : "kg",
+      // Para pesos explícitos, la cantidad normalizada es también el peso real
+      // inicial. Las piezas cobradas por kilo siguen pendientes hasta pesarlas.
+      actual_quantity: pricedByUnit || !counted ? Math.round(normalizedQuantity * 1_000) / 1_000 : null,
       preparation: String(item.preparation ?? "").trim().slice(0, 250) || null,
       notes: String(item.notes ?? sourceNote).trim().slice(0, 500) || null,
       unit_price: unitPrice,
@@ -214,5 +257,5 @@ export function normalizeRetailItems(
 
 export function requiresRetailHelp(reason: string) {
   const normalized = normalizeProductName(reason);
-  return /\b(?:asesor|asesoria|humano|persona|aclar|aclaracion|duda|confirmar|confirmacion|no entend|ayuda|atencion humana)\b/.test(normalized);
+  return /\b(?:asesor|asesoria|humano|persona|aclar|aclaracion|duda|confirmar|confirmacion|no entend|ayuda|atencion humana|comprobante(?: de)? pago|soporte de pago|recibo de pago)\b/.test(normalized);
 }

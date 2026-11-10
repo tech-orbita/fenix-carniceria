@@ -10,7 +10,7 @@ export type Viewer = {
   userId: string;
   email: string;
   role: PanelRole;
-  // Segmento asignado al operador; null para administradores (ven ambos).
+  // Segmento asignado; null significa ambos para administradores u operadores globales.
   customerType: CustomerType | null;
 };
 
@@ -51,5 +51,5 @@ export async function requireAdmin() {
 }
 
 export function canAccess(viewer: Viewer, customerType: CustomerType) {
-  return viewer.role === "admin" || viewer.customerType === customerType;
+  return viewer.role === "admin" || viewer.customerType === null || viewer.customerType === customerType;
 }

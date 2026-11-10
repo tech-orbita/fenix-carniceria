@@ -35,6 +35,7 @@ export default async function UsersPage() {
         <h1>Usuarios del panel</h1>
         <div className="session-bar">
           <span>{viewer.email} · Administrador</span>
+          <Link href="/mi-cuenta">Mi contraseña</Link>
           <Link href="/">Volver al panel</Link>
           <form action={signOut}><button type="submit">Salir</button></form>
         </div>

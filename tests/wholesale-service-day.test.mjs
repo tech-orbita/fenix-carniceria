@@ -3,13 +3,13 @@ import assert from "node:assert/strict";
 
 import { isWholesaleOperatingDay, wholesaleServiceDay } from "../src/lib/orders/wholesale-service-day.ts";
 
-test("aplica el corte mayorista de las 3 a. m. de Bogotá", () => {
-  assert.equal(wholesaleServiceDay("2026-10-26T02:59:00-05:00"), "2026-10-26");
-  assert.equal(wholesaleServiceDay("2026-10-26T03:01:00-05:00"), "2026-10-27");
+test("aplica el corte mayorista de las 5 a. m. de Bogotá", () => {
+  assert.equal(wholesaleServiceDay("2026-10-26T04:59:00-05:00"), "2026-10-26");
+  assert.equal(wholesaleServiceDay("2026-10-26T05:01:00-05:00"), "2026-10-27");
 });
 
 test("no programa entregas automáticas en domingo", () => {
-  assert.equal(wholesaleServiceDay("2026-10-31T04:00:00-05:00"), "2026-11-03");
+  assert.equal(wholesaleServiceDay("2026-10-31T06:00:00-05:00"), "2026-11-03");
 });
 
 test("reconoce festivos colombianos fijos, trasladados y de Semana Santa", () => {

@@ -17,6 +17,7 @@ export type OrderItem = {
   productName: string;
   quantity: number;
   unit: string;
+  displayUnit?: string;
   actualQuantity?: number;
   preparation?: string;
   notes?: string;
