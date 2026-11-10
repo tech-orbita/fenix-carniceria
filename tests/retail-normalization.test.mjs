@@ -6,6 +6,7 @@ import { matchRetailProduct, normalizeRetailItems, requiresRetailHelp } from "..
 const catalog = [
   { id: "pulpa", name: "Pulpa", catalogKey: "cerdo:pulpa", pricePerKg: 22_000 },
   { id: "molida", name: "Molida súper especial", catalogKey: "res:molida super especial", pricePerKg: 23_000 },
+  { id: "molida-corriente", name: "Molida Corriente", catalogKey: "res:molida corriente", pricePerKg: 20_000 },
   { id: "butifarra", name: "Butifarra", catalogKey: "otros:butifarra", pricePerKg: 9_000 },
   { id: "pechuga", name: "Pechuga congelada", catalogKey: "pollo:pechuga congelada", pricePerKg: 14_000 },
   { id: "pernil", name: "Pernil mixto (contramuslo)", catalogKey: "pollo:pernil mixto (contramuslo)", pricePerKg: 8_000 },
@@ -33,6 +34,34 @@ test("normaliza las líneas operativas que envía n8n", () => {
     { product_name: "Pulpa", quantity: 1, unit_price: 22_000 },
     { product_name: "Molida súper especial", quantity: 0.5, unit_price: 23_000 },
   ]);
+});
+
+test("usa molida súper especial por defecto y corriente solo si el cliente lo especifica", () => {
+  const items = normalizeRetailItems([], [
+    "2 libras de carne molida",
+    "1 libra de carne molida corriente",
+    "1 kilo de molida para hamburguesas",
+  ].join("\n"), catalog);
+
+  assert.deepEqual(
+    items.map(({ product_id, product_name, quantity, unit_price }) => ({ product_id, product_name, quantity, unit_price })),
+    [
+      { product_id: "molida", product_name: "Molida súper especial", quantity: 1, unit_price: 23_000 },
+      { product_id: "molida-corriente", product_name: "Molida Corriente", quantity: 0.5, unit_price: 20_000 },
+      { product_id: "molida", product_name: "Molida súper especial", quantity: 1, unit_price: 23_000 },
+    ],
+  );
+});
+
+test("aplica la regla de carne molida a los datos estructurados del agente", () => {
+  const [item] = normalizeRetailItems([
+    { product_name: "carne molida", quantity: 2, unit: "kg" },
+  ], "", catalog);
+
+  assert.deepEqual(
+    { id: item.product_id, name: item.product_name, quantity: item.quantity, price: item.unit_price },
+    { id: "molida", name: "Molida súper especial", quantity: 2, price: 23_000 },
+  );
 });
 
 test("entiende pesos después del producto y conserva cantidades por unidad", () => {

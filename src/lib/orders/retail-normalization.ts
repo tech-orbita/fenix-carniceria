@@ -97,6 +97,22 @@ export function matchRetailProduct(value: string, catalog: readonly RetailCatalo
   const wanted = comparable(value);
   if (!wanted) return undefined;
 
+  // Regla operativa de Fénix: cuando el cliente pide simplemente "carne
+  // molida" se despacha la súper especial. La corriente solo se selecciona
+  // cuando el cliente la menciona expresamente. Esta prioridad evita que el
+  // orden del catálogo o el emparejamiento aproximado cambien la decisión.
+  if (/\bmolida\b/.test(wanted)) {
+    const requestedCurrent = /\bcorriente\b/.test(wanted);
+    const preferredGroundBeef = catalog.find((product) => {
+      const candidate = comparable(`${product.name} ${product.catalogKey}`);
+      if (!/\bmolida\b/.test(candidate)) return false;
+      return requestedCurrent
+        ? /\bcorriente\b/.test(candidate)
+        : /\b(?:super\s+)?especial\b/.test(candidate) && !/\bcorriente\b/.test(candidate);
+    });
+    if (preferredGroundBeef) return preferredGroundBeef;
+  }
+
   const exact = catalog.find((product) => comparable(product.name) === wanted);
   if (exact) return exact;
 
