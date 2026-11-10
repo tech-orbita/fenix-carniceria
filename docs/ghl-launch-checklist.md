@@ -12,7 +12,7 @@ Fuente funcional: capacitación de Fénix J.A. del 29 de octubre de 2026. Ventan
 - Corregido en código, pendiente de desplegar y repetir: creación o actualización de la oportunidad cuando HighLevel no permite oportunidades duplicadas.
 - Pendiente de configurar en la acción del agente: disparar el workflow al recibir imagen, documento, comprobante, soporte o recibo de pago. En la prueba el agente respondió, pero el workflow no se ejecutó y por eso no apareció `Requiere ayuda`.
 - Corregido en código, pendiente de desplegar y repetir: aplicar la etiqueta exacta `cliente minorista`.
-- Pendiente de decisión de catálogo: definir si `Huesos carnudo` corresponde a un producto existente o debe crearse. Hasta resolverlo, el panel lo muestra como `Precio pendiente` y bloquea cobro, pago, impresión y despacho.
+- Pendiente de decisión de catálogo: definir si `Huesos carnudo` corresponde a un producto existente o debe crearse. Hasta resolverlo, el panel lo muestra como `Precio pendiente`, sin bloquear las acciones operativas.
 
 ## 1. WhatsApp y agentes
 

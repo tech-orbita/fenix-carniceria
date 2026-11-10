@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { requireViewer } from "@/lib/auth/viewer";
 import { createClient } from "@/lib/supabase/server";
 import { catalogProductFor, normalizeProductName, normalizeWholesaleUnit, parseOrderText, toKilograms, UNSPECIFIED_WHOLESALE_UNIT } from "@/lib/orders/product-parser";
-import { retailBillMessage, retailDispatchMessage, retailItemHasPendingPrice, retailItemHasPendingWeight } from "@/lib/orders/retail-bill";
+import { retailBillMessage, retailDispatchMessage } from "@/lib/orders/retail-bill";
 import { sendHighLevelMessage, sendWholesalePaymentSummary, syncHighLevelOrderFields, syncOrderPipeline, syncWholesalePipeline } from "@/lib/orders/highlevel-pipeline";
 import { customerIdentityKey, wholesaleRoutes } from "@/lib/orders/wholesale-routes";
 import type { HighLevelContext, OrderPipelineStage } from "@/lib/orders/highlevel-pipeline";
@@ -52,17 +52,6 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus) {
   }
 
   const supabase = await sessionClient();
-  if (status === "dispatched") {
-    const { data: readiness } = await supabase
-      .from("orders")
-      .select("customer_type,order_items(quantity,actual_quantity,unit,unit_price)")
-      .eq("id", Number(orderId))
-      .maybeSingle();
-    if (readiness?.customer_type === "retail" && (readiness.order_items ?? []).some((item) =>
-      retailItemHasPendingPrice({ quantity: Number(item.quantity), actualQuantity: item.actual_quantity == null ? undefined : Number(item.actual_quantity), unit: item.unit, unitPrice: Number(item.unit_price), productName: "" })
-      || retailItemHasPendingWeight({ quantity: Number(item.quantity), actualQuantity: item.actual_quantity == null ? undefined : Number(item.actual_quantity), unit: item.unit, unitPrice: Number(item.unit_price), productName: "" }),
-    )) return { ok: false, message: "Define el peso real y el precio de todos los productos antes de despachar." };
-  }
   const { data, error } = await supabase
     .from("orders")
     .update({ status })
@@ -181,10 +170,6 @@ export async function sendRetailPaymentSummary(orderId: string) {
     unit: item.unit,
     unitPrice: Number(item.unit_price),
   }));
-  if (billItems.some((item) => retailItemHasPendingPrice(item) || retailItemHasPendingWeight(item))) {
-    return { ok: false as const, message: "Define el peso real y el precio de todos los productos antes de enviar el cobro." };
-  }
-
   const customer = Array.isArray(data.customers) ? data.customers[0] : data.customers;
   const sent = await sendHighLevelMessage(highLevelContext(data.source_payload), retailBillMessage({
     orderNumber: data.order_number,
@@ -207,18 +192,6 @@ export async function updateOrderPaymentStatus(
   }
 
   const supabase = await sessionClient();
-  if (paymentStatus === "paid") {
-    const { data: readiness } = await supabase
-      .from("orders")
-      .select("order_items(quantity,actual_quantity,unit,unit_price)")
-      .eq("id", Number(orderId))
-      .eq("customer_type", "retail")
-      .maybeSingle();
-    if ((readiness?.order_items ?? []).some((item) =>
-      retailItemHasPendingPrice({ quantity: Number(item.quantity), actualQuantity: item.actual_quantity == null ? undefined : Number(item.actual_quantity), unit: item.unit, unitPrice: Number(item.unit_price), productName: "" })
-      || retailItemHasPendingWeight({ quantity: Number(item.quantity), actualQuantity: item.actual_quantity == null ? undefined : Number(item.actual_quantity), unit: item.unit, unitPrice: Number(item.unit_price), productName: "" }),
-    )) return { ok: false, message: "Define el peso real y el precio de todos los productos antes de marcar el pedido como pagado." };
-  }
   const { data, error } = await supabase
     .from("orders")
     .update({ payment_status: paymentStatus })

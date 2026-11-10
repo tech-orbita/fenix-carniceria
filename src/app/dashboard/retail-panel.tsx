@@ -320,30 +320,30 @@ function OrderDetail({ order, pending, logo, today, onAdvance, onMove, onPayment
               <span className="rt-control-label">Comunicación</span>
               <div className="rt-control-actions">
                 <a className="rt-button is-chat" href={`/api/conversation/${encodeURIComponent(order.id)}`} rel="noreferrer" target="_blank"><Icon name="chat" /> Abrir conversación</a>
-                {canBill && <button className="rt-button is-bill" disabled={pending || pendingValues} onClick={() => onSendBill(order)} title={pendingValues ? "Define todos los pesos y precios antes de enviar el cobro" : "Envía el resumen directamente por la conversación de Orbita"} type="button"><Icon name="receipt" /> {pending ? "Enviando…" : "Enviar cobro"}</button>}
+                {canBill && <button className="rt-button is-bill" disabled={pending} onClick={() => onSendBill(order)} title="Envía el resumen directamente por la conversación de Orbita" type="button"><Icon name="receipt" /> {pending ? "Enviando…" : "Enviar cobro"}</button>}
               </div>
             </div>
             <div className="rt-control-section is-order">
               <span className="rt-control-label">Pedido</span>
               <div className="rt-control-actions">
-                {canBill && <button className="rt-button is-quiet" disabled={pendingValues} onClick={() => void copyBill()} title={pendingValues ? "Define todos los pesos y precios antes de copiar el cobro" : "Copia el resumen para pegarlo en otra conversación"} type="button"><Icon name={copied ? "check" : "copy"} /> {copied ? "Copiado" : "Copiar"}</button>}
+                {canBill && <button className="rt-button is-quiet" onClick={() => void copyBill()} title="Copia el resumen para pegarlo en otra conversación" type="button"><Icon name={copied ? "check" : "copy"} /> {copied ? "Copiado" : "Copiar"}</button>}
                 <button className="rt-button is-quiet" onClick={() => setEditing(true)} type="button"><Icon name="edit" /> Editar</button>
-                <button className="rt-button is-quiet" disabled={pendingValues} onClick={() => window.print()} title={pendingValues ? "Define todos los pesos y precios antes de imprimir" : "Imprimir comanda"} type="button"><Icon name="print" /> Imprimir</button>
+                <button className="rt-button is-quiet" onClick={() => window.print()} title="Imprimir comanda" type="button"><Icon name="print" /> Imprimir</button>
               </div>
             </div>
-            <button className={paid ? "rt-button rt-payment-action is-paid" : "rt-button rt-payment-action is-pay"} disabled={pending || (!paid && pendingValues)} onClick={() => onPaymentChange(order, paid ? "pending" : "paid")} title={!paid && pendingValues ? "Define todos los pesos y precios antes de marcar como pagado" : undefined} type="button">{pending ? "Guardando…" : paid ? "Marcar pendiente" : "Marcar como pagado"}</button>
+            <button className={paid ? "rt-button rt-payment-action is-paid" : "rt-button rt-payment-action is-pay"} disabled={pending} onClick={() => onPaymentChange(order, paid ? "pending" : "paid")} type="button">{pending ? "Guardando…" : paid ? "Marcar pendiente" : "Marcar como pagado"}</button>
           </div>
           <div className="rt-stage-row">
             <span className="rt-control-label">Etapa del pedido</span>
             <div aria-label="Cambiar etapa" className="rt-stage-actions" role="group">
-              {phaseOrder.map((option) => <button aria-pressed={phase === option} className={phase === option ? "rt-button is-current" : "rt-button"} disabled={pending || phase === option || (option === "dispatched" && pendingValues)} key={option} onClick={() => onMove(order, option)} title={option === "dispatched" && pendingValues ? "Define todos los pesos y precios antes de despachar" : undefined} type="button">{phaseLabels[option]}</button>)}
+              {phaseOrder.map((option) => <button aria-pressed={phase === option} className={phase === option ? "rt-button is-current" : "rt-button"} disabled={pending || phase === option} key={option} onClick={() => onMove(order, option)} type="button">{phaseLabels[option]}</button>)}
               {phase !== "help" && <button className="rt-button is-help" disabled={pending} onClick={() => onMove(order, "help")} type="button"><Icon name="help" /> Requiere ayuda</button>}
               {phase === "help" && <button className="rt-button is-paid" disabled={pending} onClick={() => onResolveHelp(order)} type="button"><Icon name="check" /> {pending ? "Guardando…" : "Solucionado"}</button>}
             </div>
           </div>
         </div>
         {scheduledDay > today && <div className="rt-alert rt-delivery-alert" role="status"><Icon name="calendar" /><span>Entrega programada para <b>{scheduledDay === addDays(today, 1) ? "mañana" : formatDay(scheduledDay)}</b>.</span><button disabled={pending} onClick={() => onAdvance(order)} type="button">{pending ? "Guardando…" : "Adelantar a hoy"}</button></div>}
-        {pendingValues && <div className="rt-price-warning" role="status"><strong>Pedido pendiente de completar</strong><span>Define el peso real y un precio válido para cada producto antes de cobrar, imprimir, pagar o despachar.</span></div>}
+        {pendingValues && <div className="rt-price-warning" role="status"><strong>Pedido pendiente de completar</strong><span>Hay pesos o precios pendientes. Puedes continuar con cualquier acción y completar estos datos cuando corresponda.</span></div>}
         <FormDetails order={order} />
         {order.items.length > 0 && <table className="rt-lines">
           <thead><tr><th scope="col">Producto</th><th scope="col">Peso real</th><th scope="col">Precio/kg</th><th scope="col">Subtotal</th></tr></thead>

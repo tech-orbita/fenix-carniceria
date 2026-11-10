@@ -8,7 +8,7 @@ import type { OrderPipelineStage } from "@/lib/orders/highlevel-pipeline";
 import { customerIdentityKey } from "@/lib/orders/wholesale-routes";
 import { normalizeRetailItems, requiresRetailHelp } from "@/lib/orders/retail-normalization";
 import type { RetailCatalogProduct, RetailInputItem } from "@/lib/orders/retail-normalization";
-import { retailOrderWindowStart } from "@/lib/orders/retail-order-window";
+import { retailOrderDayStart } from "@/lib/orders/retail-order-window";
 
 type RetailAgentItem = RetailInputItem;
 
@@ -138,14 +138,14 @@ async function findLatestOrderByContactId(contactId: string, from?: string) {
 }
 
 function findCurrentOrder(customerId: number) {
-  return findLatestOrder(customerId, retailOrderWindowStart());
+  return findLatestOrder(customerId, retailOrderDayStart());
 }
 
 export async function retailOrderContext(value: unknown) {
   const body = value && typeof value === "object" ? value as RetailAgentPayload : {};
   const phone = cleanPhone(body.customer?.phone);
   const customerId = await findCustomerId(phone);
-  const cutoff = retailOrderWindowStart();
+  const cutoff = retailOrderDayStart();
   const [currentByCustomer, latestByCustomer] = customerId
     ? await Promise.all([findLatestOrder(customerId, cutoff), findLatestOrder(customerId)])
     : [null, null];
@@ -212,8 +212,8 @@ export async function upsertRetailOrder(value: unknown) {
     .single();
   if (customerError || !customer) return NextResponse.json({ error: "Could not save customer" }, { status: 500 });
 
-  // "new" siempre crea otro pedido. "update" solo puede tocar el pedido de la
-  // ventana operativa vigente; después de las 2 p. m. se inicia otra ventana.
+  // "new" siempre crea otro pedido. "update" solo puede tocar un pedido creado
+  // en la fecha calendario vigente de Bogotá. El día de entrega se organiza aparte.
   const openOrder = body.orderAction === "new" ? null : await findCurrentOrder(customer.id);
   const previousPayload = openOrder?.source_payload && typeof openOrder.source_payload === "object"
     ? openOrder.source_payload as Record<string, unknown>
@@ -228,7 +228,7 @@ export async function upsertRetailOrder(value: unknown) {
     rawOrderText: String(body.rawOrderText).trim(),
     sourceEventId: body.sourceEventId ?? null,
     orderAction: body.orderAction ?? null,
-    orderWindowStart: retailOrderWindowStart(),
+    orderWindowStart: retailOrderDayStart(),
   };
   // Las piezas conservan la cantidad solicitada, pero no se cobran como si
   // fueran kilos. El subtotal queda pendiente hasta registrar el peso real.

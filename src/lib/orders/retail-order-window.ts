@@ -32,6 +32,19 @@ export function retailOrderWindowStart(now = new Date()) {
   return new Date(`${windowDay}T14:00:00${BOGOTA_OFFSET}`).toISOString();
 }
 
+// La identidad del pedido usa el día calendario de Bogotá, no la ventana de
+// preparación. Un cliente que vuelve al día siguiente siempre inicia otro pedido.
+export function retailOrderDayStart(now = new Date()) {
+  const parts = bogotaParts(now);
+  const day = `${parts.year}-${parts.month}-${parts.day}`;
+  return new Date(`${day}T00:00:00${BOGOTA_OFFSET}`).toISOString();
+}
+
+export function belongsToCurrentRetailOrderDay(receivedAt: string, now = new Date()) {
+  const received = new Date(receivedAt);
+  return !Number.isNaN(received.getTime()) && received >= new Date(retailOrderDayStart(now));
+}
+
 export function belongsToCurrentRetailWindow(receivedAt: string, now = new Date()) {
   const received = new Date(receivedAt);
   return !Number.isNaN(received.getTime()) && received >= new Date(retailOrderWindowStart(now));
