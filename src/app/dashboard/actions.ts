@@ -6,6 +6,7 @@ import { requireViewer } from "@/lib/auth/viewer";
 import { createClient } from "@/lib/supabase/server";
 import { catalogProductFor, normalizeProductName, normalizeWholesaleUnit, parseOrderText, toKilograms, UNSPECIFIED_WHOLESALE_UNIT } from "@/lib/orders/product-parser";
 import { retailBillMessage, retailDispatchMessage } from "@/lib/orders/retail-bill";
+import { wholesaleDispatchMessage } from "@/lib/orders/wholesale-messages";
 import { sendHighLevelMessage, sendWholesalePaymentSummary, syncHighLevelOrderFields, syncOrderPipeline, syncWholesalePipeline } from "@/lib/orders/highlevel-pipeline";
 import { customerIdentityKey, wholesaleRoutes } from "@/lib/orders/wholesale-routes";
 import type { HighLevelContext, OrderPipelineStage } from "@/lib/orders/highlevel-pipeline";
@@ -93,6 +94,24 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus) {
         : `${message} Tampoco se pudo avisar al cliente: ${sent.message}`;
     } else if (message === "Estado actualizado.") {
       message = "Estado actualizado y cliente notificado por WhatsApp.";
+    }
+  }
+
+  if (data.customer_type === "wholesale" && status === "dispatched") {
+    const customer = Array.isArray(data.customers) ? data.customers[0] : data.customers;
+    const sent = await sendHighLevelMessage(
+      highLevelContext(data.source_payload),
+      wholesaleDispatchMessage({
+        orderNumber: data.order_number,
+        customer: customer?.business_name || customer?.name || "cliente",
+      }),
+    );
+    if (!sent.ok) {
+      message = message === "Estado actualizado."
+        ? `Estado actualizado, pero no se pudo avisar al cliente: ${sent.message}`
+        : `${message} Tampoco se pudo avisar al cliente: ${sent.message}`;
+    } else if (message === "Estado actualizado.") {
+      message = "Estado actualizado y cliente mayorista notificado por WhatsApp.";
     }
   }
 
@@ -600,7 +619,7 @@ function parseWholesaleCell(productName: string, value: string) {
   const parts = value.split("/").map((part) => part.trim()).filter(Boolean);
   if (!parts.length) return null;
   const parsed = parts.map((part) => {
-    const match = part.match(/^(\d+(?:[.,]\d+)?)\s*(kg|kgs|kilo|kilos|lb|lbs|libra|libras|und|unds|unidad|unidades)?\s*([CLTB])?$/i);
+    const match = part.match(/^(\d+(?:[.,]\d+)?)\s*(kg|kgs|kilo|kilos|lb|lbs|libra|libras|und|unds|unidad|unidades)?\s*([CLTBR])?$/i);
     if (!match) return null;
     const quantity = Number(match[1].replace(",", "."));
     if (!Number.isFinite(quantity) || quantity < 0) return null;
@@ -687,7 +706,7 @@ export async function updateWholesaleTable(rows: WholesaleTableRowInput[]) {
         continue;
       }
 
-      if (!parsedValues) return { ok: false, message: "Usa cantidades como “1,5”, para Blanda “5 C / 2 L” y para Comodín “2 kg producto”." };
+      if (!parsedValues) return { ok: false, message: "Usa cantidades como “1,5”, para Blanda “5 C / 2 L / 1 R” y para Comodín “2 kg producto”." };
       const canonicalName = catalogProductFor(entry.productName)?.name ?? entry.productName.trim();
 
       if (matching.length) {

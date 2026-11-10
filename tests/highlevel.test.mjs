@@ -65,6 +65,17 @@ test("clasifica el catálogo mayorista y conserva indicadores de blanda", () => 
   ]);
 });
 
+test("marca como R la blanda relajada o abierta", () => {
+  const order = mapHighLevelForm({
+    ...base,
+    "Coloca tu Pedido": "4 libras blanda relajada; 2 kg blanda abierta",
+  }, "mayorista-cliente");
+  assert.deepEqual(order.items, [
+    { product_name: "Blanda", quantity: 4, unit: "lb", preparation: "R" },
+    { product_name: "Blanda", quantity: 2, unit: "kg", preparation: "R" },
+  ]);
+});
+
 test("conserva los identificadores de HighLevel para pipeline y conversación", () => {
   const order = mapHighLevelForm({ ...base, contactId: "contact-1", locationId: "location-1", conversationId: "conversation-1" }, "mayorista-cliente");
   assert.equal(order.form_data.contact_id, "contact-1");

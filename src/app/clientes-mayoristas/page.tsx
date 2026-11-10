@@ -3,10 +3,12 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { canAccess, requireViewer } from "@/lib/auth/viewer";
+import { unassignedWholesaleRoute } from "@/lib/orders/wholesale-routes";
 import { createClient } from "@/lib/supabase/server";
 
 import "../auth.css";
 import { signOut } from "../login/actions";
+import { WholesaleRouteManager } from "./route-manager";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Clientes mayoristas | Fénix Carnes" };
@@ -19,7 +21,7 @@ export default async function WholesaleCustomersPage() {
   const supabase = await createClient();
   const { data: customers, error } = await supabase
     .from("customers")
-    .select("id,name,business_name,tax_id,phone,email,address,neighborhood,city,requires_e_invoice,wholesale_registered_at,ghl_sync_status")
+    .select("id,name,business_name,tax_id,phone,email,address,neighborhood,city,requires_e_invoice,wholesale_registered_at,ghl_sync_status,routes(name)")
     .eq("customer_type", "wholesale")
     .not("wholesale_registered_at", "is", null)
     .order("wholesale_registered_at", { ascending: false });
@@ -38,23 +40,22 @@ export default async function WholesaleCustomersPage() {
       <section className="users-panel">
         <div className="customers-summary"><strong>{customers?.length ?? 0}</strong><span>mayoristas inscritos</span></div>
         {error ? <p className="users-notice is-error">No se pudieron cargar las inscripciones.</p> : (
-          <div className="users-table-wrap">
-            <table className="users-table customers-table">
-              <thead><tr><th>Negocio / contacto</th><th>Identificación</th><th>Contacto</th><th>Ubicación</th><th>Factura</th><th>Orbita</th><th>Inscripción</th></tr></thead>
-              <tbody>
-                {(customers ?? []).map((customer) => <tr key={customer.id}>
-                  <td><strong>{customer.business_name}</strong><small>{customer.name}</small></td>
-                  <td>{customer.tax_id || "—"}</td>
-                  <td><a href={`https://wa.me/${customer.phone.replace(/\D/g, "")}`} rel="noreferrer" target="_blank">{customer.phone}</a><small>{customer.email}</small></td>
-                  <td>{[customer.address, customer.neighborhood, customer.city].filter(Boolean).join(", ")}</td>
-                  <td>{customer.requires_e_invoice ? "Sí" : "No"}</td>
-                  <td><span className={`sync-badge is-${customer.ghl_sync_status ?? "pending"}`}>{customer.ghl_sync_status === "synced" ? "Sincronizado" : customer.ghl_sync_status === "error" ? "Pendiente" : "En proceso"}</span></td>
-                  <td>{customer.wholesale_registered_at ? dateTime.format(new Date(customer.wholesale_registered_at)) : "—"}</td>
-                </tr>)}
-                {!customers?.length && <tr><td className="customers-empty" colSpan={7}>Todavía no hay clientes inscritos desde el formulario.</td></tr>}
-              </tbody>
-            </table>
-          </div>
+          <WholesaleRouteManager customers={(customers ?? []).map((customer) => {
+            const route = Array.isArray(customer.routes) ? customer.routes[0] : customer.routes;
+            return {
+              id: String(customer.id),
+              name: customer.name,
+              businessName: customer.business_name || customer.name,
+              taxId: customer.tax_id || "",
+              phone: customer.phone || "",
+              email: customer.email || "",
+              location: [customer.address, customer.neighborhood, customer.city].filter(Boolean).join(", "),
+              requiresInvoice: customer.requires_e_invoice,
+              syncStatus: customer.ghl_sync_status || "pending",
+              registeredAt: customer.wholesale_registered_at ? dateTime.format(new Date(customer.wholesale_registered_at)) : "—",
+              routeName: route?.name || unassignedWholesaleRoute,
+            };
+          })} />
         )}
       </section>
     </main>

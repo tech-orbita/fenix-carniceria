@@ -6,7 +6,7 @@ export type WholesaleProduct = {
 };
 
 export const wholesaleProductCatalog: readonly WholesaleProduct[] = [
-  { category: "Res · cortes", name: "Blanda", aliases: ["carne blanda", "blanda", "capon", "capón", "lomo", "tetafulla", "tetafula", "calavera"] },
+  { category: "Res · cortes", name: "Blanda", aliases: ["carne blanda", "blanda", "capon", "capón", "lomo", "tetafulla", "tetafula", "calavera", "relajado", "relajada", "abierto", "abierta"] },
   { category: "Res · cortes", name: "Molida especial", aliases: ["molida especial", "carne molida especial", "carne molida", "molida"] },
   { category: "Res · cortes", name: "Espaldilla", aliases: ["espaldilla", "espaldi"] },
   { category: "Res · cortes", name: "Atravesado", aliases: ["pollo atravesado", "atravesado"] },
@@ -62,7 +62,7 @@ export const wholesaleProductCatalog: readonly WholesaleProduct[] = [
   { category: "Otros productos", name: "Comodín", aliases: ["comodin", "comodín", "otro producto"] },
 ] as const;
 
-export type BlandaIndicator = "C" | "L" | "T" | "B";
+export type BlandaIndicator = "C" | "L" | "T" | "B" | "R";
 
 // Valor interno para una cantidad cuyo formulario no indicó kg, lb ni unidades.
 // La interfaz lo oculta para mostrar exactamente el número escrito por el cliente.
@@ -70,12 +70,13 @@ export const UNSPECIFIED_WHOLESALE_UNIT = "cantidad";
 
 export function blandaIndicatorFor(value: string): BlandaIndicator | undefined {
   const normalized = normalizeProductName(value);
-  const explicit = normalized.match(/(?:^| )blanda ([cltb])(?: |$)/)?.[1]?.toUpperCase() as BlandaIndicator | undefined;
+  const explicit = normalized.match(/(?:^| )blanda ([cltbr])(?: |$)/)?.[1]?.toUpperCase() as BlandaIndicator | undefined;
   if (explicit) return explicit;
   if (/(?:^| )capon(?: |$)/.test(normalized)) return "C";
   if (/(?:^| )lomo(?: |$)/.test(normalized) && !/(?:fino|pinga)/.test(normalized)) return "L";
   if (/(?:^| )(?:tetafulla|tetafula)(?: |$)/.test(normalized)) return "T";
   if (/(?:^| )calavera(?: |$)/.test(normalized)) return "B";
+  if (/(?:^| )(?:relajado|relajada|abierto|abierta)(?: |$)/.test(normalized)) return "R";
   return undefined;
 }
 

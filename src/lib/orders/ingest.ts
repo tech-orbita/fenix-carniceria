@@ -120,12 +120,10 @@ export async function ingestOrder(body: IngestBody) {
   const routeId = route?.id ?? fallbackRoute?.id ?? null;
 
   const { data: existingCustomer } = await supabase.from("customers").select("business_name,tax_id,email,address,neighborhood,city,route_id").eq("customer_type", body.customer_type).eq("identity_key", identityKey).maybeSingle();
-  // Los formularios mayoristas ya no definen la ruta. Cada pedido nuevo debe
-  // entrar a la bandeja como "Sin clasificar" para que el operador la asigne
-  // desde la tabla, incluso si el cliente conserva una ruta de pedidos previos.
-  const isUnroutedWholesaleForm = body.customer_type === "wholesale" && body.source === "form" && !submittedRouteName;
+  // Si el cliente ya tiene una ruta asignada desde el directorio, sus pedidos
+  // siguientes la heredan. Los clientes nuevos permanecen "Sin clasificar".
   const customerRouteId = submittedRouteName ? routeId : existingCustomer?.route_id ?? routeId;
-  const orderRouteId = isUnroutedWholesaleForm ? routeId : customerRouteId;
+  const orderRouteId = customerRouteId;
 
   const { data: customer, error: customerError } = await supabase
     .from("customers")
