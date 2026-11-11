@@ -37,7 +37,7 @@ function productAmounts(order: Order, product: WholesaleProduct, into = new Map<
     if (!matches) return;
     const quantity = item.actualQuantity ?? item.quantity;
     const unit = item.displayUnit ?? item.unit;
-    const detail = product.name === "Blanda" && /^[CLTB]$/i.test(item.preparation ?? "")
+    const detail = product.name === "Blanda" && /^[CLTBR]$/i.test(item.preparation ?? "")
       ? item.preparation!.toUpperCase()
       : "";
     const key = `${unit}|${detail}`;
@@ -175,34 +175,45 @@ function productsForOrders(orders: Order[]) {
   return products;
 }
 
-async function downloadWholesaleOrders(orders: Order[], products: WholesaleProduct[]) {
+type WholesaleExportVariant = "planilla" | "completo";
+
+function wholesaleCustomerName(order: Order) {
+  return order.businessName && order.businessName !== order.customer ? order.businessName : order.customer;
+}
+
+async function downloadWholesaleOrders(orders: Order[], products: WholesaleProduct[], selectedDay: string, variant: WholesaleExportVariant) {
   const { default: ExcelJS } = await import("exceljs");
   const workbook = new ExcelJS.Workbook();
-  const worksheet = workbook.addWorksheet("Pedidos mayoristas");
-  worksheet.columns = [
+  const worksheet = workbook.addWorksheet(variant === "planilla" ? "Planilla" : "Pedidos mayoristas");
+  const productColumns = products.map((product, index) => ({
+    header: product.name === "Blanda"
+      ? "Blanda (C=Capón, L=Lomo, T=Tetafula, B=Calavera, R=Relajado)"
+      : product.name,
+    key: `product${index}`,
+    width: product.name === "Blanda" ? 34 : 18,
+  }));
+  worksheet.columns = variant === "planilla" ? [
+    { header: "Cliente", key: "customer", width: 28 },
+    { header: "Ruta", key: "zone", width: 18 },
+    ...productColumns,
+  ] : [
     { header: "Pedido", key: "orderNumber", width: 16 },
     { header: "Fecha", key: "receivedAt", width: 22 },
     { header: "Cliente", key: "customer", width: 28 },
     { header: "Teléfono", key: "phone", width: 18 },
     { header: "Dirección", key: "address", width: 34 },
-    { header: "Zona", key: "zone", width: 18 },
+    { header: "Ruta", key: "zone", width: 18 },
     { header: "Entrega", key: "fulfillment", width: 18 },
     { header: "Facturación", key: "billing", width: 18 },
     { header: "Estado", key: "status", width: 20 },
     { header: "Observaciones", key: "notes", width: 42 },
     { header: "NIT o cédula", key: "taxId", width: 20 },
-    ...products.map((product, index) => ({
-      header: product.name === "Blanda"
-        ? "Blanda (kg; C=Capón, L=Lomo, T=Tetafula, B=Calavera)"
-        : `${product.name} (${wholesaleUnitFor(product.name)})`,
-      key: `product${index}`,
-      width: product.name === "Blanda" ? 28 : 20,
-    })),
+    ...productColumns.map((column, index) => ({ ...column, header: products[index].name === "Blanda" ? column.header : `${column.header} (${wholesaleUnitFor(products[index].name)})` })),
   ];
   orders.forEach((order) => worksheet.addRow({
     orderNumber: order.orderNumber,
     receivedAt: dateTime.format(new Date(order.receivedAt)),
-    customer: order.customer,
+    customer: wholesaleCustomerName(order),
     phone: order.phone,
     address: order.address,
     zone: order.route,
@@ -225,9 +236,51 @@ async function downloadWholesaleOrders(orders: Order[], products: WholesaleProdu
   });
   worksheet.views = [{ state: "frozen", ySplit: 1 }];
   worksheet.autoFilter = { from: "A1", to: `${worksheet.getColumn(worksheet.columnCount).letter}1` };
+  worksheet.pageSetup = { orientation: "landscape", paperSize: 9, fitToPage: true, fitToWidth: 1, fitToHeight: 0, margins: { left: 0.25, right: 0.25, top: 0.45, bottom: 0.45, header: 0.2, footer: 0.2 } };
+  worksheet.pageSetup.printArea = `A1:${worksheet.getColumn(worksheet.columnCount).letter}${Math.max(1, worksheet.rowCount)}`;
+  worksheet.headerFooter.oddHeader = `&C&BFénix J.A. · Planilla mayorista · ${selectedDay}`;
+  worksheet.headerFooter.oddFooter = "&L&A&RPágina &P de &N";
   const buffer = await workbook.xlsx.writeBuffer();
   const url = URL.createObjectURL(new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
-  const link = document.createElement("a"); link.href = url; link.download = "pedidos-mayoristas.xlsx"; link.click(); URL.revokeObjectURL(url);
+  const link = document.createElement("a"); link.href = url; link.download = `${variant === "planilla" ? "planilla" : "pedidos"}-mayoristas-${selectedDay}.xlsx`; link.click(); URL.revokeObjectURL(url);
+}
+
+function escapeHtml(value: string) {
+  return value.replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", "\"": "&quot;" })[character] ?? character);
+}
+
+function printWholesaleOrders(orders: Order[], products: WholesaleProduct[], selectedDay: string) {
+  const printWindow = window.open("", "_blank", "width=1200,height=800");
+  if (!printWindow) return false;
+  printWindow.opener = null;
+  const routes = [...new Set(orders.map((order) => wholesaleRouteLabel(order.route)))].join(" · ") || "Sin pedidos";
+  const day = dayLabel.format(new Date(`${selectedDay}T12:00:00Z`));
+  const headerCells = ["Cliente", "Ruta", ...products.map((product) => product.name === "Blanda" ? "Blanda C/L/T/B/R" : product.name)];
+  const rows = orders.map((order) => [
+    wholesaleCustomerName(order),
+    wholesaleRouteLabel(order.route),
+    ...products.map((product) => productQuantity(order, product)),
+  ]);
+  const totals = products.map((product) => formatAmounts(orders.reduce((sum, order) => productAmounts(order, product, sum), new Map<string, number>())));
+  const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Planilla mayorista ${escapeHtml(selectedDay)}</title><style>
+    @page { size: A4 landscape; margin: 8mm; }
+    * { box-sizing: border-box; }
+    body { margin: 0; color: #111827; font-family: Arial, sans-serif; font-size: 9px; }
+    header { display: flex; align-items: end; justify-content: space-between; gap: 16px; margin-bottom: 7px; }
+    h1 { margin: 0; font-size: 16px; }
+    header p { margin: 2px 0 0; color: #475569; }
+    table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    th, td { border: 1px solid #94a3b8; padding: 3px 4px; overflow-wrap: anywhere; text-align: center; vertical-align: middle; }
+    thead th { background: #dbeafe; font-size: 8px; }
+    th:first-child, td:first-child { width: 19%; text-align: left; font-weight: 700; }
+    th:nth-child(2), td:nth-child(2) { width: 10%; text-align: left; }
+    tfoot th, tfoot td { background: #eef2ff; font-weight: 700; }
+    tr { break-inside: avoid; }
+  </style></head><body><header><div><h1>Planilla de pedidos mayoristas</h1><p>${escapeHtml(day)} · ${escapeHtml(routes)}</p></div><strong>${orders.length} pedidos</strong></header><table><thead><tr>${headerCells.map((cell) => `<th>${escapeHtml(cell)}</th>`).join("")}</tr></thead><tbody>${rows.map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join("")}</tr>`).join("")}</tbody>${orders.length ? `<tfoot><tr><th>Total</th><td>${orders.length} pedidos</td>${totals.map((total) => `<td>${escapeHtml(total || "—")}</td>`).join("")}</tr></tfoot>` : ""}</table><script>window.addEventListener('load',()=>{window.focus();window.print();});<\/script></body></html>`;
+  printWindow.document.open();
+  printWindow.document.write(html);
+  printWindow.document.close();
+  return true;
 }
 
 type TableFilter = "zones" | "cuts" | "query";
@@ -506,7 +559,9 @@ function WholesaleOrdersTable({ isAdmin, orders: allOrders, pendingId, onStatusC
             <button className="outline-action" disabled={saving} onClick={stopEditing} type="button">Cancelar</button>
             <button className="primary-action" disabled={saving} onClick={() => void saveTable()} type="button">{saving ? "Guardando…" : "Guardar cambios"}</button>
           </> : <button className="outline-action" onClick={beginEditing} type="button"><Icon name="edit" /> Editar tabla</button>}
-          <button className="outline-action" onClick={() => void downloadWholesaleOrders(visibleOrders, visibleProducts)} type="button"><Icon name="download" /> Excel</button>
+          <button className="outline-action" disabled={!visibleOrders.length} onClick={() => { if (!printWholesaleOrders(visibleOrders, visibleProducts, selectedDay)) setEditNotice("Permite las ventanas emergentes para imprimir la planilla."); }} type="button"><Icon name="print" /> Imprimir</button>
+          <button className="outline-action" disabled={!visibleOrders.length} onClick={() => void downloadWholesaleOrders(visibleOrders, visibleProducts, selectedDay, "planilla")} type="button"><Icon name="download" /> Excel planilla</button>
+          {isAdmin && <button className="outline-action" disabled={!visibleOrders.length} onClick={() => void downloadWholesaleOrders(visibleOrders, visibleProducts, selectedDay, "completo")} type="button"><Icon name="download" /> Excel completo</button>}
         </div>
       </div>
       {creatingOrder && <ManualWholesaleOrderForm onClose={() => setCreatingOrder(false)} orders={allOrders} />}
@@ -523,7 +578,7 @@ function WholesaleOrdersTable({ isAdmin, orders: allOrders, pendingId, onStatusC
         <table className={`order-matrix wholesale-matrix ${showInfoColumns ? "with-order-info" : "without-order-info"}`}>
           <thead>
             <tr className="category-row"><th colSpan={showInfoColumns ? 5 : 1}>Pedido recibido</th>{categories.map((category, index) => <th colSpan={category.count} key={`${category.name}-${index}`}>{category.name}</th>)}</tr>
-            <tr><th>Cliente</th>{showInfoColumns && <><th>Teléfono</th><th>Ruta</th><th>Facturación</th><th>Comentario</th></>}{visibleProducts.map((product) => <th key={product.name} title={product.name === "Blanda" ? "C = Capón · L = Lomo · T = Tetafula · B = Calavera" : undefined}>{product.name}{product.name === "Blanda" && <small className="unit-label">C/L/T/B</small>}</th>)}</tr>
+            <tr><th>Cliente</th>{showInfoColumns && <><th>Teléfono</th><th>Ruta</th><th>Facturación</th><th>Comentario</th></>}{visibleProducts.map((product) => <th key={product.name} title={product.name === "Blanda" ? "C = Capón · L = Lomo · T = Tetafula · B = Calavera · R = Relajado/abierto" : undefined}>{product.name}{product.name === "Blanda" && <small className="unit-label">C/L/T/B/R</small>}</th>)}</tr>
           </thead>
           <tbody>
             {visibleOrders.map((order) => <tr className={isClosed(order) ? "is-dispatched" : undefined} key={order.id}>
@@ -543,8 +598,8 @@ function WholesaleOrdersTable({ isAdmin, orders: allOrders, pendingId, onStatusC
               </>}
               {visibleProducts.map((product) => {
                 const value = productQuantity(order, product);
-                const placeholder = product.name === "Blanda" ? "5 C / 2 L" : product.name === "Comodín" ? "2 producto" : "Cantidad";
-                const title = product.name === "Blanda" ? "Usa C=capón, L=lomo, T=tetafula y B=calavera. Puedes añadir kg o lb si aplica." : product.name === "Comodín" ? "Escribe cantidad y nombre del producto. Ejemplo: 2 producto especial." : "Escribe el número y añade kg, lb o und solamente cuando corresponda.";
+                const placeholder = product.name === "Blanda" ? "5 C / 2 L / 1 R" : product.name === "Comodín" ? "2 producto" : "Cantidad";
+                const title = product.name === "Blanda" ? "Usa C=capón, L=lomo, T=tetafula, B=calavera y R=relajado/abierto. Puedes añadir kg o lb si aplica." : product.name === "Comodín" ? "Escribe cantidad y nombre del producto. Ejemplo: 2 producto especial." : "Escribe el número y añade kg, lb o und solamente cuando corresponda.";
                 return <td className={editing ? "matrix-quantity-cell is-editing" : value ? "matrix-quantity-cell has-value" : "matrix-quantity-cell"} key={product.name}>{editing ? <input aria-label={`${product.name} de ${order.orderNumber}`} onChange={(event) => updateDraft(order.id, product.name, event.target.value)} placeholder={placeholder} title={title} value={draftRows[order.id]?.quantities[product.name] ?? ""} /> : value || ""}</td>;
               })}
             </tr>)}
@@ -601,17 +656,15 @@ export function OrdersPanel({ initialOrders, loadError, viewer }: { initialOrder
   const saveOrder = async (order: Order, details: EditableOrderDetails) => {
     setPendingId(order.id); setNotice(undefined);
     const result = await updateOrderDetails(order.id, details);
-    if (!result.ok) { setNotice(result.message); setPendingId(undefined); return false; }
+    if (!result.ok || !result.items) { setNotice(result.message); setPendingId(undefined); return false; }
+    const savedItems = result.items;
     setOrders((current) => current.map((item) => item.id === order.id ? {
       ...item,
       customer: details.customer,
       phone: details.phone,
       address: details.address,
       notes: details.notes || undefined,
-      items: details.items.map((edited) => {
-        const original = item.items.find((candidate) => candidate.id === edited.id);
-        return { ...original, id: edited.id, productName: edited.productName, quantity: original?.quantity ?? edited.quantity, actualQuantity: edited.quantity, unit: edited.unit, unitPrice: edited.unitPrice, preparation: edited.preparation || undefined };
-      }),
+      items: savedItems,
     } : item));
     setNotice(`Los datos de ${order.orderNumber} fueron actualizados.`); setPendingId(undefined); router.refresh(); return true;
   };

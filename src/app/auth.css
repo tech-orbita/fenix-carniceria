@@ -318,7 +318,7 @@
 .customers-summary { display: flex; align-items: baseline; gap: 8px; margin-bottom: 18px; }
 .customers-summary strong { color: #1769e0; font-size: 30px; }
 .customers-summary span { color: #6e7f99; font-size: 13px; font-weight: 700; }
-.customers-table { min-width: 1180px; }
+.customers-table { min-width: 1380px; }
 .customers-table td { line-height: 1.4; }
 .customers-table td strong, .customers-table td small { display: block; }
 .customers-table td small { margin-top: 3px; color: #6e7f99; }
@@ -327,3 +327,22 @@
 .sync-badge.is-synced { background: #e7f7ed; color: #1f6b44; }
 .sync-badge.is-error { background: #ffebe9; color: #a5352f; }
 .customers-empty { height: 100px; color: #6e7f99; text-align: center !important; }
+.route-bulk-toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; border: 1px solid #dce5f2; border-radius: 12px; padding: 12px; background: #f7faff; }
+.route-bulk-toolbar > div { display: grid; min-width: 260px; gap: 2px; margin-right: auto; }
+.route-bulk-toolbar strong { color: #17233d; font-size: 13px; }
+.route-bulk-toolbar small { color: #6e7f99; font-size: 11px; }
+.route-bulk-toolbar > span { color: #50627d; font-size: 12px; font-weight: 800; white-space: nowrap; }
+.route-bulk-toolbar select, .customer-route-select { min-height: 36px; border: 1px solid #c8d4e5; border-radius: 8px; padding: 0 32px 0 10px; background: white; color: #17233d; font: inherit; font-size: 12px; font-weight: 700; }
+.route-bulk-toolbar button { min-height: 36px; border: 0; border-radius: 8px; padding: 0 14px; background: #1769e0; color: white; cursor: pointer; font: inherit; font-size: 12px; font-weight: 800; white-space: nowrap; }
+.route-bulk-toolbar button:disabled, .route-bulk-toolbar select:disabled, .customer-route-select:disabled { opacity: .55; cursor: default; }
+.customer-route-select.is-unassigned { border-color: #e0a52a; background: #fff7e7; color: #8a5a0c; }
+.customer-select-cell { width: 34px; min-width: 34px; text-align: center !important; }
+.customer-select-cell input { width: 16px; height: 16px; accent-color: #1769e0; }
+.users-notice.is-success { border-color: #a7d7b7; background: #e7f7ed; color: #1f6b44; }
+
+@media (max-width: 820px) {
+  .route-bulk-toolbar { align-items: stretch; flex-direction: column; }
+  .route-bulk-toolbar > div { min-width: 0; margin-right: 0; }
+  .route-bulk-toolbar > span { align-self: flex-start; }
+  .route-bulk-toolbar select, .route-bulk-toolbar button { width: 100%; }
+}
