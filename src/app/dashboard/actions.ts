@@ -578,8 +578,28 @@ export async function updateOrderDetails(
     return { ok: false, message: "No se pudieron guardar todos los cambios." };
   }
 
+  const { data: savedItems, error: savedItemsError } = await supabase
+    .from("order_items")
+    .select("id,product_name,quantity,actual_quantity,unit,unit_price,preparation,notes,sort_order")
+    .eq("order_id", Number(orderId))
+    .order("sort_order", { ascending: true });
+  if (savedItemsError || !savedItems) return { ok: false, message: "Los cambios se guardaron, pero no se pudieron verificar." };
+
   revalidatePath("/dashboard");
-  return { ok: true, message: "Pedido actualizado." };
+  return {
+    ok: true,
+    message: "Pedido actualizado.",
+    items: savedItems.map((item) => ({
+      id: String(item.id),
+      productName: item.product_name,
+      quantity: Number(item.quantity),
+      actualQuantity: item.actual_quantity == null ? undefined : Number(item.actual_quantity),
+      unit: item.unit,
+      unitPrice: Number(item.unit_price),
+      preparation: item.preparation ?? undefined,
+      notes: item.notes ?? undefined,
+    })),
+  };
 }
 
 type WholesaleTableRowInput = {

@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 
-import { toKilograms } from "@/lib/orders/product-parser";
 import { retailBillMessage, retailItemHasPendingPrice, retailItemHasPendingWeight, retailItemQuantity, retailLineSubtotal, retailOrderHasPendingValues, retailOrderSubtotal } from "@/lib/orders/retail-bill";
+import { formatRetailNumberInput, parseRetailNumberInput } from "@/lib/orders/retail-edit";
 import { retailDeliveryDay } from "@/lib/orders/retail-order-window";
 
 import { addDays, bogotaDay, dateTime, dayLabel, Icon, isPaid, money, phaseForStatus, phaseLabels, phaseOrder } from "./panel-shared";
@@ -204,13 +204,17 @@ function ThermalTicket({ order, logo }: { order: Order; logo: boolean }) {
 }
 
 function EditOrderForm({ order, saving, onCancel, onSave }: { order: Order; saving: boolean; onCancel: () => void; onSave: (details: EditableOrderDetails) => Promise<boolean> }) {
-  const [details, setDetails] = useState<EditableOrderDetails>({
+  const initialDetails: EditableOrderDetails = {
     customer: order.customer,
     phone: order.phone,
     address: order.address,
     notes: order.notes ?? "",
     items: order.items.map((item) => {
-      const normalized = pendingWeight(item) ? { quantity: 0, unit: "kg" } : item.unit === "und" ? { quantity: itemQuantity(item), unit: "und" } : toKilograms(itemQuantity(item), item.unit);
+      const normalized = pendingWeight(item)
+        ? { quantity: 0, unit: "kg" }
+        : item.unit === "und"
+          ? { quantity: itemQuantity(item), unit: "und" }
+          : { quantity: itemQuantity(item), unit: "kg" };
       return {
         id: item.id,
         productName: item.productName,
@@ -220,7 +224,14 @@ function EditOrderForm({ order, saving, onCancel, onSave }: { order: Order; savi
         preparation: item.preparation ?? "",
       };
     }),
-  });
+  };
+  const [details, setDetails] = useState<EditableOrderDetails>(initialDetails);
+  const [numberDrafts, setNumberDrafts] = useState<Record<string, { quantity: string; unitPrice: string }>>(() => Object.fromEntries(
+    initialDetails.items.map((item) => [item.id, {
+      quantity: formatRetailNumberInput(item.quantity),
+      unitPrice: formatRetailNumberInput(item.unitPrice),
+    }]),
+  ));
   const updateItem = (index: number, values: Partial<EditableOrderDetails["items"][number]>) => {
     setDetails((current) => ({ ...current, items: current.items.map((item, itemIndex) => itemIndex === index ? { ...item, ...values } : item) }));
   };
@@ -233,7 +244,24 @@ function EditOrderForm({ order, saving, onCancel, onSave }: { order: Order; savi
     unitPrice: 0,
     preparation: "",
   }] }));
-  const submit = async (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); if (await onSave(details)) onCancel(); };
+  const updateNumberDraft = (id: string, field: "quantity" | "unitPrice", value: string) => {
+    setNumberDrafts((current) => ({
+      ...current,
+      [id]: { quantity: current[id]?.quantity ?? "", unitPrice: current[id]?.unitPrice ?? "", [field]: value },
+    }));
+  };
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const parsedDetails = {
+      ...details,
+      items: details.items.map((item) => ({
+        ...item,
+        quantity: parseRetailNumberInput(numberDrafts[item.id]?.quantity ?? ""),
+        unitPrice: parseRetailNumberInput(numberDrafts[item.id]?.unitPrice ?? "", 0),
+      })),
+    };
+    if (await onSave(parsedDetails)) onCancel();
+  };
   return (
     <form className="rt-edit" onSubmit={(event) => void submit(event)}>
       <div className="rt-edit-head"><div><span className="rt-kicker">Editando {order.orderNumber}</span><h2>Información del pedido</h2></div><button aria-label="Cerrar edición" onClick={onCancel} type="button">×</button></div>
@@ -245,15 +273,20 @@ function EditOrderForm({ order, saving, onCancel, onSave }: { order: Order; savi
       </div>
       <fieldset className="rt-edit-items">
         <legend>Productos · ajusta el peso real y conserva el precio por kilo</legend>
-        {details.items.map((item, index) => <div className="rt-edit-row" key={item.id}>
+        {details.items.map((item, index) => {
+          const quantityValue = numberDrafts[item.id]?.quantity ?? "";
+          const priceValue = numberDrafts[item.id]?.unitPrice ?? "";
+          const parsedQuantity = parseRetailNumberInput(quantityValue, 0);
+          const parsedPrice = parseRetailNumberInput(priceValue, 0);
+          return <div className="rt-edit-row" key={item.id}>
           <label>Producto<input onChange={(event) => updateItem(index, { productName: event.target.value })} required value={item.productName} />{order.items.find((candidate) => candidate.id === item.id)?.notes && <small>Pedido: {order.items.find((candidate) => candidate.id === item.id)?.notes}</small>}</label>
-          <label>{item.unit === "und" ? "Cantidad real" : "Peso real"}<input min="0.001" onChange={(event) => updateItem(index, { quantity: Number(event.target.value) })} placeholder="0" required step="0.001" type="number" value={item.quantity || ""} /></label>
+          <label>{item.unit === "und" ? "Cantidad real" : "Peso real"}<input inputMode="decimal" onChange={(event) => updateNumberDraft(item.id, "quantity", event.target.value)} pattern="[0-9]+([.,][0-9]+)?" placeholder="0" required type="text" value={quantityValue} /></label>
           <label>Unidad<select aria-label="Unidad de cobro" onChange={(event) => updateItem(index, { unit: event.target.value })} value={item.unit}><option value="kg">kg</option><option value="und">und</option></select></label>
-          <label>Precio por {item.unit}<input min="0" onChange={(event) => updateItem(index, { unitPrice: Number(event.target.value) })} required step="100" type="number" value={item.unitPrice} />{item.unitPrice <= 0 && <small className="rt-pending-copy">Precio pendiente</small>}</label>
+          <label>Precio por {item.unit === "und" ? "und" : "kg"}<input inputMode="numeric" onChange={(event) => updateNumberDraft(item.id, "unitPrice", event.target.value)} pattern="[0-9]+" placeholder="0" type="text" value={priceValue} />{parsedPrice <= 0 && <small className="rt-pending-copy">Precio pendiente</small>}</label>
           <label>Preparación<input onChange={(event) => updateItem(index, { preparation: event.target.value })} placeholder="Sin indicaciones" value={item.preparation} /></label>
-          <div className="rt-edit-line-total"><span>Subtotal</span><strong>{item.unitPrice > 0 && item.quantity > 0 ? money.format(Math.round(item.quantity * item.unitPrice)) : "Pendiente"}</strong></div>
+          <div className="rt-edit-line-total"><span>Subtotal</span><strong>{parsedPrice > 0 && parsedQuantity > 0 ? money.format(Math.round(parsedQuantity * parsedPrice)) : "Pendiente"}</strong></div>
           <button aria-label={`Eliminar ${item.productName || "producto"}`} className="rt-remove-item" onClick={() => removeItem(index)} type="button">Eliminar</button>
-        </div>)}
+        </div>; })}
         <button className="rt-button rt-add-item" onClick={addItem} type="button">+ Agregar producto</button>
       </fieldset>
       <div className="rt-edit-actions"><button className="rt-button" onClick={onCancel} type="button">Cancelar</button><button className="rt-button is-primary" disabled={saving} type="submit">{saving ? "Guardando…" : "Guardar cambios"}</button></div>

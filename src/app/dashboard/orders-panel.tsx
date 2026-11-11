@@ -656,17 +656,15 @@ export function OrdersPanel({ initialOrders, loadError, viewer }: { initialOrder
   const saveOrder = async (order: Order, details: EditableOrderDetails) => {
     setPendingId(order.id); setNotice(undefined);
     const result = await updateOrderDetails(order.id, details);
-    if (!result.ok) { setNotice(result.message); setPendingId(undefined); return false; }
+    if (!result.ok || !result.items) { setNotice(result.message); setPendingId(undefined); return false; }
+    const savedItems = result.items;
     setOrders((current) => current.map((item) => item.id === order.id ? {
       ...item,
       customer: details.customer,
       phone: details.phone,
       address: details.address,
       notes: details.notes || undefined,
-      items: details.items.map((edited) => {
-        const original = item.items.find((candidate) => candidate.id === edited.id);
-        return { ...original, id: edited.id, productName: edited.productName, quantity: original?.quantity ?? edited.quantity, actualQuantity: edited.quantity, unit: edited.unit, unitPrice: edited.unitPrice, preparation: edited.preparation || undefined };
-      }),
+      items: savedItems,
     } : item));
     setNotice(`Los datos de ${order.orderNumber} fueron actualizados.`); setPendingId(undefined); router.refresh(); return true;
   };
