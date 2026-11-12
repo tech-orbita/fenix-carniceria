@@ -65,26 +65,16 @@ export function mapHighLevelForm(value: unknown, form: WholesaleForm) {
   // Los formularios nuevos envían la persona y la empresa por separado. Se
   // conservan los alias anteriores para que los flujos históricos sigan
   // funcionando mientras todos los contactos se actualizan.
-  const name = get("full_name", "Nombre Completo", "customer_name", "contact.name", "name") ?? [get("first_name", "contact.first_name"), get("last_name", "contact.last_name")].filter(Boolean).join(" ");
+  const name = get("full_name", "Nombre Completo", "Nombre", "customer_name", "contact.name", "name") ?? [get("first_name", "contact.first_name"), get("last_name", "contact.last_name")].filter(Boolean).join(" ");
   const businessKeys = [
     "business_name", "Business_name", "Nombre del Negocio", "nombre_del_negocio",
     "Nombre del establecimiento comercial",
     "contact.nombre_del_negocio", "company_name", "contact.company_name", "companyName",
   ];
-  const hasExplicitBusinessField = businessKeys.some((key) => fields.has(normalize(key)));
-  const business = get(...businessKeys)
-    // Compatibilidad con el formulario anterior, que usaba el nombre del
-    // contacto como negocio. Si el flujo nuevo envía el campo vacío, no se
-    // debe inventar una empresa copiando el nombre de la persona.
-    ?? (form === "nuevo-mayorista" && !hasExplicitBusinessField ? name : undefined);
+  const business = get(...businessKeys);
   const phone = get("phone", "Teléfono", "contact.phone");
   const text = get("order_text", "Coloca tu Pedido", "coloca_tu_pedido", "Pedido", "pedido_mayorista");
-  const fulfillment = get("fulfillment_type", "¿Es a Domicilio o Recoges en Tienda?", "es_a_domicilio_o_recoges_en_tienda", "Domicilio o Tienda", "Tipo de entrega");
-  if (!phone || !(name || business) || !text) throw new Error("Faltan nombre o negocio, teléfono o Coloca tu Pedido");
-  const fulfillmentValue = fulfillment?.toLowerCase() ?? "";
-  const pickup = /pickup|tienda|recog/.test(fulfillmentValue);
-  const delivery = /delivery|domicilio|env[ií]o/.test(fulfillmentValue);
-  if (!pickup && !delivery) throw new Error("Entrega debe ser Domicilio o Tienda");
+  if (!phone || !business || !text) throw new Error("Faltan establecimiento, teléfono o Coloca tu Pedido");
   const submission = get("submission_id", "submissionId", "event_id", "eventId", "formSubmissionId");
   const directAddress = typeof payload.address === "string" && payload.address.trim() ? payload.address.trim() : undefined;
   // `location.address` es la sede de Fénix, no la dirección del contacto. Priorizar
@@ -97,8 +87,13 @@ export function mapHighLevelForm(value: unknown, form: WholesaleForm) {
     "full_address",
     "contact.full_address",
     "Dirección",
+    "Ingrese la Dirección de Entrega",
     "Agrega Dirección de Entrega",
   ) ?? directAddress;
+  const taxId = get("tax_id", "Nit o Cédula", "Nit", "NIT");
+  if (form === "nuevo-mayorista" && (!name || !taxId || !customerAddress)) {
+    throw new Error("Nuevo Mayorista requiere nombre, NIT y dirección");
+  }
   const parsedOrder = parseOrderTextDetailed(text);
   const observations = get("observations", "Observaciones Adicionales");
   const clarification = parsedOrder.unresolved.length
@@ -109,17 +104,15 @@ export function mapHighLevelForm(value: unknown, form: WholesaleForm) {
     source_reference: submission ? `ghl:${form}:${submission}` : undefined,
     customer_type: "wholesale" as const,
     customer: {
-      name: name || business!, phone: phone.replace(/[\s()-]/g, ""), business_name: business,
-      tax_id: get("tax_id", "Nit o Cédula"), email: get("email", "contact.email"),
+      name: form === "nuevo-mayorista" ? name! : business, phone: phone.replace(/[\s()-]/g, ""), business_name: business,
+      tax_id: taxId, email: get("email", "contact.email"),
       address: customerAddress?.replace(/,\s*$/, ""),
     },
-    fulfillment_type: pickup ? "pickup" as const : "delivery" as const,
+    fulfillment_type: "delivery" as const,
     notes: [observations, clarification].filter(Boolean).join("\n") || undefined,
     items: parsedOrder.items,
     form_data: {
-      form, order_text: text, tax_id: get("tax_id", "Nit o Cédula"), billing: get("billing", "Facturación"),
-      maps_url: get("maps_url", "Ubicación de Maps"),
-      receiver_phone: get("receiver_phone", "Número de Quien Recibe"),
+      form, order_text: text, tax_id: taxId,
       payment_proof: getFileUrl("payment_proof", "Aqui puedes subir tu comprobante de Pago"),
       contact_id: get("contactId", "contact_id", "contact.id"),
       location_id: get("locationId", "location_id", "location.id"),
