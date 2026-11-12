@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { syncHighLevelOrderFields, syncWholesalePipeline } from "@/lib/orders/highlevel-pipeline";
 import { customerIdentityKey } from "@/lib/orders/wholesale-routes";
+import { existingWholesaleCustomerPayload, isExistingWholesaleCustomerOrder } from "@/lib/orders/wholesale-form-customer";
 
 type IngestItem = {
   product_name: string;
@@ -119,57 +120,78 @@ export async function ingestOrder(body: IngestBody) {
     : await supabase.from("routes").select("id").eq("name", "Sin clasificar").single();
   const routeId = route?.id ?? fallbackRoute?.id ?? null;
 
-  const { data: existingCustomer } = await supabase.from("customers").select("business_name,tax_id,email,address,neighborhood,city,route_id").eq("customer_type", body.customer_type).eq("identity_key", identityKey).maybeSingle();
+  const { data: existingCustomer, error: existingCustomerError } = await supabase
+    .from("customers")
+    .select("id,name,phone,business_name,tax_id,email,address,neighborhood,city,route_id")
+    .eq("customer_type", body.customer_type)
+    .eq("identity_key", identityKey)
+    .maybeSingle();
+  if (existingCustomerError) {
+    return NextResponse.json({ error: "Could not look up customer" }, { status: 500 });
+  }
+  const usesExistingWholesaleCustomer = isExistingWholesaleCustomerOrder(body);
+  if (usesExistingWholesaleCustomer && !existingCustomer) {
+    return NextResponse.json({ error: "Mayorista no registrado; use el formulario Nuevo Mayorista" }, { status: 422 });
+  }
+  const normalizedBody = usesExistingWholesaleCustomer
+    ? { ...body, customer: existingWholesaleCustomerPayload(body.customer, existingCustomer!) }
+    : body;
   // Si el cliente ya tiene una ruta asignada desde el directorio, sus pedidos
   // siguientes la heredan. Los clientes nuevos permanecen "Sin clasificar".
   const customerRouteId = submittedRouteName ? routeId : existingCustomer?.route_id ?? routeId;
   const orderRouteId = customerRouteId;
 
-  const { data: customer, error: customerError } = await supabase
-    .from("customers")
-    .upsert({
-      customer_type: body.customer_type,
-      identity_key: identityKey,
-      name: body.customer.name.trim(),
-      phone: body.customer.phone.trim(),
-      business_name: body.customer.business_name?.trim() || existingCustomer?.business_name || null,
-      tax_id: body.customer.tax_id?.trim() || existingCustomer?.tax_id || null,
-      email: body.customer.email?.trim() || existingCustomer?.email || null,
-      address: body.customer.address?.trim() || existingCustomer?.address || null,
-      neighborhood: body.customer.neighborhood?.trim() || existingCustomer?.neighborhood || null,
-      city: body.customer.city?.trim() || existingCustomer?.city || "Barranquilla",
-      route_id: customerRouteId,
-    }, { onConflict: "customer_type,identity_key" })
-    .select("id")
-    .single();
+  let customer: { id: number } | null = usesExistingWholesaleCustomer ? { id: existingCustomer!.id } : null;
+  let customerError = null;
+  if (!usesExistingWholesaleCustomer) {
+    const result = await supabase
+      .from("customers")
+      .upsert({
+        customer_type: normalizedBody.customer_type,
+        identity_key: identityKey,
+        name: normalizedBody.customer.name.trim(),
+        phone: normalizedBody.customer.phone.trim(),
+        business_name: normalizedBody.customer.business_name?.trim() || existingCustomer?.business_name || null,
+        tax_id: normalizedBody.customer.tax_id?.trim() || existingCustomer?.tax_id || null,
+        email: normalizedBody.customer.email?.trim() || existingCustomer?.email || null,
+        address: normalizedBody.customer.address?.trim() || existingCustomer?.address || null,
+        neighborhood: normalizedBody.customer.neighborhood?.trim() || existingCustomer?.neighborhood || null,
+        city: normalizedBody.customer.city?.trim() || existingCustomer?.city || "Barranquilla",
+        route_id: customerRouteId,
+      }, { onConflict: "customer_type,identity_key" })
+      .select("id")
+      .single();
+    customer = result.data;
+    customerError = result.error;
+  }
 
   if (customerError || !customer) {
     return NextResponse.json({ error: "Could not save customer" }, { status: 500 });
   }
 
-  const subtotal = body.items.reduce(
+  const subtotal = normalizedBody.items.reduce(
     (total, item) => total + Number(item.quantity) * Number(item.unit_price ?? 0),
     0,
   );
-  const needsReview = body.source === "agent" && (body.confidence == null || body.confidence < 0.9);
+  const needsReview = normalizedBody.source === "agent" && (normalizedBody.confidence == null || normalizedBody.confidence < 0.9);
   const { data: order, error: orderError } = await supabase
     .from("orders")
     .insert({
-      customer_type: body.customer_type,
+      customer_type: normalizedBody.customer_type,
       customer_id: customer.id,
       route_id: orderRouteId,
-      source: body.source,
-      source_reference: body.source_reference ?? null,
-      source_payload: body,
-      extraction_confidence: body.confidence ?? null,
+      source: normalizedBody.source,
+      source_reference: normalizedBody.source_reference ?? null,
+      source_payload: normalizedBody,
+      extraction_confidence: normalizedBody.confidence ?? null,
       status: needsReview ? "needs_review" : "received",
-      fulfillment_type: body.fulfillment_type ?? "delivery",
-      requested_delivery_at: body.requested_delivery_at ?? null,
-      delivery_address: body.delivery_address ?? body.customer.address ?? existingCustomer?.address ?? null,
-      delivery_notes: body.delivery_notes ?? null,
-      payment_method: body.payment_method ?? null,
+      fulfillment_type: normalizedBody.fulfillment_type ?? "delivery",
+      requested_delivery_at: normalizedBody.requested_delivery_at ?? null,
+      delivery_address: normalizedBody.delivery_address ?? normalizedBody.customer.address ?? existingCustomer?.address ?? null,
+      delivery_notes: normalizedBody.delivery_notes ?? null,
+      payment_method: normalizedBody.payment_method ?? null,
       subtotal,
-      notes: body.notes ?? null,
+      notes: normalizedBody.notes ?? null,
     })
     .select("id, order_number, status")
     .single();
@@ -179,8 +201,8 @@ export async function ingestOrder(body: IngestBody) {
     return NextResponse.json({ error: status === 409 ? "Order already received" : "Could not save order" }, { status });
   }
 
-  const { error: itemsError } = body.items.length ? await supabase.from("order_items").insert(
-    body.items.map((item, index) => ({
+  const { error: itemsError } = normalizedBody.items.length ? await supabase.from("order_items").insert(
+    normalizedBody.items.map((item, index) => ({
       order_id: order.id,
       product_name: item.product_name.trim(),
       quantity: Number(item.quantity),
@@ -197,13 +219,13 @@ export async function ingestOrder(body: IngestBody) {
     return NextResponse.json({ error: "Could not save order items" }, { status: 500 });
   }
 
-  const highLevelContext = { contactId: body.form_data?.contact_id, locationId: body.form_data?.location_id, conversationId: body.form_data?.conversation_id };
-  const [pipeline, orderFields] = body.customer_type === "wholesale" && body.form_data
+  const highLevelContext = { contactId: normalizedBody.form_data?.contact_id, locationId: normalizedBody.form_data?.location_id, conversationId: normalizedBody.form_data?.conversation_id };
+  const [pipeline, orderFields] = normalizedBody.customer_type === "wholesale" && normalizedBody.form_data
     ? await Promise.all([
         syncWholesalePipeline(
           highLevelContext,
           "order_placed",
-          `${body.customer.name} · ${order.order_number}`,
+          `${normalizedBody.customer.name} · ${order.order_number}`,
           subtotal,
         ),
         syncHighLevelOrderFields(highLevelContext, { orderNumber: order.order_number, total: subtotal }),

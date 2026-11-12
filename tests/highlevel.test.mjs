@@ -1,7 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mapHighLevelForm } from "../src/lib/orders/highlevel.ts";
-const base = { "Nombre Completo": "Ana", "Teléfono": "+57 300 123 4567", "Coloca tu Pedido": "2 kg de costilla\nMolida por confirmar", "¿Es a Domicilio o Recoges en Tienda?": "Domicilio" };
+const base = {
+  "Nombre del establecimiento comercial": "Mercado Ana",
+  "Nombre Completo": "Ana",
+  Nit: "123456789",
+  "Teléfono": "+57 300 123 4567",
+  "Dirección": "Calle 10 # 20-30",
+  "Coloca tu Pedido": "2 kg de costilla\nMolida por confirmar",
+};
 test("cliente: preserva el pedido libre y aplica la regla operativa de molida", () => {
   const order = mapHighLevelForm(base, "mayorista-cliente");
   assert.equal(order.form_data.order_text, base["Coloca tu Pedido"]);
@@ -23,11 +30,20 @@ test("ninguna línea ambigua desaparece de la tabla mayorista", () => {
   assert.match(order.notes, /producto secreto/i);
   assert.match(order.notes, /3 libras corte extraterrestre/i);
 });
-test("nuevo: mapea campos personalizados y datos de entrega", () => {
-  const order = mapHighLevelForm({ ...base, customData: { "Nombre del Negocio": "Asados", "Nit o Cédula": "123", "Facturación": "Electrónica", "Ubicación de Maps": "https://maps.google.com/", "Número de Quien Recibe": "3001234568" }, submission_id: "envio-1" }, "nuevo-mayorista");
+test("nuevo: registra los campos activos del cliente", () => {
+  const order = mapHighLevelForm({
+    "Nombre del Negocio": "Asados",
+    Nit: "123",
+    Teléfono: "+573001234567",
+    Nombre: "Ana",
+    "Ingrese la Dirección de Entrega": "Carrera 5 # 6-70",
+    "Coloca tu Pedido": "2 kg de costilla",
+    submission_id: "envio-1",
+  }, "nuevo-mayorista");
   assert.equal(order.customer.business_name, "Asados");
   assert.equal(order.customer.tax_id, "123");
-  assert.equal(order.form_data.billing, "Electrónica");
+  assert.equal(order.customer.address, "Carrera 5 # 6-70");
+  assert.equal(order.fulfillment_type, "delivery");
   assert.equal(order.source_reference, "ghl:nuevo-mayorista:envio-1");
 });
 test("ignora zona del formulario para que el pedido llegue sin clasificar", () => {
@@ -39,10 +55,10 @@ test("rechaza payload incompleto y variables sin sustituir", () => {
   assert.throws(() => mapHighLevelForm({ ...base, "Teléfono": "{{contact.phone}}" }, "mayorista-cliente"));
 });
 
-test("nuevo: usa el nombre completo si GHL no llena Company Name", () => {
-  const order = mapHighLevelForm(base, "nuevo-mayorista");
-  assert.equal(order.customer.name, "Ana");
-  assert.equal(order.customer.business_name, "Ana");
+test("nuevo: exige el establecimiento que identifica al mayorista", () => {
+  const withoutBusiness = { ...base };
+  delete withoutBusiness["Nombre del establecimiento comercial"];
+  assert.throws(() => mapHighLevelForm(withoutBusiness, "nuevo-mayorista"), /establecimiento/i);
 });
 
 test("cliente: reconoce la nueva etiqueta del establecimiento", () => {
@@ -90,15 +106,16 @@ test("acepta el payload anidado que envía un workflow de HighLevel", () => {
     conversation: { id: "conversation-nested" },
     customData: [
       { fieldKey: "Nombre del Negocio", value: "Restaurante Pamela" },
+      { fieldKey: "Nit", value: "900123456" },
+      { fieldKey: "Ingrese la Dirección de Entrega", value: "Calle 8 # 10-20" },
       { fieldKey: "Coloca tu Pedido", value: "5 kg de costilla" },
-      { fieldKey: "Domicilio o Tienda", value: "Recoges en tienda" },
     ],
     formSubmissionId: "submission-nested",
   }, "nuevo-mayorista");
   assert.equal(order.form_data.contact_id, "contact-nested");
   assert.equal(order.form_data.location_id, "location-nested");
   assert.equal(order.form_data.conversation_id, "conversation-nested");
-  assert.equal(order.fulfillment_type, "pickup");
+  assert.equal(order.fulfillment_type, "delivery");
   assert.equal(order.source_reference, "ghl:nuevo-mayorista:submission-nested");
 });
 
@@ -205,6 +222,49 @@ test("acepta el comprobante de pago cuando HighLevel lo envía como lista de arc
     ],
   }, "mayorista-cliente");
   assert.equal(order.form_data.payment_proof, "https://files.example/comprobante.jpg");
+});
+
+test("acepta exactamente los campos activos de Nuevo Mayorista", () => {
+  const order = mapHighLevelForm({
+    "Nombre del Negocio": "Prueba Orbita",
+    Nit: "20000000",
+    "Teléfono": "+573134368219",
+    Nombre: "Prueba",
+    "Ingrese la Dirección de Entrega": "Prueba Test#33-33",
+    "Coloca tu Pedido": "Me puedes vender un capón y una pulpa de pierna de cerdo criollo",
+    "Observaciones Adicionales": "Entregar temprano",
+    "Aqui puedes subir tu comprobante de Pago": ["https://files.example/prueba.pdf"],
+  }, "nuevo-mayorista");
+
+  assert.deepEqual(order.customer, {
+    name: "Prueba",
+    phone: "+573134368219",
+    business_name: "Prueba Orbita",
+    tax_id: "20000000",
+    email: undefined,
+    address: "Prueba Test#33-33",
+  });
+  assert.equal(order.fulfillment_type, "delivery");
+  assert.match(order.notes, /^Entregar temprano/);
+  assert.match(order.notes, /Por aclarar en el pedido/);
+  assert.equal(order.form_data.payment_proof, "https://files.example/prueba.pdf");
+});
+
+test("Cliente Mayorista solo necesita identificar la ficha y enviar el pedido", () => {
+  const order = mapHighLevelForm({
+    "Nombre del establecimiento comercial": "Mercado Central",
+    "Teléfono": "+573001234567",
+    "Coloca tu Pedido": "5 kg de costilla",
+    "Observaciones Adicionales": "Corte delgado",
+    "Aqui puedes subir tu comprobante de Pago": ["https://files.example/cliente.pdf"],
+  }, "mayorista-cliente");
+
+  assert.equal(order.customer.name, "Mercado Central");
+  assert.equal(order.customer.business_name, "Mercado Central");
+  assert.equal(order.customer.tax_id, undefined);
+  assert.equal(order.customer.address, undefined);
+  assert.equal(order.fulfillment_type, "delivery");
+  assert.equal(order.form_data.payment_proof, "https://files.example/cliente.pdf");
 });
 
 test("interpreta las líneas reales de blanda, cerdo y pollo sin perder productos", () => {

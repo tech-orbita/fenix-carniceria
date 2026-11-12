@@ -31,13 +31,16 @@ Fuente funcional: capacitación de Fénix J.A. del 29 de octubre de 2026. Ventan
 ## 3. Formularios mayoristas
 
 - [ ] Mantener dos formularios: `Nuevo Mayorista` para el registro inicial y `Mayorista Cliente` para pedidos posteriores.
-- [ ] En el registro inicial, exigir negocio, teléfono, modalidad, zona y texto del pedido.
-- [ ] En pedidos posteriores, usar el teléfono en formato internacional como llave del cliente.
+- [ ] En `Nuevo Mayorista`, exigir negocio, NIT, teléfono, nombre, dirección y texto del pedido; dejar observaciones y comprobante como opcionales.
+- [ ] En `Cliente Mayorista`, enviar únicamente establecimiento, teléfono, texto del pedido, observaciones y comprobante.
+- [ ] En pedidos posteriores, identificar la ficha por establecimiento y reutilizar sus datos registrados sin sobrescribirlos.
 - [ ] Mostrar el formulario dentro de WhatsApp cuando la integración lo permita.
 - [ ] Permitir texto libre como `costilla lo que salga`; el webhook lo registrará como `0` para que Fénix complete la cantidad en el panel.
 - [ ] Crear un workflow `Form Submitted` separado para cada formulario.
 - [ ] Enviar `POST` a los endpoints documentados en `docs/highlevel-webhooks.md`, con `Content-Type: application/json` y `Authorization: Bearer <ORDERS_INGEST_SECRET>`.
-- [ ] Mapear mediante Custom Data las claves estables: `customer_name`, `business_name`, `phone`, `tax_id`, `fulfillment_type`, `address`, `maps_url`, `zone`, `billing`, `receiver_phone`, `order_text`, `observations`, `payment_proof`, `submission_id`, `contactId`, `locationId`, `conversationId` y `conversationUrl`.
+- [ ] Mapear `Nuevo Mayorista`: `customer_name`, `business_name`, `phone`, `tax_id`, `address`, `order_text`, `observations` y `payment_proof`.
+- [ ] Mapear `Cliente Mayorista`: `business_name`, `phone`, `order_text`, `observations` y `payment_proof`.
+- [ ] Eliminar de ambos workflows `fulfillment_type`, `maps_url`, `zone`, `billing` y `receiver_phone`.
 - [ ] Usar un `submission_id` distinto por envío; no reutilizar el ID del contacto.
 
 ## 4. Pipelines y campos personalizados

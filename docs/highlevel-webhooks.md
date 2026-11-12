@@ -9,37 +9,32 @@ En ambas acciones configurar Content-Type: application/json y Authorization: Bea
 
 Configurar un flujo por formulario con disparador Form Submitted y filtro del formulario correspondiente. Mapear los valores usando el selector de campos de HighLevel: las capturas no contienen las claves internas de los campos personalizados. No escribir variables de plantilla adivinadas.
 
-El cuerpo puede incluir los campos con sus etiquetas originales o los siguientes nombres explícitos en Custom Data:
+Cada workflow debe enviar únicamente los campos activos de su formulario. Puede usar las etiquetas originales o estas claves estables en Custom Data:
 
-| Clave JSON | Campo del formulario |
-| --- | --- |
-| customer_name | Nombre Completo (cliente) |
-| business_name | Nombre del Negocio / Nombre del establecimiento comercial |
-| phone | Teléfono |
-| tax_id | Nit o Cédula |
-| fulfillment_type | Domicilio o Tienda |
-| address | Dirección |
-| maps_url | Ubicación de Maps |
-| billing | Facturación |
-| receiver_phone | Número de Quien Recibe |
-| order_text | Coloca tu Pedido |
-| observations | Observaciones Adicionales |
-| payment_proof | URL del comprobante de Pago |
-| submission_id | Identificador único de ESTE envío (si está disponible) |
-| contactId | ID del contacto de HighLevel |
-| locationId | ID de la subcuenta de HighLevel |
-| conversationId | ID de la conversación, si está disponible |
-| conversationUrl | URL directa de la conversación, si está disponible |
+| Clave JSON | Nuevo Mayorista | Cliente Mayorista |
+| --- | --- | --- |
+| `business_name` | Nombre del Negocio | Nombre del establecimiento comercial |
+| `phone` | Teléfono | Teléfono |
+| `order_text` | Coloca tu Pedido | Coloca tu Pedido |
+| `observations` | Observaciones Adicionales | Observaciones Adicionales |
+| `payment_proof` | URL del comprobante de Pago | URL del comprobante de Pago |
+| `customer_name` | Nombre | — |
+| `tax_id` | Nit | — |
+| `address` | Ingrese la Dirección de Entrega | — |
+
+Además, ambos workflows pueden enviar `submission_id`, `contactId`, `locationId`, `conversationId` y `conversationUrl` como metadatos técnicos. No usar `fulfillment_type`, `maps_url`, `zone`, `billing` ni `receiver_phone`: esos campos ya no forman parte de los formularios activos. Todos los pedidos de estos formularios se registran como domicilio.
 
 El parser también acepta el payload nativo anidado de HighLevel (`contact.id`, `location.id`,
 `conversation.id` y arreglos de `customData`/`customFields`). Aun así, el workflow debe enviar los
 campos del formulario con sus etiquetas o con las claves estables de la tabla anterior.
 
-Nombre o negocio, teléfono, modalidad y texto del pedido son obligatorios. El formulario nuevo requiere negocio. El establecimiento identifica al mayorista; el teléfono es un dato de contacto y puede coincidir entre pedidos sin mezclar empresas.
+`Nuevo Mayorista` exige negocio, NIT, teléfono, nombre, dirección y texto del pedido. Crea el cliente cuando no existe y actualiza su ficha cuando el establecimiento ya está registrado. `Cliente Mayorista` exige establecimiento, teléfono y texto del pedido; debe encontrar primero una ficha creada por `Nuevo Mayorista` y reutiliza sus datos sin sobrescribirlos con el formulario corto. Si no encuentra el establecimiento, responde 422 indicando que se debe usar `Nuevo Mayorista`.
+
+El establecimiento identifica al mayorista; el teléfono es un dato de contacto y puede coincidir entre negocios sin mezclarlos. Por eso el nombre del establecimiento debe escribirse igual en los dos formularios.
 
 No usar el ID de contacto como submission_id: el mismo contacto puede hacer varios pedidos. Con un identificador de envío se rechazan duplicados con 409; sin él, cada petición crea un pedido nuevo.
 
-El texto libre queda íntegro en el detalle y la comanda, sin inventar productos, pesos o precios. La ruta ya no se toma del formulario: se asigna manualmente en la planilla y queda guardada para pedidos futuros del establecimiento. Facturación se conserva como respuesta textual. El comprobante se muestra como enlace y no acredita el pago. La app no descarga archivos externos. Original del webhook conservado en orders.source_payload.form_data.original_payload.
+El texto libre queda íntegro en el detalle y la comanda, sin inventar productos, pesos o precios. La ruta no se toma del formulario: se asigna manualmente en la planilla y queda guardada para pedidos futuros del establecimiento. El comprobante se muestra como enlace y no acredita el pago. La app no descarga archivos externos. El original del webhook se conserva en `orders.source_payload.form_data.original_payload`.
 
 El panel mayorista permite crear pedidos manuales sin teléfono. Es el canal recomendado cuando el equipo de Fénix está transcribiendo los pedidos; el formulario queda como canal alternativo para pedidos enviados desde HighLevel.
 
