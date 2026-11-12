@@ -3374,12 +3374,6 @@ a {
 
 .orders-app .wholesale-matrix.with-order-info th:nth-child(4),
 .orders-app .wholesale-matrix.with-order-info td:nth-child(4) {
-  width: 116px;
-  min-width: 116px;
-}
-
-.orders-app .wholesale-matrix.with-order-info th:nth-child(5),
-.orders-app .wholesale-matrix.with-order-info td:nth-child(5) {
   width: 150px;
   min-width: 150px;
 }
@@ -3682,12 +3676,6 @@ a {
 
   .orders-app .wholesale-matrix.with-order-info th:nth-child(4),
   .orders-app .wholesale-matrix.with-order-info td:nth-child(4) {
-    width: 98px;
-    min-width: 98px;
-  }
-
-  .orders-app .wholesale-matrix.with-order-info th:nth-child(5),
-  .orders-app .wholesale-matrix.with-order-info td:nth-child(5) {
     width: 130px;
     min-width: 130px;
   }

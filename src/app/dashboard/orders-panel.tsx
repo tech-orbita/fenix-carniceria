@@ -204,7 +204,6 @@ async function downloadWholesaleOrders(orders: Order[], products: WholesaleProdu
     { header: "Dirección", key: "address", width: 34 },
     { header: "Ruta", key: "zone", width: 18 },
     { header: "Entrega", key: "fulfillment", width: 18 },
-    { header: "Facturación", key: "billing", width: 18 },
     { header: "Estado", key: "status", width: 20 },
     { header: "Observaciones", key: "notes", width: 42 },
     { header: "NIT o cédula", key: "taxId", width: 20 },
@@ -218,7 +217,6 @@ async function downloadWholesaleOrders(orders: Order[], products: WholesaleProdu
     address: order.address,
     zone: order.route,
     fulfillment: order.fulfillment === "delivery" ? "Domicilio" : "Recoge en tienda",
-    billing: order.formData?.billing ?? "",
     status: ["needs_review", "incident"].includes(order.status) ? "Requiere ayuda" : isClosed(order) ? "Despachado" : "Pendiente",
     notes: order.notes ?? "",
     taxId: order.formData?.tax_id ?? "",
@@ -408,7 +406,10 @@ function WholesaleOrdersTable({ isAdmin, orders: allOrders, pendingId, onStatusC
   const [view, setView] = useState<"orders" | "wallet">("orders");
   const [dayOffset, setDayOffset] = useState(0);
   const [listMode, setListMode] = useState<"orders" | "help" | "dispatched">("orders");
-  const [showInfoColumns, setShowInfoColumns] = useState(true);
+  // La operación diaria empieza con la vista compacta para dedicar la pantalla
+  // de la tablet a los cortes. Ruta, teléfono y comentario siguen disponibles
+  // bajo “Mostrar datos” cuando se necesiten.
+  const [showInfoColumns, setShowInfoColumns] = useState(false);
   const [zones, setZones] = useState<string[]>([]);
   const [cuts, setCuts] = useState<string[]>([]);
   const [extraColumns, setExtraColumns] = useState<string[]>([]);
@@ -577,8 +578,8 @@ function WholesaleOrdersTable({ isAdmin, orders: allOrders, pendingId, onStatusC
       <div aria-label="Planilla desplazable de pedidos mayoristas" className="matrix-scroll" ref={matrixScrollRef} tabIndex={0}>
         <table className={`order-matrix wholesale-matrix ${showInfoColumns ? "with-order-info" : "without-order-info"}`}>
           <thead>
-            <tr className="category-row"><th colSpan={showInfoColumns ? 5 : 1}>Pedido recibido</th>{categories.map((category, index) => <th colSpan={category.count} key={`${category.name}-${index}`}>{category.name}</th>)}</tr>
-            <tr><th>Cliente</th>{showInfoColumns && <><th>Teléfono</th><th>Ruta</th><th>Facturación</th><th>Comentario</th></>}{visibleProducts.map((product) => <th key={product.name} title={product.name === "Blanda" ? "C = Capón · L = Lomo · T = Tetafula · B = Calavera · R = Relajado/abierto" : undefined}>{product.name}{product.name === "Blanda" && <small className="unit-label">C/L/T/B/R</small>}</th>)}</tr>
+            <tr className="category-row"><th colSpan={showInfoColumns ? 4 : 1}>Pedido recibido</th>{categories.map((category, index) => <th colSpan={category.count} key={`${category.name}-${index}`}>{category.name}</th>)}</tr>
+            <tr><th>Cliente</th>{showInfoColumns && <><th>Teléfono</th><th>Ruta</th><th>Comentario</th></>}{visibleProducts.map((product) => <th key={product.name} title={product.name === "Blanda" ? "C = Capón · L = Lomo · T = Tetafula · B = Calavera · R = Relajado/abierto" : undefined}>{product.name}{product.name === "Blanda" && <small className="unit-label">C/L/T/B/R</small>}</th>)}</tr>
           </thead>
           <tbody>
             {visibleOrders.map((order) => <tr className={isClosed(order) ? "is-dispatched" : undefined} key={order.id}>
@@ -593,7 +594,6 @@ function WholesaleOrdersTable({ isAdmin, orders: allOrders, pendingId, onStatusC
               {showInfoColumns && <>
                 <td>{order.phone}</td>
                 <td className={editing ? "matrix-route-cell is-editing" : "matrix-route-cell"}>{editing ? <select aria-label={`Ruta de ${order.businessName ?? order.customer}`} onChange={(event) => setDraftRows((current) => ({ ...current, [order.id]: { ...current[order.id], routeName: event.target.value } }))} value={draftRows[order.id]?.routeName ?? order.route}>{![...wholesaleRoutes, unassignedWholesaleRoute].includes(order.route as (typeof wholesaleRoutes)[number] | typeof unassignedWholesaleRoute) && <option value={order.route}>{order.route}</option>}<option value={unassignedWholesaleRoute}>Sin clasificar</option>{wholesaleRoutes.map((route) => <option key={route} value={route}>{wholesaleRouteLabel(route)}</option>)}</select> : wholesaleRouteLabel(order.route)}</td>
-                <td>{order.formData?.billing || "—"}</td>
                 <td className="matrix-comment-cell">{editing ? <textarea aria-label={`Comentario para ${order.orderNumber}`} onChange={(event) => updateDraft(order.id, "notes", event.target.value)} placeholder="Añade un comentario" rows={2} value={draftRows[order.id]?.notes ?? ""} /> : order.notes || "—"}</td>
               </>}
               {visibleProducts.map((product) => {
@@ -603,9 +603,9 @@ function WholesaleOrdersTable({ isAdmin, orders: allOrders, pendingId, onStatusC
                 return <td className={editing ? "matrix-quantity-cell is-editing" : value ? "matrix-quantity-cell has-value" : "matrix-quantity-cell"} key={product.name}>{editing ? <input aria-label={`${product.name} de ${order.orderNumber}`} onChange={(event) => updateDraft(order.id, product.name, event.target.value)} placeholder={placeholder} title={title} value={draftRows[order.id]?.quantities[product.name] ?? ""} /> : value || ""}</td>;
               })}
             </tr>)}
-            {!visibleOrders.length && <tr><td className="matrix-empty" colSpan={visibleProducts.length + (showInfoColumns ? 5 : 1)}>{hasFilters ? "Ningún pedido coincide con los filtros." : listMode === "dispatched" ? "No hay pedidos despachados para este día." : listMode === "help" ? "No hay solicitudes de ayuda para este día." : "No hay pedidos pendientes para este día."}</td></tr>}
+            {!visibleOrders.length && <tr><td className="matrix-empty" colSpan={visibleProducts.length + (showInfoColumns ? 4 : 1)}>{hasFilters ? "Ningún pedido coincide con los filtros." : listMode === "dispatched" ? "No hay pedidos despachados para este día." : listMode === "help" ? "No hay solicitudes de ayuda para este día." : "No hay pedidos pendientes para este día."}</td></tr>}
           </tbody>
-          {visibleOrders.length > 0 && visibleProducts.length > 0 && <tfoot><tr><th scope="row">{showInfoColumns ? "Total" : `Total · ${visibleSummary}`}</th>{showInfoColumns && <td colSpan={4}>{visibleSummary}</td>}{totals.map((total, index) => <td key={visibleProducts[index].name}>{total || "—"}</td>)}</tr></tfoot>}
+          {visibleOrders.length > 0 && visibleProducts.length > 0 && <tfoot><tr><th scope="row">{showInfoColumns ? "Total" : `Total · ${visibleSummary}`}</th>{showInfoColumns && <td colSpan={3}>{visibleSummary}</td>}{totals.map((total, index) => <td key={visibleProducts[index].name}>{total || "—"}</td>)}</tr></tfoot>}
         </table>
       </div>
       </div>
