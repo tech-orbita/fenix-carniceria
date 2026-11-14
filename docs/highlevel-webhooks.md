@@ -56,7 +56,7 @@ El token privado debe incluir `opportunities.readonly`, `opportunities.write` y,
   automatizaciones de HighLevel puedan incluirlo. **Enviar resumen** manda además el recordatorio con valor
   y número de pedido directamente por WhatsApp.
 - Los fallos de HighLevel no revierten el pedido: quedan registrados en los logs para reintento/configuración.
-- Las solicitudes de atención de un mayorista que todavía no envió formulario llegan a `POST /api/webhooks/ghl/wholesale-help-requests`. El webhook crea un registro sin productos en **Mayoristas → Requiere ayuda**, conserva los datos de conversación y evita duplicados mediante `sourceEventId`.
+- Las solicitudes de atención de un mayorista llegan a `POST /api/webhooks/ghl/wholesale-help-requests`. El webhook siempre crea un registro independiente y sin productos en **Mayoristas → Requiere ayuda**, aunque el cliente ya tenga un pedido abierto. El pedido operativo permanece intacto, se conservan los datos de conversación y se evitan duplicados mediante `sourceEventId`.
 - El workflow n8n separado recibe el evento en `/webhook/fenix-mayoristas-ayuda`, exige el encabezado `x-fenix-secret` y reenvía la solicitud al webhook de la aplicación usando `Authorization: Bearer <ORDERS_INGEST_SECRET>`.
 
 Ejemplo de cuerpo para ayuda mayorista:

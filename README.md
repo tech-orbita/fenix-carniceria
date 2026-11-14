@@ -78,8 +78,9 @@ Antes de activar los agentes, completa el [checklist de lanzamiento en GoHighLev
 El texto original aparece en el detalle y la comanda como pedido por cotizar.
 
 Los mayoristas que solicitan atención sin enviar formulario ingresan por
-`/api/webhooks/ghl/wholesale-help-requests`. Se registran sin productos en
-**Mayoristas → Requiere ayuda** y no pasan por el webhook minorista.
+`/api/webhooks/ghl/wholesale-help-requests`. Se registran en una fila independiente,
+sin productos, en **Mayoristas → Requiere ayuda** aunque exista un pedido abierto; el
+pedido operativo no se modifica y la solicitud no pasa por el webhook minorista.
 
 ## Inscripción anticipada de mayoristas
 
