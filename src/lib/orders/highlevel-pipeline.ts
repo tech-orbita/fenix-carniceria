@@ -68,6 +68,28 @@ function configuration(context: HighLevelContext) {
   return { token, locationId, contactId };
 }
 
+async function resolvedConfiguration(context: HighLevelContext) {
+  const configured = configuration(context);
+  if (configured) return configured;
+  const token = process.env.GHL_PRIVATE_INTEGRATION_TOKEN?.trim();
+  const contactId = context.contactId?.trim();
+  if (!token || !contactId) return null;
+  try {
+    const result = await ghlFetch<{ contact?: { locationId?: string }; locationId?: string }>(
+      `/contacts/${encodeURIComponent(contactId)}`,
+      token,
+      { headers: { Version: "2021-07-28" } },
+    );
+    const locationId = result.contact?.locationId?.trim() || result.locationId?.trim();
+    return locationId ? { token, contactId, locationId } : null;
+  } catch (error) {
+    console.error("[highlevel-context] No se pudo resolver la subcuenta del contacto", {
+      message: error instanceof Error ? error.message : "Error desconocido",
+    });
+    return null;
+  }
+}
+
 class HighLevelHttpError extends Error {
   status: number;
 
@@ -126,7 +148,7 @@ export async function syncHighLevelOrderFields(
   context: HighLevelContext,
   values: { orderNumber: string; total?: number },
 ) {
-  const config = configuration(context);
+  const config = await resolvedConfiguration(context);
   if (!config) return { ok: false as const, skipped: true as const, message: "Integración de Orbita sin configurar o sin contactId." };
   try {
     const fields = await contactCustomFields(config.locationId, config.token);
@@ -205,7 +227,7 @@ export async function syncOrderPipeline(
   opportunityName: string,
   monetaryValue?: number,
 ) {
-  const config = configuration(context);
+  const config = await resolvedConfiguration(context);
   if (!config) return { ok: false as const, skipped: true as const, message: "Integración de Orbita sin configurar o sin contactId." };
 
   try {
@@ -291,7 +313,7 @@ export function syncRetailPipeline(
 }
 
 export async function sendHighLevelMessage(context: HighLevelContext, message: string) {
-  const config = configuration(context);
+  const config = await resolvedConfiguration(context);
   if (!config) return { ok: false as const, message: "El pedido no tiene un contacto de Orbita asociado." };
   try {
     const search = new URLSearchParams({ locationId: config.locationId, contactId: config.contactId });
@@ -316,7 +338,7 @@ export async function sendHighLevelMessage(context: HighLevelContext, message: s
 }
 
 export async function ensureHighLevelContactTag(context: HighLevelContext, tag: string) {
-  const config = configuration(context);
+  const config = await resolvedConfiguration(context);
   if (!config) return { ok: false as const, skipped: true as const, message: "Integración de Orbita sin configurar o sin contactId." };
   try {
     await ghlFetch(`/contacts/${encodeURIComponent(config.contactId)}/tags`, config.token, {

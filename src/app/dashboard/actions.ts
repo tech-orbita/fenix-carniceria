@@ -447,6 +447,25 @@ export async function updateWholesalePayment(
   return { ok: true, message: `${sendSummary ? "Cartera actualizada y resumen enviado." : "Cartera actualizada."}${synchronizationWarning}` };
 }
 
+export async function updateWholesaleRoute(orderId: string, routeName: string) {
+  if (!/^\d+$/.test(orderId) || !routeName.trim() || routeName.length > 120) {
+    return { ok: false as const, message: "Selecciona una ruta válida." };
+  }
+  const supabase = await sessionClient();
+  const [{ data: order, error: orderError }, { data: route, error: routeError }] = await Promise.all([
+    supabase.from("orders").select("id,customer_id").eq("id", Number(orderId)).eq("customer_type", "wholesale").maybeSingle(),
+    supabase.from("routes").select("id").eq("name", routeName.trim()).maybeSingle(),
+  ]);
+  if (orderError || !order || routeError || !route) return { ok: false as const, message: "No se pudo encontrar el pedido o la ruta." };
+  const [orderUpdate, customerUpdate] = await Promise.all([
+    supabase.from("orders").update({ route_id: route.id }).eq("id", order.id),
+    supabase.from("customers").update({ route_id: route.id }).eq("id", order.customer_id).eq("customer_type", "wholesale"),
+  ]);
+  if (orderUpdate.error || customerUpdate.error) return { ok: false as const, message: "No se pudo guardar la ruta." };
+  revalidatePath("/dashboard");
+  return { ok: true as const, message: "Ruta guardada." };
+}
+
 type OrderDetailsInput = {
   customer: string;
   phone: string;

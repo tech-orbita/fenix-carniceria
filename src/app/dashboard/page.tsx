@@ -117,7 +117,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           normalizeProductName(item.product_name) === normalizeProductName(storedItems[index]?.productName ?? "")
           && (item.preparation ?? "") === (storedItems[index]?.preparation ?? "")
         ));
-        const items = reparsedItems.length > storedItems.length
+        const canUseReparsedItems = reparsedItems.length > 0 && storedItems.every((item) => item.actualQuantity == null);
+        const items = canUseReparsedItems
           ? reparsedItems.map((item, index) => ({
               id: `parsed-${row.id}-${index}`,
               productName: item.product_name,
@@ -125,6 +126,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
               unit: item.unit,
               displayUnit: item.unit,
               preparation: item.preparation,
+              notes: item.notes,
               unitPrice: 0,
             }))
           : reparsedMatchesStored
