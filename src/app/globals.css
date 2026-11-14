@@ -5779,3 +5779,43 @@ a {
     display: none;
   }
 }
+
+/* Minoristas usa una sola barra vertical: la del documento completo. La lista
+   y el detalle crecen con su contenido para que la rueda y la barra lateral
+   desplacen filtros, resumen y pedidos como una sola pantalla. */
+.orders-app .dashboard-content:has(.rt-panel) {
+  height: auto;
+  min-height: 100dvh;
+  overflow: visible;
+}
+
+.orders-app .rt-panel {
+  min-height: 0;
+  flex: 0 0 auto;
+}
+
+.orders-app .rt-workspace {
+  min-height: 0;
+  flex: 0 0 auto;
+  align-items: start;
+  overflow: visible;
+}
+
+.orders-app .rt-list,
+.orders-app .rt-detail-panel,
+.orders-app .rt-detail {
+  min-height: auto;
+}
+
+.orders-app .rt-cards {
+  max-height: none;
+  flex: 0 0 auto;
+  overflow-y: visible;
+}
+
+.orders-app .rt-detail-body,
+.orders-app .rt-edit {
+  min-height: auto;
+  flex: 0 0 auto;
+  overflow-y: visible;
+}
