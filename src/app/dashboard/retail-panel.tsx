@@ -29,7 +29,7 @@ type DateRange = { from: string; to: string };
 
 const LOGO_SRC = "/logo-fenix.png";
 const quantityFormat = new Intl.NumberFormat("es-CO", { maximumFractionDigits: 3 });
-const rangeLabels: Record<RangePreset, string> = { today: "Hoy", tomorrow: "Mañana", yesterday: "Ayer", week: "Últimos 7 días", month: "Este mes", custom: "Elegir fechas" };
+const rangeLabels: Record<RangePreset, string> = { yesterday: "Ayer", today: "Hoy", tomorrow: "Mañana", week: "Últimos 7 días", month: "Este mes", custom: "Elegir fechas" };
 const phaseHints: Record<OperationalPhase, string> = {
   new: "Recién ingresados",
   preparing: "En alistamiento",
