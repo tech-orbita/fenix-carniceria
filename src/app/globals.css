@@ -2071,7 +2071,8 @@ a {
 
 @media print {
   @page {
-    size: 80mm auto;
+    /* El alto lo define el rollo continuo seleccionado en el controlador. */
+    size: auto;
     margin: 0;
   }
 
@@ -2091,20 +2092,25 @@ a {
   }
 
   .thermal-ticket {
-    position: absolute;
-    inset: 0 auto auto 0;
+    position: static;
     display: block;
     box-sizing: border-box;
-    width: 72mm;
-    margin: 0 auto;
-    padding: 2mm;
+    width: 80mm;
+    max-width: 80mm;
+    margin: 0;
+    padding: 2mm 4mm 3mm;
     background: white;
     color: black;
     font-family: "Courier New", monospace;
     font-size: 14px;
     line-height: 1.35;
     overflow-wrap: anywhere;
+    page-break-inside: avoid;
+    page-break-before: avoid;
     page-break-after: avoid;
+    break-inside: avoid-page;
+    break-before: avoid-page;
+    break-after: avoid-page;
   }
 
   .ticket-brand {
@@ -2154,10 +2160,22 @@ a {
 
   .ticket-line {
     display: grid;
-    grid-template-columns: 1fr auto;
+    grid-template-columns: minmax(0, 1fr) auto;
     gap: 2px 8px;
     padding: 6px 0;
     break-inside: avoid;
+  }
+
+  .ticket-line > *,
+  .ticket-meta dt,
+  .ticket-meta dd,
+  .ticket-notes,
+  .ticket-address,
+  .ticket-footer {
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
 
   .ticket-line strong,
@@ -5099,10 +5117,83 @@ a {
   }
 }
 
-/* Comanda térmica de 80 mm con 72 mm útiles y tipografía legible. */
+/* Comanda térmica: un único documento continuo de 80 mm. Los 4 mm laterales
+   dejan 72 mm útiles y evitan que texto o valores alcancen el borde físico. */
 @media print {
+  html:has(.thermal-ticket),
+  body:has(.thermal-ticket),
+  .orders-app:has(.thermal-ticket) {
+    width: 80mm !important;
+    min-width: 80mm !important;
+    max-width: 80mm !important;
+    height: auto !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    background: white !important;
+  }
+
+  .orders-app .dashboard-content:has(.thermal-ticket),
+  .orders-app .dashboard-content:has(.thermal-ticket) .rt-panel,
+  .orders-app .dashboard-content:has(.thermal-ticket) .rt-workspace,
+  .orders-app .dashboard-content:has(.thermal-ticket) .rt-detail-panel,
+  .orders-app .dashboard-content:has(.thermal-ticket) .rt-detail {
+    display: block !important;
+    width: 80mm !important;
+    min-width: 0 !important;
+    max-width: 80mm !important;
+    height: auto !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: white !important;
+    box-shadow: none !important;
+  }
+
+  /* Quitar del flujo, no solo ocultar, evita páginas vacías y cortes extra. */
+  .orders-app .dashboard-content:has(.thermal-ticket) .dashboard-topbar,
+  .orders-app .dashboard-content:has(.thermal-ticket) .operation-notice,
+  .orders-app .dashboard-content:has(.thermal-ticket) .rt-toolbar,
+  .orders-app .dashboard-content:has(.thermal-ticket) .rt-summary,
+  .orders-app .dashboard-content:has(.thermal-ticket) .rt-alert,
+  .orders-app .dashboard-content:has(.thermal-ticket) .rt-phases,
+  .orders-app .dashboard-content:has(.thermal-ticket) .rt-list,
+  .orders-app .dashboard-content:has(.thermal-ticket) .rt-detail-body,
+  .orders-app .dashboard-content:has(.thermal-ticket) .rt-actionbar {
+    display: none !important;
+  }
+
   .orders-app .thermal-ticket {
+    position: static !important;
+    inset: auto !important;
+    display: block !important;
+    width: 80mm !important;
+    min-width: 80mm !important;
+    max-width: 80mm !important;
+    height: auto !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 2mm 4mm 3mm !important;
+    overflow: visible !important;
+    visibility: visible !important;
     font-size: 13px;
+    page-break-inside: avoid !important;
+    page-break-before: avoid !important;
+    page-break-after: avoid !important;
+    break-inside: avoid-page !important;
+    break-before: avoid-page !important;
+    break-after: avoid-page !important;
+    print-color-adjust: exact;
+  }
+
+  .orders-app .thermal-ticket *,
+  .orders-app .thermal-ticket img {
+    max-width: 100%;
+    visibility: visible !important;
   }
 
   .orders-app .ticket-subtotal {
@@ -5114,6 +5205,10 @@ a {
     margin: 6px 0 0;
     text-align: center;
     font-weight: 700;
+  }
+
+  .orders-app .ticket-footer {
+    margin-bottom: 0;
   }
 }
 
