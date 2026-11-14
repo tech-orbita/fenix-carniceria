@@ -3201,6 +3201,25 @@ a {
   height: 17px;
 }
 
+.orders-app .wallet-actions .send-summary-action span {
+  font-size: 10px;
+}
+
+.orders-app .wallet-saved {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-top: 4px;
+  color: #18733c;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.orders-app .wallet-saved svg {
+  width: 13px;
+  height: 13px;
+}
+
 .orders-app .wallet-table th:last-child,
 .orders-app .wallet-table td:last-child {
   min-width: 365px;
@@ -3276,6 +3295,77 @@ a {
   background: #fff6d8;
   color: #7c4b00;
   text-decoration: none;
+}
+
+.orders-app .matrix-row-actions .form-source-link {
+  border: 1px solid #91b7ef;
+  border-radius: 8px;
+  background: #edf5ff;
+  color: #155fb8;
+}
+
+.orders-app .form-submission-modal {
+  position: fixed;
+  z-index: 1100;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgb(8 27 52 / 52%);
+  backdrop-filter: blur(3px);
+}
+
+.orders-app .form-submission-dialog {
+  width: min(680px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  overflow: auto;
+  border: 1px solid #b8c9df;
+  border-radius: 15px;
+  padding: 20px;
+  background: #fff;
+  box-shadow: 0 24px 70px rgb(10 35 70 / 30%);
+}
+
+.orders-app .form-submission-dialog header,
+.orders-app .form-submission-dialog footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.orders-app .form-submission-dialog header > div {
+  display: grid;
+  gap: 3px;
+}
+
+.orders-app .form-submission-dialog header small,
+.orders-app .form-submission-dialog > p {
+  color: var(--subtle);
+}
+
+.orders-app .form-submission-dialog header > button {
+  border: 0;
+  background: transparent;
+  color: var(--subtle);
+  cursor: pointer;
+  font-size: 25px;
+}
+
+.orders-app .form-submission-dialog pre {
+  overflow: auto;
+  margin: 16px 0;
+  border: 1px solid #cbd9ea;
+  border-radius: 10px;
+  padding: 16px;
+  background: #f7faff;
+  color: var(--ink);
+  font: 600 14px/1.6 system-ui, sans-serif;
+  white-space: pre-wrap;
+}
+
+.orders-app .form-submission-dialog footer {
+  justify-content: flex-end;
 }
 
 .orders-app .matrix-row-actions .payment-proof-link:hover {
@@ -5168,10 +5258,17 @@ a {
 }
 
 .orders-app .dashboard-content:has(.wholesale-workspace) .wholesale-matrix th:first-child {
-  width: clamp(184px, 18vw, 220px);
-  min-width: clamp(184px, 18vw, 220px);
-  max-width: clamp(184px, 18vw, 220px);
+  width: clamp(166px, 15vw, 190px);
+  min-width: clamp(166px, 15vw, 190px);
+  max-width: clamp(166px, 15vw, 190px);
   overflow: hidden;
+}
+
+.orders-app .dashboard-content:has(.wholesale-workspace) .wholesale-matrix .is-blanda-column {
+  width: clamp(108px, 10vw, 132px);
+  min-width: clamp(108px, 10vw, 132px);
+  max-width: clamp(108px, 10vw, 132px);
+  white-space: normal;
 }
 
 .orders-app .dashboard-content:has(.wholesale-workspace) .matrix-client,

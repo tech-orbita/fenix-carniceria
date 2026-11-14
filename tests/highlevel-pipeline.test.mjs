@@ -218,3 +218,22 @@ test("llena Pedido y Valor del pedido en los campos del contacto", async () => {
     ],
   });
 });
+
+test("resuelve la subcuenta desde el contacto cuando el formulario no trae locationId", async () => {
+  process.env.GHL_PRIVATE_INTEGRATION_TOKEN = "token-test";
+  delete process.env.GHL_LOCATION_ID;
+  const calls = [];
+  global.fetch = async (input, init) => {
+    calls.push({ input: String(input), init });
+    if (String(input).endsWith("/contacts/contact-without-location")) return Response.json({ contact: { locationId: "resolved-location" } });
+    if (String(input).includes("/locations/resolved-location/customFields?")) return Response.json({ customFields: [{ id: "order-field-resolved", name: "Pedido" }] });
+    if (String(input).endsWith("/contacts/contact-without-location") && init?.method === "PUT") return Response.json({});
+    return Response.json({});
+  };
+
+  const result = await syncHighLevelOrderFields({ contactId: "contact-without-location" }, { orderNumber: "FEN-000082" });
+
+  assert.equal(result.ok, true);
+  const update = calls.find((call) => call.init?.method === "PUT");
+  assert.deepEqual(JSON.parse(update.init.body), { customFields: [{ id: "order-field-resolved", field_value: "FEN-000082" }] });
+});

@@ -276,7 +276,47 @@ test("interpreta las líneas reales de blanda, cerdo y pollo sin perder producto
     { product_name: "Blanda", quantity: 4, unit: "kg", preparation: "C" },
     { product_name: "Lomo cerdo", quantity: 2, unit: "kg" },
     { product_name: "Blanda", quantity: 6, unit: "kg", preparation: "L" },
-    { product_name: "Comodín", quantity: 5, unit: "cantidad", preparation: "Pechugas pollo" },
+    { product_name: "Pechuga", quantity: 5, unit: "cantidad" },
     { product_name: "Comodín", quantity: 4, unit: "cantidad", preparation: "Pierna pernil" },
+  ]);
+});
+
+test("separa todos los productos cuando el formulario llega en una sola línea", () => {
+  const order = mapHighLevelForm({ ...base, "Coloca tu Pedido": "6 pulpa cedo 3 molida corriente 2 molida especial 5 libras costillas de cerdo 1 bollo 6 libras de lomo ahumado del que viene en malla" }, "mayorista-cliente");
+  assert.deepEqual(order.items, [
+    { product_name: "Pulpa cerdo", quantity: 6, unit: "cantidad" },
+    { product_name: "Molida corriente", quantity: 3, unit: "cantidad" },
+    { product_name: "Molida especial", quantity: 2, unit: "cantidad" },
+    { product_name: "Costilla cerdo", quantity: 5, unit: "lb" },
+    { product_name: "Bollo", quantity: 1, unit: "cantidad" },
+    { product_name: "Ahumada", quantity: 6, unit: "lb" },
+  ]);
+});
+
+test("conserva R en todos los productos relajados y reconoce pechuga y muslos", () => {
+  const order = mapHighLevelForm({ ...base, "Coloca tu Pedido": "13 libras de Costillitas\n10 libras de hueso\n2 libras de capón relado\n2 libras de lomo de cerdo relajado\n2 unidades de pechuga relajada\n2 libras de molida\n1 lengua\n3 libras de sobrebarriga\n3 libras de muslos de pollo" }, "mayorista-cliente");
+  assert.deepEqual(order.items, [
+    { product_name: "Costillita", quantity: 13, unit: "lb" },
+    { product_name: "Hueso", quantity: 10, unit: "lb" },
+    { product_name: "Blanda", quantity: 2, unit: "lb", preparation: "C/R" },
+    { product_name: "Lomo cerdo", quantity: 2, unit: "lb", preparation: "R" },
+    { product_name: "Pechuga", quantity: 2, unit: "und", preparation: "R" },
+    { product_name: "Molida especial", quantity: 2, unit: "lb" },
+    { product_name: "Lenguas", quantity: 1, unit: "cantidad" },
+    { product_name: "Sobrebarriga", quantity: 3, unit: "lb" },
+    { product_name: "Muslos de pollo", quantity: 3, unit: "lb" },
+  ]);
+});
+
+test("conserva lomo ancho y expresiones exactas no numéricas del formulario", () => {
+  const order = mapHighLevelForm({ ...base, "Coloca tu Pedido": "5 lb lomo ancho\nUn pedazo de blanda\nUn pedazo de espaldilla\nMolida 3 bolsas\nPatas 20\nFinos mucho\nDos lomos" }, "mayorista-cliente");
+  assert.deepEqual(order.items, [
+    { product_name: "Blanda", quantity: 5, unit: "lb", preparation: "Ancho" },
+    { product_name: "Blanda", quantity: 1, unit: "pedazo", notes: "Un pedazo de blanda" },
+    { product_name: "Espaldilla", quantity: 1, unit: "pedazo", notes: "Un pedazo de espaldilla" },
+    { product_name: "Molida especial", quantity: 3, unit: "bolsas", notes: "Molida 3 bolsas" },
+    { product_name: "Pata", quantity: 20, unit: "cantidad", notes: "Patas 20" },
+    { product_name: "Lomo fino", quantity: 0, unit: "cantidad", notes: "Finos mucho" },
+    { product_name: "Blanda", quantity: 2, unit: "cantidad", preparation: "L" },
   ]);
 });
