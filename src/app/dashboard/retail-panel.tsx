@@ -6,6 +6,8 @@ import type { FormEvent } from "react";
 import { retailBillMessage, retailItemHasPendingPrice, retailItemHasPendingWeight, retailItemQuantity, retailLineSubtotal, retailOrderHasPendingValues, retailOrderSubtotal } from "@/lib/orders/retail-bill";
 import { formatRetailNumberInput, parseRetailNumberInput } from "@/lib/orders/retail-edit";
 import { retailDeliveryDay } from "@/lib/orders/retail-order-window";
+import { retailCatalogPrice } from "@/lib/orders/retail-normalization";
+import type { RetailCatalogProduct } from "@/lib/orders/retail-normalization";
 
 import { addDays, bogotaDay, dateTime, dayLabel, Icon, isPaid, money, phaseForStatus, phaseLabels, phaseOrder } from "./panel-shared";
 import type { OperationalPhase } from "./panel-shared";
@@ -203,7 +205,7 @@ function ThermalTicket({ order, logo }: { order: Order; logo: boolean }) {
   );
 }
 
-function EditOrderForm({ order, saving, onCancel, onSave }: { order: Order; saving: boolean; onCancel: () => void; onSave: (details: EditableOrderDetails) => Promise<boolean> }) {
+function EditOrderForm({ catalog, order, saving, onCancel, onSave }: { catalog: RetailCatalogProduct[]; order: Order; saving: boolean; onCancel: () => void; onSave: (details: EditableOrderDetails) => Promise<boolean> }) {
   const initialDetails: EditableOrderDetails = {
     customer: order.customer,
     phone: order.phone,
@@ -250,6 +252,12 @@ function EditOrderForm({ order, saving, onCancel, onSave }: { order: Order; savi
       [id]: { quantity: current[id]?.quantity ?? "", unitPrice: current[id]?.unitPrice ?? "", [field]: value },
     }));
   };
+  const applyCatalogPrice = (index: number, id: string, value: string) => {
+    const matched = retailCatalogPrice(value, details.items[index]?.unit ?? "kg", catalog);
+    if (!matched) return;
+    updateItem(index, { productName: matched.product.name, unit: matched.unit, unitPrice: matched.amount });
+    updateNumberDraft(id, "unitPrice", formatRetailNumberInput(matched.amount));
+  };
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const parsedDetails = {
@@ -273,13 +281,14 @@ function EditOrderForm({ order, saving, onCancel, onSave }: { order: Order; savi
       </div>
       <fieldset className="rt-edit-items">
         <legend>Productos · ajusta el peso real y conserva el precio por kilo</legend>
+        <datalist id="retail-catalog-products">{catalog.map((product) => <option key={product.id} value={product.name} />)}</datalist>
         {details.items.map((item, index) => {
           const quantityValue = numberDrafts[item.id]?.quantity ?? "";
           const priceValue = numberDrafts[item.id]?.unitPrice ?? "";
           const parsedQuantity = parseRetailNumberInput(quantityValue, 0);
           const parsedPrice = parseRetailNumberInput(priceValue, 0);
           return <div className="rt-edit-row" key={item.id}>
-          <label>Producto<input onChange={(event) => updateItem(index, { productName: event.target.value })} required value={item.productName} />{order.items.find((candidate) => candidate.id === item.id)?.notes && <small>Pedido: {order.items.find((candidate) => candidate.id === item.id)?.notes}</small>}</label>
+          <label>Producto<input list="retail-catalog-products" onBlur={(event) => applyCatalogPrice(index, item.id, event.target.value)} onChange={(event) => updateItem(index, { productName: event.target.value })} required value={item.productName} />{order.items.find((candidate) => candidate.id === item.id)?.notes && <small>Pedido: {order.items.find((candidate) => candidate.id === item.id)?.notes}</small>}</label>
           <label>{item.unit === "und" ? "Cantidad real" : "Peso real"}<input inputMode="decimal" onChange={(event) => updateNumberDraft(item.id, "quantity", event.target.value)} pattern="[0-9]+([.,][0-9]+)?" placeholder="0" required type="text" value={quantityValue} /></label>
           <label>Unidad<select aria-label="Unidad de cobro" onChange={(event) => updateItem(index, { unit: event.target.value })} value={item.unit}><option value="kg">kg</option><option value="und">und</option></select></label>
           <label>Precio por {item.unit === "und" ? "und" : "kg"}<input inputMode="numeric" onChange={(event) => updateNumberDraft(item.id, "unitPrice", event.target.value)} pattern="[0-9]+" placeholder="0" type="text" value={priceValue} />{parsedPrice <= 0 && <small className="rt-pending-copy">Precio pendiente</small>}</label>
@@ -315,7 +324,7 @@ function FormDetails({ order }: { order: Order }) {
   </div>;
 }
 
-function OrderDetail({ order, pending, logo, today, onAdvance, onMove, onPaymentChange, onResolveHelp, onSave, onSendBill }: { order: Order; pending: boolean; logo: boolean; today: string; onAdvance: (order: Order) => void; onMove: (order: Order, phase: OperationalPhase) => void; onPaymentChange: (order: Order, status: "paid" | "pending") => void; onResolveHelp: (order: Order) => void; onSave: (order: Order, details: EditableOrderDetails) => Promise<boolean>; onSendBill: (order: Order) => void }) {
+function OrderDetail({ catalog, order, pending, logo, today, onAdvance, onMove, onPaymentChange, onResolveHelp, onSave, onSendBill }: { catalog: RetailCatalogProduct[]; order: Order; pending: boolean; logo: boolean; today: string; onAdvance: (order: Order) => void; onMove: (order: Order, phase: OperationalPhase) => void; onPaymentChange: (order: Order, status: "paid" | "pending") => void; onResolveHelp: (order: Order) => void; onSave: (order: Order, details: EditableOrderDetails) => Promise<boolean>; onSendBill: (order: Order) => void }) {
   const [editing, setEditing] = useState(false);
   const [copied, setCopied] = useState(false);
   const phase = phaseForStatus(order.status);
@@ -330,7 +339,7 @@ function OrderDetail({ order, pending, logo, today, onAdvance, onMove, onPayment
       window.setTimeout(() => setCopied(false), 2000);
     } catch { /* El navegador puede bloquear el portapapeles; el envío directo por GHL sigue disponible. */ }
   };
-  if (editing) return <EditOrderForm key={order.id} onCancel={() => setEditing(false)} onSave={(details) => onSave(order, details)} order={order} saving={pending} />;
+  if (editing) return <EditOrderForm catalog={catalog} key={order.id} onCancel={() => setEditing(false)} onSave={(details) => onSave(order, details)} order={order} saving={pending} />;
   return (
     <div className="rt-detail">
       <div className="rt-detail-body">
@@ -406,7 +415,7 @@ function OrderDetail({ order, pending, logo, today, onAdvance, onMove, onPayment
   );
 }
 
-export function RetailPanel({ orders, pendingId, onAdvance, onMove, onPaymentChange, onResolveHelp, onSave, onSendBill }: { orders: Order[]; pendingId?: string; onAdvance: (order: Order) => void; onMove: (order: Order, phase: OperationalPhase) => void; onPaymentChange: (order: Order, status: "paid" | "pending") => void; onResolveHelp: (order: Order) => void; onSave: (order: Order, details: EditableOrderDetails) => Promise<boolean>; onSendBill: (order: Order) => void }) {
+export function RetailPanel({ catalog, orders, pendingId, onAdvance, onMove, onPaymentChange, onResolveHelp, onSave, onSendBill }: { catalog: RetailCatalogProduct[]; orders: Order[]; pendingId?: string; onAdvance: (order: Order) => void; onMove: (order: Order, phase: OperationalPhase) => void; onPaymentChange: (order: Order, status: "paid" | "pending") => void; onResolveHelp: (order: Order) => void; onSave: (order: Order, details: EditableOrderDetails) => Promise<boolean>; onSendBill: (order: Order) => void }) {
   // "Hoy" se recalcula en cada refresco para que el periodo avance solo al cambiar el día.
   const today = bogotaDay.format(new Date());
   const [preset, setPreset] = useState<RangePreset>("today");
@@ -461,7 +470,7 @@ export function RetailPanel({ orders, pendingId, onAdvance, onMove, onPaymentCha
           <label>Hasta<input onChange={(event) => event.target.value && setCustom((current) => ({ ...current, to: event.target.value }))} type="date" value={custom.to} /></label>
         </div>}
         <label className="rt-search"><Icon name="search" /><span className="sr-only">Buscar pedido</span><input onChange={(event) => setQuery(event.target.value)} placeholder="Buscar cliente, pedido, teléfono o dirección" type="search" value={query} /></label>
-        <button className="rt-button" disabled={!rangeOrders.length} onClick={() => void downloadRetailOrders(rangeOrders, range)} title="Descarga todos los pedidos del periodo" type="button"><Icon name="download" /> Descargar Excel</button>
+        <button aria-label="Descargar pedidos en Excel" className="rt-button rt-export" disabled={!rangeOrders.length} onClick={() => void downloadRetailOrders(rangeOrders, range)} title="Descargar Excel del periodo" type="button"><Icon name="download" /><span>Descargar Excel</span></button>
       </div>
 
       <div aria-label={`Resumen · ${rangeTitle(range)}`} className="rt-summary" role="group">
@@ -494,7 +503,7 @@ export function RetailPanel({ orders, pendingId, onAdvance, onMove, onPaymentCha
           </div>
         </aside>
         <div className="rt-detail-panel">{selected
-          ? <OrderDetail key={selected.id} logo={logo} onAdvance={onAdvance} onMove={onMove} onPaymentChange={onPaymentChange} onResolveHelp={onResolveHelp} onSave={onSave} onSendBill={onSendBill} order={selected} pending={pendingId === selected.id} today={today} />
+          ? <OrderDetail catalog={catalog} key={selected.id} logo={logo} onAdvance={onAdvance} onMove={onMove} onPaymentChange={onPaymentChange} onResolveHelp={onResolveHelp} onSave={onSave} onSendBill={onSendBill} order={selected} pending={pendingId === selected.id} today={today} />
           : <div className="rt-empty is-detail"><strong>Selecciona un pedido</strong><span>Cambia el periodo, la fase o el filtro de pago para ver otros pedidos.</span></div>}</div>
       </div>
     </section>

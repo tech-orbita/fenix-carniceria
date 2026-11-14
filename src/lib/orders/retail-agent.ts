@@ -73,7 +73,7 @@ function paymentMethod(value?: string): "cash" | "transfer" | "credit" | "other"
   return "other";
 }
 
-async function retailCatalog(): Promise<RetailCatalogProduct[]> {
+export async function loadRetailCatalog(): Promise<RetailCatalogProduct[]> {
   const supabase = createAdminClient();
   const [{ data: products, error: productError }, { data: prices, error: priceError }] = await Promise.all([
     supabase.from("products").select("id,name,catalog_key").eq("active", true),
@@ -181,7 +181,7 @@ export async function upsertRetailOrder(value: unknown) {
   const items = normalizeRetailItems(
     Array.isArray(body.items) ? body.items : [],
     String(body.rawOrderText ?? ""),
-    await retailCatalog(),
+    await loadRetailCatalog(),
   );
   if (!phone || !items.length || !String(body.rawOrderText ?? "").trim()) {
     return NextResponse.json({ error: "Phone, order text and at least one item are required" }, { status: 422 });

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { catalogProductFor, normalizeProductName, UNSPECIFIED_WHOLESALE_UNIT, wholesaleProductCatalog, wholesaleUnitFor } from "@/lib/orders/product-parser";
+import type { RetailCatalogProduct } from "@/lib/orders/retail-normalization";
 import type { WholesaleProduct } from "@/lib/orders/product-parser";
 import { wholesaleServiceDay } from "@/lib/orders/wholesale-service-day";
 import { unassignedWholesaleRoute, wholesaleRouteLabel, wholesaleRoutes } from "@/lib/orders/wholesale-routes";
@@ -60,6 +61,31 @@ function formatAmounts(amounts: Map<string, number>) {
 
 function productQuantity(order: Order, product: WholesaleProduct) {
   return formatAmounts(productAmounts(order, product));
+}
+
+// El pie de la planilla es un resumen operativo, no una repetición del texto
+// libre del formulario. Suma solo cantidades medibles y omite preparaciones,
+// nombres, "pedazos", "mucho" y cualquier otra descripción.
+function productTotal(orders: Order[], product: WholesaleProduct) {
+  const totals = new Map<string, number>();
+  orders.forEach((order) => order.items.forEach((item) => {
+    const itemCatalog = catalogProductFor(item.productName);
+    const productCatalog = catalogProductFor(product.name);
+    const itemLabel = itemCatalog?.name === "Comodín" && item.preparation ? item.preparation : item.productName;
+    const matches = product.name === "Comodín"
+      ? itemCatalog?.name === "Comodín" && !item.preparation
+      : productCatalog && productCatalog.name !== "Comodín"
+        ? itemCatalog?.name === productCatalog.name
+        : normalizeProductName(itemLabel) === normalizeProductName(product.name);
+    if (!matches) return;
+    const quantity = item.actualQuantity ?? item.quantity;
+    const unit = item.displayUnit ?? item.unit;
+    if (!Number.isFinite(quantity) || quantity <= 0 || ![UNSPECIFIED_WHOLESALE_UNIT, "kg", "lb"].includes(unit)) return;
+    totals.set(unit, (totals.get(unit) ?? 0) + quantity);
+  }));
+  return [...totals.entries()]
+    .map(([unit, quantity]) => `${quantityFormat.format(quantity)}${unit === UNSPECIFIED_WHOLESALE_UNIT ? "" : ` ${unit}`}`)
+    .join(" / ");
 }
 
 // Los pedidos recibidos entre las 5 a. m. del día anterior y las 5 a. m. del día D (hora Bogotá) se despachan el día D.
@@ -273,7 +299,7 @@ function printWholesaleOrders(orders: Order[], products: WholesaleProduct[], sel
     wholesaleRouteLabel(order.route),
     ...products.map((product) => productQuantity(order, product)),
   ]);
-  const totals = products.map((product) => formatAmounts(orders.reduce((sum, order) => productAmounts(order, product, sum), new Map<string, number>())));
+  const totals = products.map((product) => productTotal(orders, product));
   const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Planilla mayorista ${escapeHtml(selectedDay)}</title><style>
     @page { size: A4 landscape; margin: 8mm; }
     * { box-sizing: border-box; }
@@ -411,8 +437,8 @@ function WholesaleWallet({ orders }: { orders: Order[] }) {
       <p className="wallet-scope">Control por pedido · no reemplaza el libro contable ni Siigo</p>
     </div>
     {notice && <div className="table-edit-notice" role="status">{notice}</div>}
-    <div className="matrix-scroll"><table className="order-matrix wallet-table"><thead><tr><th>Cliente</th><th>Pedido</th><th>Fecha</th><th>Valor</th><th>Estado</th><th>Acciones</th></tr></thead><tbody>
-      {shown.map((order) => <tr key={order.id}><th scope="row"><div className="wallet-client"><span><span className="client-heading-line"><strong>{order.businessName && order.businessName !== order.customer ? order.businessName : order.customer}</strong>{order.businessName && order.businessName !== order.customer && <small className="client-contact-inline">- {order.customer}</small>}</span><small>{order.phone}</small></span><ConversationLink order={order} /></div></th><td>{order.orderNumber}</td><td>{dateTime.format(new Date(order.receivedAt))}</td><td><label className="wallet-value"><span>$</span><input aria-label={`Valor de ${order.orderNumber}`} inputMode="numeric" onChange={(event) => { setSavedId(undefined); setValues((current) => ({ ...current, [order.id]: event.target.value })); }} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); void save(order, order.paymentStatus === "paid" ? "paid" : "pending"); } }} placeholder="0" value={values[order.id] ?? ""} /></label>{savedId === order.id && <small className="wallet-saved" role="status"><Icon name="check" /> Guardado</small>}</td><td><span className={order.paymentStatus === "paid" ? "wallet-status is-paid" : "wallet-status"}>{order.paymentStatus === "paid" ? "Pago realizado" : "Pendiente por pago"}</span></td><td><div className="wallet-actions"><button aria-label="Marcar pago como pendiente" className="wallet-action-button" disabled={pendingId === order.id} onClick={() => void save(order, "pending")} type="button"><Icon name="clock" /><span>Pendiente</span></button><button aria-label="Marcar como pagado" className="is-paid wallet-action-button" disabled={pendingId === order.id} onClick={() => void save(order, "paid")} type="button"><Icon name="check" /><span>Pagado</span></button><button aria-label="Enviar resumen de pago" className="wallet-action-button send-summary-action" disabled={pendingId === order.id} onClick={() => void save(order, "pending", true)} type="button"><Icon name="receipt" /><span>Enviar resumen</span></button></div></td></tr>)}
+    <div className="matrix-scroll wallet-scroll"><table className="order-matrix wallet-table"><thead><tr><th>Cliente</th><th>Pedido</th><th>Fecha</th><th>Valor</th><th>Estado</th><th>Acciones</th></tr></thead><tbody>
+      {shown.map((order) => <tr key={order.id}><th scope="row"><div className="wallet-client"><span><span className="client-heading-line"><strong>{order.businessName && order.businessName !== order.customer ? order.businessName : order.customer}</strong></span><small>{order.phone}</small></span><ConversationLink order={order} /></div></th><td>{order.orderNumber}</td><td>{dateTime.format(new Date(order.receivedAt))}</td><td><label className="wallet-value"><span>$</span><input aria-label={`Valor de ${order.orderNumber}`} inputMode="numeric" onChange={(event) => { setSavedId(undefined); setValues((current) => ({ ...current, [order.id]: event.target.value })); }} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); void save(order, order.paymentStatus === "paid" ? "paid" : "pending"); } }} placeholder="0" value={values[order.id] ?? ""} /></label>{savedId === order.id && <small className="wallet-saved" role="status"><Icon name="check" /> Guardado</small>}</td><td><span className={order.paymentStatus === "paid" ? "wallet-status is-paid" : "wallet-status"}>{order.paymentStatus === "paid" ? "Pago realizado" : "Pendiente por pago"}</span></td><td><div className="wallet-actions"><button aria-label="Marcar pago como pendiente" className="wallet-action-button" disabled={pendingId === order.id} onClick={() => void save(order, "pending")} type="button"><Icon name="clock" /><span>Pendiente</span></button><button aria-label="Marcar como pagado" className="is-paid wallet-action-button" disabled={pendingId === order.id} onClick={() => void save(order, "paid")} type="button"><Icon name="check" /><span>Pagado</span></button><button aria-label="Enviar resumen de pago" className="wallet-action-button send-summary-action" disabled={pendingId === order.id} onClick={() => void save(order, "pending", true)} type="button"><Icon name="receipt" /><span>Enviar resumen</span></button></div></td></tr>)}
       {!shown.length && <tr><td className="matrix-empty" colSpan={6}>No hay pedidos que coincidan con la búsqueda.</td></tr>}
     </tbody><tfoot><tr><th colSpan={3}>Total visible</th><td>{money.format(shown.reduce((sum, order) => sum + order.total, 0))}</td><td colSpan={2}>{shown.length} pedidos</td></tr></tfoot></table></div>
   </section>;
@@ -494,7 +520,7 @@ function WholesaleOrdersTable({ isAdmin, orders: allOrders, pendingId, onStatusC
     else groups.push({ name: product.category, count: 1 });
     return groups;
   }, []);
-  const totals = visibleProducts.map((product) => formatAmounts(visibleOrders.reduce((sum, order) => productAmounts(order, product, sum), new Map<string, number>())));
+  const totals = visibleProducts.map((product) => productTotal(visibleOrders, product));
   const visibleHelpWithoutOrder = visibleOrders.filter(isHelpWithoutOrder).length;
   const visibleOrderCount = visibleOrders.length - visibleHelpWithoutOrder;
   const visibleSummary = [
@@ -596,9 +622,9 @@ function WholesaleOrdersTable({ isAdmin, orders: allOrders, pendingId, onStatusC
             {hiddenProducts.length > 0 && <label className="zone-filter"><span className="sr-only">Agregar columna de corte</span><select aria-label="Agregar columna de corte" onChange={(event) => addExtraColumn(event.target.value)} value=""><option value="">+ Agregar corte</option>{hiddenProducts.map((product) => <option key={product.name} value={product.name}>{product.name}</option>)}</select></label>}
             <button className="outline-action" disabled={saving} onClick={stopEditing} type="button">Cancelar</button>
             <button className="primary-action" disabled={saving} onClick={() => void saveTable()} type="button">{saving ? "Guardando…" : "Guardar cambios"}</button>
-          </> : <button className="outline-action" onClick={beginEditing} type="button"><Icon name="edit" /> Editar tabla</button>}
-          <button className="outline-action" disabled={!visibleOrders.length} onClick={() => { if (!printWholesaleOrders(visibleOrders, visibleProducts, selectedDay)) setEditNotice("Permite las ventanas emergentes para imprimir la planilla."); }} type="button"><Icon name="print" /> Imprimir</button>
-          <button className="outline-action" disabled={!visibleOrders.length} onClick={() => void downloadWholesaleOrders(visibleOrders, visibleProducts, selectedDay, "planilla")} type="button"><Icon name="download" /> Excel planilla</button>
+          </> : <button className="outline-action" onClick={beginEditing} type="button"><Icon name="edit" /> Editar</button>}
+          <button aria-label="Imprimir planilla" className="outline-action icon-only-action" disabled={!visibleOrders.length} onClick={() => { if (!printWholesaleOrders(visibleOrders, visibleProducts, selectedDay)) setEditNotice("Permite las ventanas emergentes para imprimir la planilla."); }} title="Imprimir planilla" type="button"><Icon name="print" /></button>
+          <button aria-label="Descargar planilla en Excel" className="outline-action icon-only-action" disabled={!visibleOrders.length} onClick={() => void downloadWholesaleOrders(visibleOrders, visibleProducts, selectedDay, "planilla")} title="Descargar Excel" type="button"><Icon name="download" /></button>
         </div>
       </div>
       {creatingOrder && <ManualWholesaleOrderForm onClose={() => setCreatingOrder(false)} orders={allOrders} />}
@@ -614,12 +640,12 @@ function WholesaleOrdersTable({ isAdmin, orders: allOrders, pendingId, onStatusC
       <div aria-label="Planilla desplazable de pedidos mayoristas" className="matrix-scroll" ref={matrixScrollRef} tabIndex={0}>
         <table className={`order-matrix wholesale-matrix ${showInfoColumns ? "with-order-info" : "without-order-info"}`}>
           <thead>
-            <tr className="category-row"><th colSpan={showInfoColumns ? 4 : 1}>Pedido recibido</th>{categories.map((category, index) => <th colSpan={category.count} key={`${category.name}-${index}`}>{category.name}</th>)}</tr>
-            <tr><th>Cliente</th>{showInfoColumns && <><th>Teléfono</th><th>Ruta</th><th>Comentario</th></>}{visibleProducts.map((product) => <th className={product.name === "Blanda" ? "is-blanda-column" : undefined} key={product.name} title={product.name === "Blanda" ? "C = Capón · L = Lomo · T = Tetafula · B = Calavera · R = Relajado/abierto" : undefined}>{product.name}{product.name === "Blanda" && <small className="unit-label">C/L/T/B/R</small>}</th>)}</tr>
+            <tr className="category-row"><th colSpan={showInfoColumns ? 3 : 1}>Pedido recibido</th>{categories.map((category, index) => <th colSpan={category.count} key={`${category.name}-${index}`}>{category.name}</th>)}</tr>
+            <tr><th>Cliente</th>{showInfoColumns && <><th>Teléfono</th><th>Ruta</th></>}{visibleProducts.map((product) => <th className={product.name === "Blanda" ? "is-blanda-column" : undefined} key={product.name} title={product.name === "Blanda" ? "C = Capón · L = Lomo · T = Tetafula · B = Calavera · R = Relajado/abierto" : undefined}>{product.name}{product.name === "Blanda" && <small className="unit-label">C/L/T/B/R</small>}</th>)}</tr>
           </thead>
           <tbody>
             {visibleOrders.map((order) => <tr className={isClosed(order) ? "is-dispatched" : undefined} key={order.id}>
-              <th scope="row"><div className="matrix-client"><span><span className="client-heading-line" title={[order.businessName && order.businessName !== order.customer ? order.businessName : order.customer, order.businessName && order.businessName !== order.customer ? order.customer : ""].filter(Boolean).join(" · ")}><strong>{order.businessName && order.businessName !== order.customer ? order.businessName : order.customer}</strong>{order.businessName && order.businessName !== order.customer && <small className="client-contact-inline">{order.customer}</small>}</span><small className="client-order-number">Pedido {order.orderNumber}</small><small className="client-address">{order.address}</small></span><div className="matrix-row-actions"><ConversationLink order={order} />{order.formData?.order_text && <button aria-label={`Ver formulario original de ${order.orderNumber}`} className="form-source-link row-icon-action tooltip-icon-action" data-tooltip="Formulario original" onClick={() => setFormOrder(order)} type="button"><Icon name="receipt" /><span className="sr-only">Ver formulario original</span></button>}{isAdmin && safeExternalUrl(order.formData?.payment_proof) && <a aria-label={`Abrir comprobante de ${order.orderNumber}`} className="payment-proof-link row-icon-action tooltip-icon-action" data-tooltip="Comprobante adjunto" href={safeExternalUrl(order.formData?.payment_proof)} rel="noreferrer" target="_blank"><Icon name="receipt" /><span className="sr-only">Ver comprobante adjunto</span></a>}{isHelpWithoutOrder(order)
+              <th scope="row"><div className="matrix-client"><span><span className="client-heading-line" title={order.businessName && order.businessName !== order.customer ? order.businessName : order.customer}><strong>{order.businessName && order.businessName !== order.customer ? order.businessName : order.customer}</strong></span><small className="client-order-number">Pedido {order.orderNumber}</small></span><div className="matrix-row-actions"><ConversationLink order={order} />{order.formData?.order_text && <button aria-label={`Ver formulario original de ${order.orderNumber}`} className="form-source-link row-icon-action tooltip-icon-action" data-tooltip="Formulario original" onClick={() => setFormOrder(order)} type="button"><Icon name="receipt" /><span className="sr-only">Ver formulario original</span></button>}{isAdmin && safeExternalUrl(order.formData?.payment_proof) && <a aria-label={`Abrir comprobante de ${order.orderNumber}`} className="payment-proof-link row-icon-action tooltip-icon-action" data-tooltip="Comprobante adjunto" href={safeExternalUrl(order.formData?.payment_proof)} rel="noreferrer" target="_blank"><Icon name="receipt" /><span className="sr-only">Ver comprobante adjunto</span></a>}{isHelpWithoutOrder(order)
                 ? <span className="no-order-badge">Sin pedido</span>
                 : isClosed(order)
                   ? <button aria-label="Volver a pedidos pendientes" className="dispatch-action is-done row-icon-action tooltip-icon-action" data-tooltip="Volver a pedidos" disabled={pendingId === order.id || editing} onClick={() => onStatusChange(order, "new")} type="button">{pendingId === order.id ? "…" : <Icon name="undo" />}<span className="sr-only">Volver a pedidos pendientes</span></button>
@@ -630,7 +656,6 @@ function WholesaleOrdersTable({ isAdmin, orders: allOrders, pendingId, onStatusC
               {showInfoColumns && <>
                 <td>{order.phone}</td>
                 <td className={editing ? "matrix-route-cell is-editing" : "matrix-route-cell"}><select aria-label={`Ruta de ${order.businessName ?? order.customer}`} disabled={routePendingId === order.id} onChange={(event) => editing ? setDraftRows((current) => ({ ...current, [order.id]: { ...current[order.id], routeName: event.target.value } })) : void saveRoute(order, event.target.value)} value={editing ? draftRows[order.id]?.routeName ?? order.route : order.route}>{![...wholesaleRoutes, unassignedWholesaleRoute].includes(order.route as (typeof wholesaleRoutes)[number] | typeof unassignedWholesaleRoute) && <option value={order.route}>{order.route}</option>}<option value={unassignedWholesaleRoute}>Sin clasificar</option>{wholesaleRoutes.map((route) => <option key={route} value={route}>{wholesaleRouteLabel(route)}</option>)}</select></td>
-                <td className="matrix-comment-cell">{editing ? <textarea aria-label={`Comentario para ${order.orderNumber}`} onChange={(event) => updateDraft(order.id, "notes", event.target.value)} placeholder="Añade un comentario" rows={2} value={draftRows[order.id]?.notes ?? ""} /> : order.notes || "—"}</td>
               </>}
               {visibleProducts.map((product) => {
                 const value = productQuantity(order, product);
@@ -639,9 +664,9 @@ function WholesaleOrdersTable({ isAdmin, orders: allOrders, pendingId, onStatusC
                 return <td className={`${editing ? "matrix-quantity-cell is-editing" : value ? "matrix-quantity-cell has-value" : "matrix-quantity-cell"}${product.name === "Blanda" ? " is-blanda-column" : ""}`} key={product.name}>{editing ? <input aria-label={`${product.name} de ${order.orderNumber}`} onChange={(event) => updateDraft(order.id, product.name, event.target.value)} placeholder={placeholder} title={title} value={draftRows[order.id]?.quantities[product.name] ?? ""} /> : value || ""}</td>;
               })}
             </tr>)}
-            {!visibleOrders.length && <tr><td className="matrix-empty" colSpan={visibleProducts.length + (showInfoColumns ? 4 : 1)}>{hasFilters ? "Ningún pedido coincide con los filtros." : listMode === "dispatched" ? "No hay pedidos despachados para este día." : listMode === "help" ? "No hay solicitudes de ayuda para este día." : "No hay pedidos pendientes para este día."}</td></tr>}
+            {!visibleOrders.length && <tr><td className="matrix-empty" colSpan={visibleProducts.length + (showInfoColumns ? 3 : 1)}>{hasFilters ? "Ningún pedido coincide con los filtros." : listMode === "dispatched" ? "No hay pedidos despachados para este día." : listMode === "help" ? "No hay solicitudes de ayuda para este día." : "No hay pedidos pendientes para este día."}</td></tr>}
           </tbody>
-          {visibleOrders.length > 0 && visibleProducts.length > 0 && <tfoot><tr><th scope="row">{showInfoColumns ? "Total" : `Total · ${visibleSummary}`}</th>{showInfoColumns && <td colSpan={3}>{visibleSummary}</td>}{totals.map((total, index) => <td key={visibleProducts[index].name}>{total || "—"}</td>)}</tr></tfoot>}
+          {visibleOrders.length > 0 && visibleProducts.length > 0 && <tfoot><tr><th scope="row">{showInfoColumns ? "Total" : `Total · ${visibleSummary}`}</th>{showInfoColumns && <td colSpan={2}>{visibleSummary}</td>}{totals.map((total, index) => <td key={visibleProducts[index].name}>{total || "—"}</td>)}</tr></tfoot>}
         </table>
       </div>
       </div>
@@ -649,7 +674,7 @@ function WholesaleOrdersTable({ isAdmin, orders: allOrders, pendingId, onStatusC
   );
 }
 
-export function OrdersPanel({ initialOrders, loadError, viewer }: { initialOrders: Order[]; loadError?: string; viewer?: Viewer }) {
+export function OrdersPanel({ initialOrders, loadError, retailCatalog = [], viewer }: { initialOrders: Order[]; loadError?: string; retailCatalog?: RetailCatalogProduct[]; viewer?: Viewer }) {
   const router = useRouter();
   const [orders, setOrders] = useState(initialOrders);
   // Sincroniza los datos refrescados del servidor sin remontar el panel (conserva día, filtros y edición).
@@ -755,7 +780,7 @@ export function OrdersPanel({ initialOrders, loadError, viewer }: { initialOrder
         </div>}
       </div>
       {notice && <div className="operation-notice" role="status">{notice}</div>}
-      {activeType === "wholesale" ? <WholesaleOrdersTable isAdmin={viewer?.role === "admin"} onStatusChange={(order, phase) => void moveOrder(order, phase)} orders={wholesale} pendingId={pendingId} /> : <RetailPanel onAdvance={(order) => void advanceRetailOrder(order)} onMove={(order, phase) => void moveOrder(order, phase)} onPaymentChange={(order, status) => void changePaymentStatus(order, status)} onResolveHelp={(order) => void resolveHelp(order)} onSave={saveOrder} onSendBill={(order) => void sendBill(order)} orders={retail} pendingId={pendingId} />}
+      {activeType === "wholesale" ? <WholesaleOrdersTable isAdmin={viewer?.role === "admin"} onStatusChange={(order, phase) => void moveOrder(order, phase)} orders={wholesale} pendingId={pendingId} /> : <RetailPanel catalog={retailCatalog} onAdvance={(order) => void advanceRetailOrder(order)} onMove={(order, phase) => void moveOrder(order, phase)} onPaymentChange={(order, status) => void changePaymentStatus(order, status)} onResolveHelp={(order) => void resolveHelp(order)} onSave={saveOrder} onSendBill={(order) => void sendBill(order)} orders={retail} pendingId={pendingId} />}
     </main></div>
   );
 }

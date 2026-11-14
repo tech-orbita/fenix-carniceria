@@ -34,6 +34,7 @@ export type NormalizedRetailItem = {
 const unitPattern = "(?:kg|kgs|kilo|kilos|kilogramo|kilogramos|lb|lbs|lib|libra|libras)";
 
 const retailAliases: Record<string, string> = {
+  "carne para desmechar": "carne blanda",
   "carne molida especial": "molida super especial",
   "molida especial": "molida super especial",
   "muslo colombia": "muslo colombina",
@@ -134,6 +135,15 @@ export function matchRetailProduct(value: string, catalog: readonly RetailCatalo
     if (!wantedCategory) return undefined;
   }
   return ranked[0].product;
+}
+
+export function retailCatalogPrice(value: string, unit: string, catalog: readonly RetailCatalogProduct[]) {
+  const product = matchRetailProduct(value, catalog);
+  if (!product) return undefined;
+  const saleUnit = product.saleUnit ?? (unit === "und" && product.pricePerUnit != null ? "und" : "kg");
+  const amount = saleUnit === "und" ? product.pricePerUnit : product.pricePerKg;
+  if (!Number.isFinite(amount) || Number(amount) <= 0) return undefined;
+  return { product, amount: Number(amount), unit: saleUnit };
 }
 
 function parsedLine(item: RetailInputItem) {

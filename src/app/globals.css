@@ -5345,3 +5345,437 @@ a {
     display: none;
   }
 }
+
+/* Ajuste final de Mayoristas: controles visibles sin una segunda barra
+   horizontal y menús de filtro libres del recorte del toolbar. */
+.orders-app .dashboard-content:has(.wholesale-workspace) .section-toolbar {
+  overflow: visible;
+}
+
+.orders-app .dashboard-content:has(.wholesale-workspace) .table-filters {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.orders-app .dashboard-content:has(.wholesale-workspace) .toolbar-actions {
+  flex: 0 0 auto;
+}
+
+.orders-app .dashboard-content:has(.wholesale-workspace) .table-search {
+  width: clamp(125px, 13vw, 185px);
+  min-width: 125px;
+}
+
+.orders-app .dashboard-content:has(.wholesale-workspace) .request-mode-filters {
+  min-width: 0;
+}
+
+.orders-app .dashboard-content:has(.wholesale-workspace) .request-mode-filters button {
+  padding-inline: clamp(6px, 0.6vw, 10px);
+  white-space: nowrap;
+}
+
+.orders-app .dashboard-content:has(.wholesale-workspace) .icon-only-action {
+  display: inline-grid;
+  width: 31px;
+  min-width: 31px;
+  place-items: center;
+  padding: 0;
+}
+
+.orders-app .dashboard-content:has(.wholesale-workspace) .icon-only-action svg {
+  width: 16px;
+  height: 16px;
+}
+
+.orders-app .filter-menu {
+  z-index: 30;
+}
+
+.orders-app .filter-popover {
+  z-index: 80;
+}
+
+/* La banda agrupadora conserva el texto, pero usa menos alto y aire. */
+.orders-app .dashboard-content:has(.wholesale-workspace) .wholesale-matrix .category-row th {
+  height: 17px;
+  padding-block: 2px;
+  line-height: 1.05;
+}
+
+.orders-app .dashboard-content:has(.wholesale-workspace) .wholesale-matrix thead tr:nth-child(2) th {
+  top: 17px;
+  padding-block: 3px;
+  line-height: 1.1;
+}
+
+/* Al retirar Comentario, Ruta vuelve a ser la última columna informativa. */
+.orders-app .wholesale-matrix.with-order-info th:nth-child(3),
+.orders-app .wholesale-matrix.with-order-info td:nth-child(3) {
+  width: 122px;
+  min-width: 122px;
+}
+
+/* Cartera ocupa el alto disponible y expone barras de desplazamiento claras. */
+.orders-app .dashboard-content:has(.wholesale-wallet) {
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+  padding: clamp(4px, 0.7vw, 8px);
+}
+
+.orders-app .dashboard-content:has(.wholesale-wallet) .wholesale-tabs {
+  flex: 0 0 auto;
+}
+
+.orders-app .wholesale-wallet {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.orders-app .wholesale-wallet .section-toolbar {
+  flex: 0 0 auto;
+  padding: 10px 12px;
+  background: white;
+}
+
+.orders-app .wallet-scroll {
+  min-height: 220px;
+  flex: 1 1 auto;
+  overflow: scroll;
+  scrollbar-color: #7f94b2 #e8eef6;
+  scrollbar-gutter: stable both-edges;
+  scrollbar-width: auto;
+}
+
+.orders-app .wallet-scroll::-webkit-scrollbar {
+  width: 14px;
+  height: 14px;
+}
+
+.orders-app .wallet-scroll::-webkit-scrollbar-track {
+  background: #e8eef6;
+}
+
+.orders-app .wallet-scroll::-webkit-scrollbar-thumb {
+  border: 3px solid #e8eef6;
+  border-radius: 999px;
+  background: #7f94b2;
+}
+
+.orders-app .wallet-scroll .wallet-table {
+  width: max-content;
+  min-width: 100%;
+}
+
+.orders-app .wallet-table th,
+.orders-app .wallet-table td {
+  padding-block: 9px;
+}
+
+@media (max-width: 1180px) {
+  .orders-app .dashboard-content:has(.wholesale-workspace) .section-toolbar {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+
+  .orders-app .dashboard-content:has(.wholesale-workspace) .table-filters,
+  .orders-app .dashboard-content:has(.wholesale-workspace) .toolbar-actions {
+    width: 100%;
+  }
+
+  .orders-app .dashboard-content:has(.wholesale-workspace) .toolbar-actions {
+    justify-content: flex-end;
+  }
+}
+
+/* Minoristas: los pedidos son el contenido principal. En un portátil normal,
+   los controles conservan su función pero consumen una sola franja compacta. */
+@media (min-width: 1101px) {
+  .orders-app .dashboard-content:has(.rt-panel) {
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+    padding: 6px 8px;
+  }
+
+  .orders-app .dashboard-content:has(.rt-panel) .dashboard-topbar {
+    min-height: 34px;
+    gap: 6px;
+    padding-bottom: 4px;
+  }
+
+  .orders-app .dashboard-content:has(.rt-panel) .segment-switch {
+    padding: 2px;
+  }
+
+  .orders-app .dashboard-content:has(.rt-panel) .segment-switch button,
+  .orders-app .dashboard-content:has(.rt-panel) .session-actions a,
+  .orders-app .dashboard-content:has(.rt-panel) .session-actions button {
+    min-height: 28px;
+    padding-inline: 9px;
+    font-size: 11px;
+  }
+
+  .orders-app .dashboard-content:has(.rt-panel) .segment-switch button > svg {
+    width: 15px;
+    height: 15px;
+  }
+
+  .orders-app .dashboard-content:has(.rt-panel) .session-avatar {
+    width: 28px;
+    height: 28px;
+    flex-basis: 28px;
+  }
+
+  .orders-app .rt-panel {
+    min-height: 0;
+    flex: 1 1 auto;
+    gap: 6px;
+    margin-top: 4px;
+    font-size: 13px;
+  }
+
+  .orders-app .rt-toolbar {
+    flex: 0 0 auto;
+    flex-wrap: nowrap;
+    gap: 6px;
+    border-radius: 10px;
+    padding: 5px 6px;
+  }
+
+  .orders-app .rt-range {
+    flex: 0 0 auto;
+    flex-wrap: nowrap;
+    gap: 2px;
+    padding: 2px 2px 2px 7px;
+  }
+
+  .orders-app .rt-range > svg,
+  .orders-app .rt-search svg,
+  .orders-app .rt-button svg {
+    width: 15px;
+    height: 15px;
+  }
+
+  .orders-app .rt-range button {
+    min-height: 30px;
+    padding-inline: clamp(7px, 0.75vw, 11px);
+    font-size: 12px;
+  }
+
+  .orders-app .rt-search {
+    min-width: 180px;
+    min-height: 34px;
+    padding-inline: 9px;
+  }
+
+  .orders-app .rt-search input {
+    font-size: 13px;
+  }
+
+  .orders-app .rt-toolbar > .rt-export {
+    width: 34px;
+    min-width: 34px;
+    min-height: 34px;
+    padding: 0;
+  }
+
+  .orders-app .rt-export span {
+    display: none;
+  }
+
+  .orders-app .rt-summary {
+    flex: 0 0 auto;
+    gap: 6px;
+  }
+
+  .orders-app .rt-stat {
+    gap: 0;
+    border-radius: 10px;
+    padding: 7px 11px;
+  }
+
+  .orders-app .rt-stat span,
+  .orders-app .rt-stat small {
+    font-size: 11px;
+  }
+
+  .orders-app .rt-stat strong,
+  .orders-app .rt-stat-period strong {
+    font-size: 18px;
+    line-height: 1.15;
+  }
+
+  .orders-app .rt-alert {
+    flex: 0 0 auto;
+    gap: 7px;
+    border-radius: 9px;
+    padding: 5px 9px;
+    font-size: 12px;
+  }
+
+  .orders-app .rt-alert svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .orders-app .rt-alert button {
+    min-height: 28px;
+    padding-inline: 10px;
+    font-size: 12px;
+  }
+
+  .orders-app .rt-phases {
+    flex: 0 0 auto;
+    gap: 6px;
+  }
+
+  .orders-app .rt-phases button {
+    min-height: 44px;
+    gap: 8px;
+    border-radius: 9px;
+    padding: 6px 11px;
+  }
+
+  .orders-app .rt-phases button > span {
+    font-size: 14px;
+  }
+
+  .orders-app .rt-phases button > span svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  .orders-app .rt-phases small {
+    display: none;
+  }
+
+  .orders-app .rt-phases strong {
+    font-size: 20px;
+  }
+
+  .orders-app .rt-workspace {
+    min-height: 160px;
+    flex: 1 1 0;
+    grid-template-columns: minmax(300px, 370px) minmax(0, 1fr);
+    border-radius: 11px;
+  }
+
+  .orders-app .rt-list-head {
+    gap: 6px;
+    padding: 8px 10px;
+  }
+
+  .orders-app .rt-list-head h2 {
+    font-size: 16px;
+  }
+
+  .orders-app .rt-list-head p {
+    font-size: 11px;
+  }
+
+  .orders-app .rt-segment {
+    padding: 2px;
+  }
+
+  .orders-app .rt-segment button {
+    min-height: 28px;
+    gap: 4px;
+    font-size: 11px;
+  }
+
+  .orders-app .rt-segment button b {
+    min-width: 18px;
+    padding-inline: 5px;
+    font-size: 10px;
+  }
+
+  .orders-app .rt-cards {
+    gap: 5px;
+    padding: 7px;
+  }
+
+  .orders-app .rt-card {
+    gap: 3px;
+    border-radius: 9px;
+    padding: 8px 10px;
+  }
+
+  .orders-app .rt-card-top strong,
+  .orders-app .rt-card-top b {
+    font-size: 13px;
+  }
+
+  .orders-app .rt-card-meta,
+  .orders-app .rt-card-foot,
+  .orders-app .rt-card .rt-card-address {
+    font-size: 11px;
+  }
+
+  .orders-app .rt-card-address svg {
+    width: 13px;
+    height: 13px;
+  }
+
+  .orders-app .rt-pill {
+    min-height: 20px;
+    padding-inline: 7px;
+    font-size: 10px;
+  }
+
+  .orders-app .rt-detail-body {
+    padding: 14px 18px;
+  }
+
+  .orders-app .rt-detail-head h2 {
+    font-size: 21px;
+  }
+
+  .orders-app .rt-customer {
+    gap: 10px;
+    margin-top: 10px;
+    padding: 9px 11px;
+  }
+
+  .orders-app .rt-avatar {
+    width: 38px;
+    height: 38px;
+    font-size: 13px;
+  }
+
+  .orders-app .rt-customer-info strong {
+    font-size: 15px;
+  }
+
+  .orders-app .rt-customer-info span,
+  .orders-app .rt-chip {
+    font-size: 12px;
+  }
+
+  .orders-app .rt-lines {
+    margin-top: 11px;
+    font-size: 13px;
+  }
+
+  .orders-app .rt-lines thead th,
+  .orders-app .rt-lines tbody th,
+  .orders-app .rt-lines tbody td {
+    padding: 8px 10px;
+  }
+
+  .orders-app .rt-actionbar {
+    padding: 7px 14px;
+  }
+}
+
+@media (min-width: 1101px) and (max-width: 1450px) {
+  .orders-app .dashboard-content:has(.rt-panel) .session-copy {
+    display: none;
+  }
+}

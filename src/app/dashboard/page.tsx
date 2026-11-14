@@ -2,6 +2,8 @@ import { requireViewer } from "@/lib/auth/viewer";
 import { hasSupabaseEnvironment } from "@/lib/supabase/config";
 import { createClient } from "@/lib/supabase/server";
 import { normalizeProductName, parseOrderText } from "@/lib/orders/product-parser";
+import { loadRetailCatalog } from "@/lib/orders/retail-agent";
+import { retailCatalogPrice } from "@/lib/orders/retail-normalization";
 
 import "../auth.css";
 import { OrdersPanel } from "./orders-panel";
@@ -85,7 +87,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     `)
     .order("received_at", { ascending: false });
   if (viewer.customerType) query = query.eq("customer_type", viewer.customerType);
-  const { data: rows, error: ordersError } = await query;
+  const [{ data: rows, error: ordersError }, retailCatalog] = await Promise.all([query, loadRetailCatalog()]);
 
   const orders: Order[] = ordersError
     ? []
@@ -100,16 +102,24 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         const submittedBusiness = typeof submittedCustomer?.business_name === "string" && submittedCustomer.business_name.trim() ? submittedCustomer.business_name.trim() : undefined;
         const submittedPhone = typeof submittedCustomer?.phone === "string" && submittedCustomer.phone.trim() ? submittedCustomer.phone.trim() : undefined;
         const submittedAddress = cleanAddress(submittedCustomer?.address);
-        const storedItems = (row.order_items ?? []).map((item) => ({
-          id: String(item.id),
-          productName: item.product_name,
-          quantity: Number(item.quantity),
-          unit: item.unit,
-          actualQuantity: item.actual_quantity == null ? undefined : Number(item.actual_quantity),
-          preparation: item.preparation ?? undefined,
-          notes: item.notes ?? undefined,
-          unitPrice: Number(item.unit_price),
-        }));
+        const storedItems = (row.order_items ?? []).map((item) => {
+          const storedPrice = Number(item.unit_price);
+          const catalogPrice = row.customer_type === "retail"
+            ? retailCatalogPrice(item.product_name, item.unit, retailCatalog)
+            : undefined;
+          return {
+            id: String(item.id),
+            productName: catalogPrice?.product.name ?? item.product_name,
+            quantity: Number(item.quantity),
+            unit: catalogPrice?.unit ?? item.unit,
+            actualQuantity: item.actual_quantity == null ? undefined : Number(item.actual_quantity),
+            preparation: item.preparation ?? undefined,
+            notes: item.notes ?? undefined,
+            // El precio guardado conserva la cotización del pedido; el catálogo
+            // vigente completa únicamente líneas que llegaron sin precio.
+            unitPrice: storedPrice > 0 ? storedPrice : catalogPrice?.amount ?? 0,
+          };
+        });
         const reparsedItems = row.customer_type === "wholesale" && typeof formData?.order_text === "string"
           ? parseOrderText(formData.order_text)
           : [];
@@ -181,5 +191,5 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         };
       });
 
-  return <OrdersPanel initialOrders={orders} viewer={viewer} loadError={ordersError ? "No se pudieron cargar los pedidos. Intenta nuevamente." : undefined} />;
+  return <OrdersPanel initialOrders={orders} retailCatalog={retailCatalog} viewer={viewer} loadError={ordersError ? "No se pudieron cargar los pedidos. Intenta nuevamente." : undefined} />;
 }

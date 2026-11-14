@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { matchRetailProduct, normalizeRetailItems, requiresRetailHelp } from "../src/lib/orders/retail-normalization.ts";
+import { matchRetailProduct, normalizeRetailItems, requiresRetailHelp, retailCatalogPrice } from "../src/lib/orders/retail-normalization.ts";
 
 const catalog = [
   { id: "pulpa", name: "Pulpa", catalogKey: "cerdo:pulpa", pricePerKg: 22_000 },
@@ -62,6 +62,24 @@ test("aplica la regla de carne molida a los datos estructurados del agente", () 
     { id: item.product_id, name: item.product_name, quantity: item.quantity, price: item.unit_price },
     { id: "molida", name: "Molida súper especial", quantity: 2, price: 23_000 },
   );
+});
+
+test("usa Carne blanda y su precio minorista para carne para desmechar", () => {
+  const extendedCatalog = [
+    ...catalog,
+    { id: "blanda", name: "Carne blanda", catalogKey: "res:carne blanda", pricePerKg: 34_000 },
+  ];
+  const [item] = normalizeRetailItems([], "10 mil de carne para desmechar", extendedCatalog);
+
+  assert.deepEqual(
+    { id: item.product_id, name: item.product_name, price: item.unit_price },
+    { id: "blanda", name: "Carne blanda", price: 34_000 },
+  );
+  assert.deepEqual(retailCatalogPrice("Carne para desmechar", "kg", extendedCatalog), {
+    product: extendedCatalog.at(-1),
+    amount: 34_000,
+    unit: "kg",
+  });
 });
 
 test("entiende pesos después del producto y conserva cantidades por unidad", () => {
