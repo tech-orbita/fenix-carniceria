@@ -26,6 +26,10 @@ function highLevelContext(sourcePayload: unknown): HighLevelContext {
   return { contactId: value("contact_id") ?? value("contactId"), locationId: value("location_id") ?? value("locationId"), conversationId: value("conversation_id") ?? value("conversationId") };
 }
 
+function isStandaloneHelpRequest(sourcePayload: unknown) {
+  return Boolean(sourcePayload && typeof sourcePayload === "object" && (sourcePayload as Record<string, unknown>).helpWithoutOrder === true);
+}
+
 function pipelineStageFor(status: OrderStatus): OrderPipelineStage | undefined {
   if (["received", "quoted", "confirmed"].includes(status)) return "order_placed";
   if (["preparing", "ready"].includes(status)) return "preparing";
@@ -125,11 +129,54 @@ export async function resolveOrderHelp(orderId: string) {
   const supabase = await sessionClient();
   const { data: current, error: currentError } = await supabase
     .from("orders")
-    .select("id,status,order_number,customer_type,source_payload,total,customers(name,business_name)")
+    .select("id,status,order_number,customer_id,customer_type,source_payload,total,customers(name,business_name)")
     .eq("id", Number(orderId))
     .maybeSingle();
   if (currentError || !current || !["incident", "needs_review"].includes(current.status)) {
     return { ok: false as const, message: "El pedido ya no está en Requiere ayuda." };
+  }
+
+  // Las alertas creadas por el chat no son pedidos. Al resolverlas se cierran
+  // y, si hay un pedido operativo del cliente, el pipeline vuelve a su etapa.
+  if (isStandaloneHelpRequest(current.source_payload)) {
+    const { data: operationalOrder } = await supabase
+      .from("orders")
+      .select("order_number,status,total")
+      .eq("customer_id", current.customer_id)
+      .eq("customer_type", current.customer_type)
+      .neq("id", current.id)
+      .not("status", "in", '("incident","needs_review","cancelled")')
+      .order("received_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const { data: closed, error: closeError } = await supabase
+      .from("orders")
+      .update({ status: "cancelled" })
+      .eq("id", Number(orderId))
+      .eq("status", current.status)
+      .select("id")
+      .maybeSingle();
+    if (closeError || !closed) return { ok: false as const, message: "No se pudo marcar el caso como solucionado." };
+
+    const stage = operationalOrder ? pipelineStageFor(operationalOrder.status as OrderStatus) : undefined;
+    if (!operationalOrder || !stage) {
+      revalidatePath("/dashboard");
+      return { ok: true as const, status: "cancelled" as const, message: "Solicitud de ayuda solucionada." };
+    }
+    const customer = Array.isArray(current.customers) ? current.customers[0] : current.customers;
+    const synced = await syncOrderPipeline(
+      highLevelContext(current.source_payload),
+      current.customer_type,
+      stage,
+      `${customer?.name || "Cliente"} · ${operationalOrder.order_number}`,
+      Number(operationalOrder.total),
+    );
+    revalidatePath("/dashboard");
+    return {
+      ok: true as const,
+      status: "cancelled" as const,
+      message: synced.ok ? "Solicitud solucionada; el pedido permaneció intacto." : `Solicitud solucionada, pero no se pudo restaurar el pipeline: ${synced.message}`,
+    };
   }
 
   const { data: history } = await supabase

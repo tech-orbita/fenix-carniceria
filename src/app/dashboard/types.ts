@@ -46,5 +46,6 @@ export type Order = {
   items: OrderItem[];
   formData?: { form: string; order_text: string; tax_id?: string; billing?: string; maps_url?: string; receiver_phone?: string; payment_proof?: string; contact_id?: string; location_id?: string; conversation_id?: string; conversation_url?: string };
   highLevel?: { contactId?: string; locationId?: string; conversationId?: string; conversationUrl?: string };
+  helpRequest?: boolean;
   notes?: string;
 };

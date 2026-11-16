@@ -187,6 +187,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             conversationId: formData?.conversation_id ?? sourcePayload.conversationId,
             conversationUrl: formData?.conversation_url ?? sourcePayload.conversationUrl,
           },
+          helpRequest: sourcePayload.helpWithoutOrder === true,
           notes: row.notes ?? undefined,
         };
       });

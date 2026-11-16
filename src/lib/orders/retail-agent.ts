@@ -352,6 +352,18 @@ export async function flagRetailHelpRequest(value: unknown) {
   }
 
   const supabase = createAdminClient();
+  const sourceReference = body.sourceEventId ? `ghl:retail-help:${body.sourceEventId}` : null;
+  if (sourceReference) {
+    const { data: duplicate, error: duplicateError } = await supabase
+      .from("orders")
+      .select("id,order_number")
+      .eq("source", "agent")
+      .eq("source_reference", sourceReference)
+      .maybeSingle();
+    if (duplicateError) return NextResponse.json({ error: "Could not verify duplicate retail help request" }, { status: 500 });
+    if (duplicate) return NextResponse.json({ ok: true, ...duplicate, adjusted: false, duplicate: true });
+  }
+
   const identityKey = customerIdentityKey("retail", { name: String(body.customer?.name ?? "Cliente WhatsApp"), phone });
   const { data: customer, error: customerError } = await supabase.from("customers").upsert({
     customer_type: "retail",
@@ -361,7 +373,6 @@ export async function flagRetailHelpRequest(value: unknown) {
   }, { onConflict: "customer_type,identity_key" }).select("id,name").single();
   if (customerError || !customer) return NextResponse.json({ error: "Could not save customer" }, { status: 500 });
 
-  const openOrder = await findCurrentOrder(customer.id);
   const sourcePayload = {
     source: "agent",
     locationId: body.locationId ?? null,
@@ -369,19 +380,20 @@ export async function flagRetailHelpRequest(value: unknown) {
     conversationId: body.conversationId ?? null,
     sourceEventId: body.sourceEventId ?? null,
     helpReason: reason,
+    helpWithoutOrder: true,
   };
-  const result = openOrder
-    ? await supabase.from("orders").update({ status: "incident", notes: reason, source_payload: sourcePayload }).eq("id", openOrder.id).select("id,order_number").single()
-    : await supabase.from("orders").insert({
-        customer_type: "retail",
-        customer_id: customer.id,
-        source: "agent",
-        source_reference: body.sourceEventId ? `ghl:retail-help:${body.sourceEventId}` : null,
-        source_payload: sourcePayload,
-        status: "incident",
-        fulfillment_type: "delivery",
-        notes: reason,
-      }).select("id,order_number").single();
+  // La alerta vive en una fila independiente y sin productos. Un comprobante
+  // nunca cambia el estado, las notas ni los metadatos del pedido operativo.
+  const result = await supabase.from("orders").insert({
+    customer_type: "retail",
+    customer_id: customer.id,
+    source: "agent",
+    source_reference: sourceReference,
+    source_payload: sourcePayload,
+    status: "incident",
+    fulfillment_type: "delivery",
+    notes: reason,
+  }).select("id,order_number").single();
   if (result.error || !result.data) return NextResponse.json({ error: "Could not register help request" }, { status: 500 });
 
   const highLevelContext = { contactId: body.contactId, locationId: body.locationId, conversationId: body.conversationId };
@@ -393,10 +405,11 @@ export async function flagRetailHelpRequest(value: unknown) {
     ok: true,
     id: result.data.id,
     order_number: result.data.order_number,
-    adjusted: Boolean(openOrder),
+    adjusted: false,
+    duplicate: false,
     pipeline_synced: pipeline.ok,
     pipeline_message: pipeline.ok ? undefined : pipeline.message,
     tag_synced: tag.ok,
     tag_message: tag.ok ? undefined : tag.message,
-  }, { status: openOrder ? 200 : 201 });
+  }, { status: 201 });
 }

@@ -86,8 +86,8 @@ La app busca el pipeline `Minoristas` y estas etapas por nombre: `Realizo Pedido
 - Cuando el agente registra un pedido nuevo, la oportunidad se crea o mueve a **Realizo Pedido**.
 - Los botones **En preparación**, **Despachados** y **Requiere ayuda** mueven la oportunidad a la etapa equivalente.
 - **Marcar como pagado** mueve a **Pago** y **Marcar pendiente** mueve a **Pendiente por Pago**.
-- Las solicitudes de atención del agente llegan a `/api/webhooks/ghl/help-requests`, aparecen en **Requiere ayuda** y mueven allí la oportunidad.
-- Los comprobantes, soportes o recibos de pago enviados por el chat deben invocar ese mismo endpoint con el motivo `El cliente envió un comprobante de pago para validar`. El flujo visual los distingue de una lista de mercado para que no se registren como productos.
+- Las solicitudes de atención del agente llegan a `/api/webhooks/ghl/help-requests`, aparecen en **Requiere ayuda** y mueven allí la oportunidad. Siempre se guardan como una alerta independiente y sin productos; si el cliente tiene un pedido operativo, su estado, notas, productos y metadatos permanecen intactos.
+- Los comprobantes, soportes o recibos de pago enviados por el chat deben invocar ese mismo endpoint con el motivo `El cliente envió un comprobante de pago para validar`. El flujo visual los distingue de una lista de mercado para que no se registren como productos. `sourceEventId` evita alertas duplicadas.
 - Si la actualización local se guarda pero HighLevel falla, el panel muestra la advertencia sin perder el cambio del pedido.
 
 La personalidad, el registro único del cliente y el workflow que marca `Registro Minorista Completo` están documentados en [agente-minorista.md](agente-minorista.md). Mantener `SEND_CONFIRMATION=false` en n8n evita que el agente y el flujo envíen dos confirmaciones por el mismo cambio.
