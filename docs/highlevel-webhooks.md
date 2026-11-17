@@ -28,13 +28,13 @@ El parser también acepta el payload nativo anidado de HighLevel (`contact.id`, 
 `conversation.id` y arreglos de `customData`/`customFields`). Aun así, el workflow debe enviar los
 campos del formulario con sus etiquetas o con las claves estables de la tabla anterior.
 
-`Nuevo Mayorista` exige negocio, NIT, teléfono, nombre, dirección y texto del pedido. Crea el cliente cuando no existe y actualiza su ficha cuando el establecimiento ya está registrado. `Cliente Mayorista` exige establecimiento, teléfono y texto del pedido; debe encontrar primero una ficha creada por `Nuevo Mayorista` y reutiliza sus datos sin sobrescribirlos con el formulario corto. Si no encuentra el establecimiento, responde 422 indicando que se debe usar `Nuevo Mayorista`.
+`Nuevo Mayorista` normalmente envía negocio, NIT, teléfono, nombre, dirección y texto del pedido. Crea el cliente cuando no existe y actualiza su ficha cuando el establecimiento ya está registrado. `Cliente Mayorista` reutiliza la ficha registrada cuando encuentra el establecimiento; si no existe, crea una ficha provisional en `Sin clasificar` para que el pedido nunca se pierda. Un envío incompleto o sin texto de pedido también se conserva y aparece en `Requiere ayuda` con un renglón Comodín para que el equipo pueda completarlo.
 
 El establecimiento identifica al mayorista; el teléfono es un dato de contacto y puede coincidir entre negocios sin mezclarlos. Por eso el nombre del establecimiento debe escribirse igual en los dos formularios.
 
 No usar el ID de contacto como submission_id: el mismo contacto puede hacer varios pedidos. Con un identificador de envío se rechazan duplicados con 409; sin él, cada petición crea un pedido nuevo.
 
-El texto libre queda íntegro en el detalle y la comanda, sin inventar productos, pesos o precios. La ruta no se toma del formulario: se asigna manualmente en la planilla y queda guardada para pedidos futuros del establecimiento. El comprobante se muestra como enlace y no acredita el pago. La app no descarga archivos externos. El original del webhook se conserva en `orders.source_payload.form_data.original_payload`.
+El texto libre queda íntegro en el detalle y la comanda, sin inventar productos, pesos o precios. Cada fragmento que no coincida con el catálogo se guarda en Comodín en vez de descartarse. La ruta no se toma del formulario: se asigna manualmente en la planilla y queda guardada para pedidos futuros del establecimiento. El comprobante se muestra como enlace y no acredita el pago. La app no descarga archivos externos. El original del webhook se conserva en `orders.source_payload.form_data.original_payload`.
 
 El panel mayorista permite crear pedidos manuales sin teléfono. Es el canal recomendado cuando el equipo de Fénix está transcribiendo los pedidos; el formulario queda como canal alternativo para pedidos enviados desde HighLevel.
 

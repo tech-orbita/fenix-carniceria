@@ -129,10 +129,7 @@ export async function ingestOrder(body: IngestBody) {
   if (existingCustomerError) {
     return NextResponse.json({ error: "Could not look up customer" }, { status: 500 });
   }
-  const usesExistingWholesaleCustomer = isExistingWholesaleCustomerOrder(body);
-  if (usesExistingWholesaleCustomer && !existingCustomer) {
-    return NextResponse.json({ error: "Mayorista no registrado; use el formulario Nuevo Mayorista" }, { status: 422 });
-  }
+  const usesExistingWholesaleCustomer = isExistingWholesaleCustomerOrder(body) && Boolean(existingCustomer);
   const normalizedBody = usesExistingWholesaleCustomer
     ? { ...body, customer: existingWholesaleCustomerPayload(body.customer, existingCustomer!) }
     : body;
@@ -173,7 +170,9 @@ export async function ingestOrder(body: IngestBody) {
     (total, item) => total + Number(item.quantity) * Number(item.unit_price ?? 0),
     0,
   );
-  const needsReview = normalizedBody.source === "agent" && (normalizedBody.confidence == null || normalizedBody.confidence < 0.9);
+  const missingFormOrder = normalizedBody.source === "form" && !normalizedBody.form_data?.order_text.trim();
+  const needsReview = missingFormOrder
+    || (normalizedBody.source === "agent" && (normalizedBody.confidence == null || normalizedBody.confidence < 0.9));
   const { data: order, error: orderError } = await supabase
     .from("orders")
     .insert({

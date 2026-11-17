@@ -71,10 +71,14 @@ export function mapHighLevelForm(value: unknown, form: WholesaleForm) {
     "Nombre del establecimiento comercial",
     "contact.nombre_del_negocio", "company_name", "contact.company_name", "companyName",
   ];
-  const business = get(...businessKeys);
-  const phone = get("phone", "Teléfono", "contact.phone");
-  const text = get("order_text", "Coloca tu Pedido", "coloca_tu_pedido", "Pedido", "pedido_mayorista");
-  if (!phone || !business || !text) throw new Error("Faltan establecimiento, teléfono o Coloca tu Pedido");
+  const submittedPhone = get("phone", "Teléfono", "contact.phone");
+  const submittedName = name || get("contact.name", "name");
+  // Nunca descartar un envío completo por un campo vacío. Los formularios de
+  // HighLevel pueden enviarse aunque un campo deje de estar marcado como
+  // obligatorio; el panel debe recibirlo y permitir que Fénix lo complete.
+  const business = get(...businessKeys) || submittedName || submittedPhone || "Mayorista sin identificar";
+  const phone = submittedPhone || "Sin teléfono";
+  const text = get("order_text", "Coloca tu Pedido", "coloca_tu_pedido", "Pedido", "pedido_mayorista") || "";
   const submission = get("submission_id", "submissionId", "event_id", "eventId", "formSubmissionId");
   const directAddress = typeof payload.address === "string" && payload.address.trim() ? payload.address.trim() : undefined;
   // `location.address` es la sede de Fénix, no la dirección del contacto. Priorizar
@@ -91,11 +95,20 @@ export function mapHighLevelForm(value: unknown, form: WholesaleForm) {
     "Agrega Dirección de Entrega",
   ) ?? directAddress;
   const taxId = get("tax_id", "Nit o Cédula", "Nit", "NIT");
-  if (form === "nuevo-mayorista" && (!name || !taxId || !customerAddress)) {
-    throw new Error("Nuevo Mayorista requiere nombre, NIT y dirección");
-  }
-  const parsedOrder = parseOrderTextDetailed(text);
+  const missingRegistrationFields = form === "nuevo-mayorista"
+    ? [!submittedName && "nombre", !taxId && "NIT", !customerAddress && "dirección"].filter(Boolean) as string[]
+    : [];
+  const parsedOrder = text.trim()
+    ? parseOrderTextDetailed(text)
+    : {
+        items: [{ product_name: "Comodín", quantity: 0, unit: "cantidad", preparation: "Pedido no especificado" }],
+        unresolved: ["Pedido no especificado"],
+      };
   const observations = get("observations", "Observaciones Adicionales");
+  const missingOrder = text.trim() ? undefined : "El formulario llegó sin texto en Coloca tu Pedido.";
+  const incompleteRegistration = missingRegistrationFields.length
+    ? `Registro incompleto: falta ${missingRegistrationFields.join(", ")}.`
+    : undefined;
   const clarification = parsedOrder.unresolved.length
     ? `Por aclarar en el pedido: ${parsedOrder.unresolved.join(" · ")}`
     : undefined;
@@ -104,12 +117,14 @@ export function mapHighLevelForm(value: unknown, form: WholesaleForm) {
     source_reference: submission ? `ghl:${form}:${submission}` : undefined,
     customer_type: "wholesale" as const,
     customer: {
-      name: form === "nuevo-mayorista" ? name! : business, phone: phone.replace(/[\s()-]/g, ""), business_name: business,
+      name: form === "nuevo-mayorista" ? submittedName || business : business,
+      phone: submittedPhone ? submittedPhone.replace(/[\s()-]/g, "") : phone,
+      business_name: business,
       tax_id: taxId, email: get("email", "contact.email"),
       address: customerAddress?.replace(/,\s*$/, ""),
     },
     fulfillment_type: "delivery" as const,
-    notes: [observations, clarification].filter(Boolean).join("\n") || undefined,
+    notes: [observations, missingOrder, incompleteRegistration, clarification].filter(Boolean).join("\n") || undefined,
     items: parsedOrder.items,
     form_data: {
       form, order_text: text, tax_id: taxId,

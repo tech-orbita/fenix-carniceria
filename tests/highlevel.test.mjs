@@ -50,15 +50,42 @@ test("ignora zona del formulario para que el pedido llegue sin clasificar", () =
   const order = mapHighLevelForm({ ...base, Zona: "Norte", zone: "Centro" }, "mayorista-cliente");
   assert.equal("route" in order, false);
 });
-test("rechaza payload incompleto y variables sin sustituir", () => {
-  assert.throws(() => mapHighLevelForm({}, "mayorista-cliente"));
-  assert.throws(() => mapHighLevelForm({ ...base, "Teléfono": "{{contact.phone}}" }, "mayorista-cliente"));
+test("conserva payloads incompletos y variables sin sustituir", () => {
+  const empty = mapHighLevelForm({}, "mayorista-cliente");
+  assert.equal(empty.customer.business_name, "Mayorista sin identificar");
+  assert.match(empty.notes, /sin texto/i);
+  const order = mapHighLevelForm({ ...base, "Teléfono": "{{contact.phone}}" }, "mayorista-cliente");
+  assert.equal(order.customer.phone, "Sin teléfono");
 });
 
-test("nuevo: exige el establecimiento que identifica al mayorista", () => {
+test("nuevo: usa el nombre como respaldo si falta el establecimiento", () => {
   const withoutBusiness = { ...base };
   delete withoutBusiness["Nombre del establecimiento comercial"];
-  assert.throws(() => mapHighLevelForm(withoutBusiness, "nuevo-mayorista"), /establecimiento/i);
+  const order = mapHighLevelForm(withoutBusiness, "nuevo-mayorista");
+  assert.equal(order.customer.business_name, "Ana");
+});
+
+test("nuevo: conserva el envío aunque Coloca tu Pedido esté vacío", () => {
+  const order = mapHighLevelForm({
+    "Nombre del Negocio": "Pizzeria Valparaíso",
+    "Nombre Completo": "Jazmín Escorcia",
+    "Nit o Cédula": "72.155.712",
+    "Teléfono": "+573046040213",
+    "Dirección": "Calle 53 # 52 - 02",
+  }, "nuevo-mayorista");
+  assert.equal(order.form_data.order_text, "");
+  assert.deepEqual(order.items, [{ product_name: "Comodín", quantity: 0, unit: "cantidad", preparation: "Pedido no especificado" }]);
+  assert.match(order.notes, /sin texto/i);
+});
+
+test("separa cantidades incrustadas aunque la frase no empiece por un número", () => {
+  const order = mapHighLevelForm({ ...base, "Coloca tu Pedido": "Medio capón 3 espaldilla 5 molida especial 3 costilla" }, "mayorista-cliente");
+  assert.deepEqual(order.items, [
+    { product_name: "Blanda", quantity: 0.5, unit: "cantidad", preparation: "C" },
+    { product_name: "Espaldilla", quantity: 3, unit: "cantidad" },
+    { product_name: "Molida especial", quantity: 5, unit: "cantidad" },
+    { product_name: "Costilla", quantity: 3, unit: "cantidad" },
+  ]);
 });
 
 test("cliente: reconoce la nueva etiqueta del establecimiento", () => {

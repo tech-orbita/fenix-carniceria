@@ -153,7 +153,7 @@ export function parseOrderTextDetailed(text: string): ParsedWholesaleOrder {
   const items: ParsedWholesaleItem[] = [];
   const unresolved: string[] = [];
 
-  const numberWords: Record<string, number> = { un: 1, uno: 1, una: 1, dos: 2, tres: 3, cuatro: 4, cinco: 5, seis: 6, siete: 7, ocho: 8, nueve: 9, diez: 10, once: 11, doce: 12, trece: 13, catorce: 14, quince: 15, veinte: 20 };
+  const numberWords: Record<string, number> = { medio: 0.5, media: 0.5, un: 1, uno: 1, una: 1, dos: 2, tres: 3, cuatro: 4, cinco: 5, seis: 6, siete: 7, ocho: 8, nueve: 9, diez: 10, once: 11, doce: 12, trece: 13, catorce: 14, quince: 15, veinte: 20 };
   const numericValue = (value: string) => String(numberWords[normalizeProductName(value)] ?? value);
 
   const preparationFor = (requestedName: string, catalogName?: string) => {
@@ -209,16 +209,22 @@ export function parseOrderTextDetailed(text: string): ParsedWholesaleOrder {
     addItem("0", undefined, requestedName, productValue, /\b(?:mucho|poco|varios|varias)\b/i.test(productValue));
   };
 
-  const quantityWord = "(?:un|uno|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce|trece|catorce|quince|veinte)";
+  const quantityWord = "(?:medio|media|un|uno|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce|trece|catorce|quince|veinte)";
+  const splitEmbeddedQuantities = (line: string) => {
+    // No partir expresiones válidas con el producto primero, como
+    // "molida especial 4 lib" o "Molida 3 bolsas".
+    const productFirst = line.match(new RegExp(`^(.+?)\\s+(?:\\d+(?:[.,]\\d+)?|${quantityWord})\\s*(${unit})\\b$`, "i"));
+    const productFirstWithoutUnit = line.match(new RegExp(`^(.+?)\\s+(?:\\d+(?:[.,]\\d+)?|${quantityWord})$`, "i"));
+    if (productFirst || (productFirstWithoutUnit && catalogProductFor(productFirstWithoutUnit[1]))) return [line];
+    return line.split(new RegExp(`\\s+(?=(?:\\d+(?:[.,]\\d+)?|${quantityWord})\\s)`, "i"));
+  };
   const chunks = normalized
-    .split(/[;\n]+/)
+    .split(/[;\n]+|[.!?](?:\s+|$)/)
     .flatMap((line) => line.split(/\s+y\s+/i))
     .flatMap((line) => line.split(/,(?!\d)/))
     // Un mismo campo puede traer todo el pedido corrido: cada nueva cantidad
     // abre un producto sin exigir saltos de línea ni comas.
-    .flatMap((line) => new RegExp(`^(?:\\d+(?:[.,]\\d+)?|${quantityWord})\\s`, "i").test(line.trim())
-      ? line.split(new RegExp(`\\s+(?=(?:\\d+(?:[.,]\\d+)?|${quantityWord})\\s)`, "i"))
-      : [line])
+    .flatMap(splitEmbeddedQuantities)
     .map((line) => line.replace(/^[\s\-*•]+/, "").trim())
     .filter(Boolean);
 
