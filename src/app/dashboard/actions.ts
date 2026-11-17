@@ -69,53 +69,48 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus) {
   }
 
   const pipelineStage = pipelineStageFor(status);
-  let message = "Estado actualizado.";
-  if (pipelineStage) {
-    const customer = Array.isArray(data.customers) ? data.customers[0] : data.customers;
-    const synced = await syncOrderPipeline(
+  const customer = Array.isArray(data.customers) ? data.customers[0] : data.customers;
+  const pipelinePromise = pipelineStage
+    ? syncOrderPipeline(
       highLevelContext(data.source_payload),
       data.customer_type,
       pipelineStage,
       `${customer?.name || "Cliente"} · ${data.order_number}`,
       Number(data.total),
-    );
-    if (!synced.ok) message = `Estado actualizado, pero no se pudo mover el pipeline: ${synced.message}`;
-  }
-
-  if (data.customer_type === "retail" && status === "dispatched") {
-    const customer = Array.isArray(data.customers) ? data.customers[0] : data.customers;
-    const sent = await sendHighLevelMessage(
+    )
+    : Promise.resolve({ ok: true as const, message: "" });
+  const notificationPromise = data.customer_type === "retail" && status === "dispatched"
+    ? sendHighLevelMessage(
       highLevelContext(data.source_payload),
       retailDispatchMessage({
         orderNumber: data.order_number,
         customer: customer?.name || "cliente",
         fulfillment: data.fulfillment_type === "pickup" ? "pickup" : "delivery",
       }),
-    );
-    if (!sent.ok) {
-      message = message === "Estado actualizado."
-        ? `Estado actualizado, pero no se pudo avisar al cliente: ${sent.message}`
-        : `${message} Tampoco se pudo avisar al cliente: ${sent.message}`;
-    } else if (message === "Estado actualizado.") {
-      message = "Estado actualizado y cliente notificado por WhatsApp.";
-    }
-  }
-
-  if (data.customer_type === "wholesale" && status === "dispatched") {
-    const customer = Array.isArray(data.customers) ? data.customers[0] : data.customers;
-    const sent = await sendHighLevelMessage(
+    )
+    : data.customer_type === "wholesale" && status === "dispatched"
+      ? sendHighLevelMessage(
       highLevelContext(data.source_payload),
       wholesaleDispatchMessage({
         orderNumber: data.order_number,
         customer: customer?.business_name || customer?.name || "cliente",
       }),
-    );
+      )
+      : Promise.resolve({ ok: true as const, message: "" });
+  const [synced, sent] = await Promise.all([pipelinePromise, notificationPromise]);
+
+  let message = synced.ok
+    ? "Estado actualizado."
+    : `Estado actualizado, pero no se pudo mover el pipeline: ${synced.message}`;
+  if (status === "dispatched") {
     if (!sent.ok) {
       message = message === "Estado actualizado."
         ? `Estado actualizado, pero no se pudo avisar al cliente: ${sent.message}`
         : `${message} Tampoco se pudo avisar al cliente: ${sent.message}`;
     } else if (message === "Estado actualizado.") {
-      message = "Estado actualizado y cliente mayorista notificado por WhatsApp.";
+      message = data.customer_type === "wholesale"
+        ? "Estado actualizado y cliente mayorista notificado por WhatsApp."
+        : "Estado actualizado y cliente notificado por WhatsApp.";
     }
   }
 
@@ -511,6 +506,49 @@ export async function updateWholesaleRoute(orderId: string, routeName: string) {
   if (orderUpdate.error || customerUpdate.error) return { ok: false as const, message: "No se pudo guardar la ruta." };
   revalidatePath("/dashboard");
   return { ok: true as const, message: "Ruta guardada." };
+}
+
+export async function deleteWholesaleOrder(orderId: string) {
+  if (!/^\d+$/.test(orderId)) return { ok: false as const, message: "Pedido inválido." };
+  const supabase = await sessionClient();
+  const { data, error } = await supabase
+    .from("orders")
+    .delete()
+    .eq("id", Number(orderId))
+    .eq("customer_type", "wholesale")
+    .select("order_number")
+    .maybeSingle();
+  if (error || !data) return { ok: false as const, message: "No se pudo eliminar el pedido." };
+  revalidatePath("/");
+  revalidatePath("/dashboard");
+  return { ok: true as const, message: `${data.order_number} fue eliminado.` };
+}
+
+export async function setWholesaleProductPrepared(orderId: string, productName: string, prepared: boolean) {
+  if (!/^\d+$/.test(orderId) || !productName.trim() || productName.length > 120 || typeof prepared !== "boolean") {
+    return { ok: false as const, message: "Producto o pedido inválido." };
+  }
+  const supabase = await sessionClient();
+  const { data: order, error: orderError } = await supabase
+    .from("orders")
+    .select("id")
+    .eq("id", Number(orderId))
+    .eq("customer_type", "wholesale")
+    .maybeSingle();
+  if (orderError || !order) return { ok: false as const, message: "No se encontró el pedido mayorista." };
+
+  const { data: items, error: itemsError } = await supabase
+    .from("order_items")
+    .select("id,product_name,preparation")
+    .eq("order_id", Number(orderId));
+  if (itemsError) return { ok: false as const, message: "No se pudieron consultar los productos." };
+  const matchingIds = (items ?? []).filter((item) => sameProduct(item, productName)).map((item) => item.id);
+  if (!matchingIds.length) return { ok: false as const, message: "Ese producto ya no está en el pedido." };
+
+  const { error } = await supabase.from("order_items").update({ is_prepared: prepared }).in("id", matchingIds).eq("order_id", Number(orderId));
+  if (error) return { ok: false as const, message: "No se pudo cambiar el estado de alistamiento." };
+  revalidatePath("/dashboard");
+  return { ok: true as const, message: prepared ? "Producto marcado como alistado." : "Producto devuelto a pendiente." };
 }
 
 type OrderDetailsInput = {

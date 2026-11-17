@@ -57,7 +57,7 @@ export function whatsappUrl(phone: string, message: string) {
   return `https://wa.me/${international}?text=${encodeURIComponent(message)}`;
 }
 
-export type IconName = "address" | "calendar" | "chat" | "check" | "clock" | "copy" | "download" | "edit" | "filter" | "help" | "print" | "receipt" | "search" | "shop" | "truck" | "undo";
+export type IconName = "address" | "calendar" | "chat" | "check" | "clock" | "copy" | "download" | "edit" | "filter" | "help" | "print" | "receipt" | "search" | "shop" | "trash" | "truck" | "undo";
 
 export function Icon({ name }: { name: IconName }) {
   const paths = {
@@ -75,6 +75,7 @@ export function Icon({ name }: { name: IconName }) {
     receipt: <><path d="M5 3h14v18l-3-2-2 2-2-2-2 2-2-2-3 2Z" /><path d="M9 8h6M9 12h6M9 16h3" /></>,
     search: <><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></>,
     shop: <><path d="M4 10v11h16V10" /><path d="M3 10 5 3h14l2 7" /><path d="M8 21v-7h8v7" /></>,
+    trash: <><path d="M4 7h16" /><path d="m9 7 1-3h4l1 3" /><path d="m6 7 1 14h10l1-14" /><path d="M10 11v6M14 11v6" /></>,
     truck: <><path d="M3 6h11v10H3z" /><path d="M14 10h4l3 3v3h-7z" /><circle cx="7" cy="18" r="2" /><circle cx="17" cy="18" r="2" /></>,
     undo: <><path d="M9 7 4 12l5 5" /><path d="M4 12h9a7 7 0 0 1 7 7" /></>,
   };

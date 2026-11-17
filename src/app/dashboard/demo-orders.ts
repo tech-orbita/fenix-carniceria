@@ -27,8 +27,8 @@ export function demoOrders(): Order[] {
       receivedAt: `${today}T01:30:00-05:00`, address: "Centro, Barranquilla", route: "Centro", status: "received", total: 385000,
       notes: "Entregar antes de las 10 a. m.",
       items: [
-        { id: "9101", productName: "Blanda", quantity: 10, unit: "lb", preparation: "C", unitPrice: 0 },
-        { id: "9102", productName: "Blanda", quantity: 4, unit: "kg", preparation: "L", unitPrice: 0 },
+        { id: "9101", productName: "Blanda", quantity: 10, unit: "lb", preparation: "C", unitPrice: 0, prepared: true },
+        { id: "9102", productName: "Blanda", quantity: 4, unit: "kg", preparation: "L", unitPrice: 0, prepared: true },
         { id: "9103", productName: "Costilla cerdo", quantity: 8, unit: "kg", unitPrice: 0 },
       ],
       formData: { form: "mayorista-cliente", order_text: "10 lb capón, 4 kg lomo y 8 kg costilla de cerdo", billing: "Cuenta de cobro" },

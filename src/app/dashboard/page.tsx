@@ -82,7 +82,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         actual_quantity,
         preparation,
         notes,
-        unit_price
+        unit_price,
+        is_prepared
       )
     `)
     .order("received_at", { ascending: false });
@@ -118,6 +119,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             // El precio guardado conserva la cotización del pedido; el catálogo
             // vigente completa únicamente líneas que llegaron sin precio.
             unitPrice: storedPrice > 0 ? storedPrice : catalogPrice?.amount ?? 0,
+            prepared: item.is_prepared === true,
           };
         });
         const reparsedItems = row.customer_type === "wholesale" && typeof formData?.order_text === "string"
@@ -138,6 +140,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
               preparation: item.preparation,
               notes: item.notes,
               unitPrice: 0,
+              prepared: storedItems[index]?.prepared ?? false,
             }))
           : reparsedMatchesStored
             ? storedItems.map((item, index) => ({ ...item, displayUnit: reparsedItems[index].unit }))

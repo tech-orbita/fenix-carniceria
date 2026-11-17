@@ -22,6 +22,7 @@ export type OrderItem = {
   preparation?: string;
   notes?: string;
   unitPrice: number;
+  prepared?: boolean;
 };
 
 export type Order = {

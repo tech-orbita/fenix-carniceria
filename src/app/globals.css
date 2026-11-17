@@ -2101,9 +2101,9 @@ a {
     padding: 2mm 4mm 3mm;
     background: white;
     color: black;
-    font-family: "Courier New", monospace;
-    font-size: 14px;
-    line-height: 1.35;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 15px;
+    line-height: 1.4;
     overflow-wrap: anywhere;
     page-break-inside: avoid;
     page-break-before: avoid;
@@ -2189,8 +2189,8 @@ a {
 
   .ticket-line small {
     font-style: italic;
-    font-size: 13px;
-    line-height: 1.35;
+    font-size: 14px;
+    line-height: 1.4;
   }
 
   .ticket-total strong {
@@ -5504,11 +5504,56 @@ a {
   line-height: 1.1;
 }
 
-/* Al retirar Comentario, Ruta vuelve a ser la última columna informativa. */
-.orders-app .wholesale-matrix.with-order-info th:nth-child(3),
-.orders-app .wholesale-matrix.with-order-info td:nth-child(3) {
+/* Productos queda junto al cliente y Ruta es la cuarta columna informativa. */
+.orders-app .wholesale-matrix .product-count-column {
+  width: 68px;
+  min-width: 68px;
+  max-width: 68px;
+  text-align: center;
+}
+
+.orders-app .wholesale-matrix.with-order-info th:nth-child(4),
+.orders-app .wholesale-matrix.with-order-info td:nth-child(4) {
   width: 122px;
   min-width: 122px;
+}
+
+.orders-app .wholesale-matrix .matrix-quantity-cell.has-value:not(.is-editing) {
+  cursor: pointer;
+  touch-action: manipulation;
+  user-select: none;
+}
+
+.orders-app .wholesale-matrix tbody .matrix-quantity-cell.is-prepared,
+.orders-app .wholesale-matrix tbody tr:nth-child(odd) .matrix-quantity-cell.is-prepared,
+.orders-app .wholesale-matrix tbody tr:nth-child(even) .matrix-quantity-cell.is-prepared {
+  background: #137a42;
+  color: #fff;
+  box-shadow: inset 0 0 0 2px #075c2d;
+}
+
+.orders-app .wholesale-matrix .matrix-quantity-cell.is-prepared::after {
+  display: block;
+  margin-top: 2px;
+  content: "✓ ALISTADO";
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+}
+
+.orders-app .wholesale-matrix .matrix-quantity-cell.is-prepared-pending {
+  opacity: 0.65;
+}
+
+.orders-app .matrix-row-actions .delete-order-action {
+  border-color: #f0b1b1;
+  background: #fff1f1;
+  color: #a52828;
+}
+
+.orders-app .matrix-row-actions .delete-order-action:hover:not(:disabled) {
+  border-color: #c83b3b;
+  background: #ffe0e0;
 }
 
 /* Cartera ocupa el alto disponible y expone barras de desplazamiento claras. */
@@ -5573,10 +5618,11 @@ a {
   padding-block: 9px;
 }
 
-@media (max-width: 1180px) {
+@media (max-width: 1366px) {
   .orders-app .dashboard-content:has(.wholesale-workspace) .section-toolbar {
     align-items: stretch;
     flex-wrap: wrap;
+    overflow: visible;
   }
 
   .orders-app .dashboard-content:has(.wholesale-workspace) .table-filters,
@@ -5585,7 +5631,26 @@ a {
   }
 
   .orders-app .dashboard-content:has(.wholesale-workspace) .toolbar-actions {
-    justify-content: flex-end;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .orders-app .dashboard-content:has(.wholesale-workspace) .table-filters {
+    flex-wrap: wrap;
+  }
+
+  .orders-app .dashboard-content:has(.wholesale-workspace) .table-filters > *,
+  .orders-app .dashboard-content:has(.wholesale-workspace) .toolbar-actions > * {
+    min-height: 34px;
+  }
+
+  .orders-app .add-order-action {
+    position: static;
+    box-shadow: none;
+  }
+
+  .orders-app .dashboard-content:has(.wholesale-workspace) .matrix-scroll-hint {
+    display: block;
   }
 }
 

@@ -6,12 +6,12 @@ export type WholesaleProduct = {
 };
 
 export const wholesaleProductCatalog: readonly WholesaleProduct[] = [
-  { category: "Res · cortes", name: "Blanda", aliases: ["carne blanda", "blanda", "capon", "capón", "lomo ancho", "lomo", "tetafulla", "tetafula", "calavera", "relajado", "relajada", "relado", "relada", "abierto", "abierta"] },
+  { category: "Res · cortes", name: "Blanda", aliases: ["carne blanda", "blanda", "capon", "capón", "lomo ancho", "lomo", "tetafulla", "tetafula", "calavera", "carabela", "caravela", "relajado", "relajada", "relado", "relada", "abierto", "abierta"] },
   { category: "Res · cortes", name: "Molida especial", aliases: ["molida especial", "carne molida especial", "carne molida", "molida"] },
   { category: "Res · cortes", name: "Espaldilla", aliases: ["espaldilla", "espaldi"] },
   { category: "Res · cortes", name: "Atravesado", aliases: ["pollo atravesado", "atravesado"] },
   { category: "Res · cortes", name: "Bollo", aliases: ["bollo"] },
-  { category: "Res · cortes", name: "Costilla", aliases: ["costilla de res", "costilla res", "costilla", "costillo"] },
+  { category: "Res · cortes", name: "Costilla", aliases: ["costilla de res", "costilla res", "costillitas", "costillita", "costilla", "costillo"] },
   { category: "Res · cortes", name: "Hueso", aliases: ["hueso de res", "hueso res", "hueso"] },
   { category: "Res · vísceras", name: "Hígado", aliases: ["higado", "hígado"] },
   { category: "Res · vísceras", name: "Corazón", aliases: ["corazon", "corazón"] },
@@ -24,8 +24,10 @@ export const wholesaleProductCatalog: readonly WholesaleProduct[] = [
   { category: "Cerdo", name: "Pulpa cerdo", aliases: ["pulpa de cerdo", "pulpa cerdo", "pulpa de cedo", "pulpa cedo"] },
   { category: "Cerdo", name: "Lomo cerdo", aliases: ["lomo de cerdo", "lomo cerdo", "cerdo lomo", "cerdo"] },
   { category: "Cerdo", name: "Pata cerdo", aliases: ["pata de cerdo", "pata cerdo", "cerdo pata"] },
-  { category: "Cerdo", name: "Costilla cerdo", aliases: ["costillas de cerdo", "costilla de cerdo", "costillas cerdo", "costilla cerdo"] },
+  { category: "Cerdo", name: "Costilla cerdo", aliases: ["costillitas de cerdo", "costillita de cerdo", "costillas de cerdo", "costilla de cerdo", "costillitas cerdo", "costillita cerdo", "costillas cerdo", "costilla cerdo"] },
   { category: "Cerdo", name: "Chuleta", aliases: ["chuleta"] },
+  { category: "Res · cortes", name: "Churrasco", aliases: ["churrascos", "churrasco"] },
+  { category: "Otros productos", name: "Chuleto", aliases: ["chuletos", "chuleto"] },
   { category: "Res · cortes", name: "Asado de Tira", aliases: ["asado de tira"] },
   { category: "Res · cortes", name: "Jarreton", aliases: ["jarreton", "jarretón"] },
   { category: "Res · cortes", name: "Jarrete", aliases: ["jarrete", "jarrtee"] },
@@ -40,7 +42,6 @@ export const wholesaleProductCatalog: readonly WholesaleProduct[] = [
   { category: "Pollo", name: "Hueso pollo", aliases: ["hueso de pollo", "hueso pollo"] },
   { category: "Pollo", name: "Pata pollo", aliases: ["pata de pollo", "pata pollo"] },
   { category: "Res · vísceras", name: "Rabo res", aliases: ["rabo de res", "rabo res", "rabo"] },
-  { category: "Cerdo", name: "Costillita", aliases: ["costillita"] },
   { category: "Res · cortes", name: "Hueso blanco", aliases: ["hueso blanco"] },
   { category: "Pollo", name: "Muslo colombina", aliases: ["muslo colombina", "colombina"] },
   { category: "Pollo", name: "Muslos de pollo", aliases: ["muslos de pollo", "muslo de pollo", "muslos pollo"] },
@@ -79,7 +80,7 @@ export function blandaIndicatorFor(value: string): BlandaIndicator | undefined {
   if (/(?:^| )capon(?: |$)/.test(normalized)) return "C";
   if (/(?:^| )lomos?(?: |$)/.test(normalized) && !/(?:fino|pinga)/.test(normalized)) return "L";
   if (/(?:^| )(?:tetafulla|tetafula)(?: |$)/.test(normalized)) return "T";
-  if (/(?:^| )calavera(?: |$)/.test(normalized)) return "B";
+  if (/(?:^| )(?:calavera|carabela|caravela)(?: |$)/.test(normalized)) return "B";
   if (/(?:^| )(?:relajado|relajada|abierto|abierta)(?: |$)/.test(normalized)) return "R";
   return undefined;
 }
@@ -211,6 +212,10 @@ export function parseOrderTextDetailed(text: string): ParsedWholesaleOrder {
 
   const quantityWord = "(?:medio|media|un|uno|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce|trece|catorce|quince|veinte)";
   const splitEmbeddedQuantities = (line: string) => {
+    // Una porción puede incluir su gramaje después del producto. Ese segundo
+    // número describe la misma línea ("3 porciones ... 350 gr"), no abre otro
+    // producto.
+    if (new RegExp(`^(?:\\d+(?:[.,]\\d+)?|${quantityWord})\\s+porciones?\\b`, "i").test(line)) return [line];
     // No partir expresiones válidas con el producto primero, como
     // "molida especial 4 lib" o "Molida 3 bolsas".
     const productFirst = line.match(new RegExp(`^(.+?)\\s+(?:\\d+(?:[.,]\\d+)?|${quantityWord})\\s*(${unit})\\b$`, "i"));
@@ -229,6 +234,12 @@ export function parseOrderTextDetailed(text: string): ParsedWholesaleOrder {
     .filter(Boolean);
 
   for (const chunk of chunks) {
+    const portionFirst = chunk.match(new RegExp(`^(\\d+(?:[.,]\\d+)?|${quantityWord})\\s+porciones?\\s+(?:de\\s+)?(.+)$`, "i"));
+    if (portionFirst) {
+      addItem(portionFirst[1], "porciones", portionFirst[2], chunk);
+      continue;
+    }
+
     const quantityFirst = chunk.match(new RegExp(`^(\\d+(?:[.,]\\d+)?|${quantityWord})\\s*(?:(${unit})\\b\\s*)?(?:de\\s+)?(.+)$`, "i"));
     if (quantityFirst) {
       addItem(quantityFirst[1], quantityFirst[2], quantityFirst[3], chunk);

@@ -10,6 +10,10 @@ export async function proxy(request: NextRequest) {
   // Sin credenciales solo se muestran datos ficticios del modo demostración.
   if (!hasSupabaseEnvironment()) return response;
   const pathname = request.nextUrl.pathname;
+  const isLocalDemo = process.env.NODE_ENV !== "production"
+    && pathname === "/dashboard"
+    && request.nextUrl.searchParams.get("demo") === "contacto";
+  if (isLocalDemo) return response;
   const isLogin = pathname === "/login";
   const isPublicAuthRoute = isLogin
     || pathname === "/recuperar-contrasena"

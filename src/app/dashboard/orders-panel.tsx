@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -11,7 +11,7 @@ import type { WholesaleProduct } from "@/lib/orders/product-parser";
 import { wholesaleServiceDay } from "@/lib/orders/wholesale-service-day";
 import { unassignedWholesaleRoute, wholesaleRouteLabel, wholesaleRoutes } from "@/lib/orders/wholesale-routes";
 
-import { createManualWholesaleOrder, findWholesaleCustomer, resolveOrderHelp, scheduleRetailOrder, scheduleWholesaleOrder, sendRetailPaymentSummary, updateOrderDetails, updateOrderPaymentStatus, updateOrderStatus, updateWholesalePayment, updateWholesaleRoute, updateWholesaleTable } from "./actions";
+import { createManualWholesaleOrder, deleteWholesaleOrder, findWholesaleCustomer, resolveOrderHelp, scheduleRetailOrder, scheduleWholesaleOrder, sendRetailPaymentSummary, setWholesaleProductPrepared, updateOrderDetails, updateOrderPaymentStatus, updateOrderStatus, updateWholesalePayment, updateWholesaleRoute, updateWholesaleTable } from "./actions";
 import { addDays, bogotaDay, dateTime, dayLabel, Icon, phaseLabels, phaseStatus } from "./panel-shared";
 import type { OperationalPhase } from "./panel-shared";
 import { RetailPanel } from "./retail-panel";
@@ -25,17 +25,24 @@ import type { Viewer } from "@/lib/auth/viewer";
 const quantityFormat = new Intl.NumberFormat("es-CO", { maximumFractionDigits: 3, useGrouping: false });
 const money = new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 });
 
+function itemMatchesProduct(item: Order["items"][number], product: WholesaleProduct) {
+  const storedCatalog = catalogProductFor(item.productName);
+  const productCatalog = catalogProductFor(product.name);
+  const itemLabel = storedCatalog?.name === "Comodín" && item.preparation ? item.preparation : item.productName;
+  const itemCatalog = storedCatalog?.name === "Comodín" ? catalogProductFor(itemLabel) ?? storedCatalog : storedCatalog;
+  return product.name === "Comodín"
+    ? itemCatalog?.name === "Comodín" && !item.preparation
+    : productCatalog && productCatalog.name !== "Comodín"
+      ? itemCatalog?.name === productCatalog.name
+      : normalizeProductName(itemLabel) === normalizeProductName(product.name);
+}
+
+function productItems(order: Order, product: WholesaleProduct) {
+  return order.items.filter((item) => itemMatchesProduct(item, product));
+}
+
 function productAmounts(order: Order, product: WholesaleProduct, into = new Map<string, number>()) {
-  order.items.forEach((item) => {
-    const itemCatalog = catalogProductFor(item.productName);
-    const productCatalog = catalogProductFor(product.name);
-    const itemLabel = itemCatalog?.name === "Comodín" && item.preparation ? item.preparation : item.productName;
-    const matches = product.name === "Comodín"
-      ? itemCatalog?.name === "Comodín" && !item.preparation
-      : productCatalog && productCatalog.name !== "Comodín"
-        ? itemCatalog?.name === productCatalog.name
-        : normalizeProductName(itemLabel) === normalizeProductName(product.name);
-    if (!matches) return;
+  productItems(order, product).forEach((item) => {
     const quantity = item.actualQuantity ?? item.quantity;
     const unit = item.displayUnit ?? item.unit;
     const detail = item.preparation?.trim() ?? "";
@@ -69,9 +76,10 @@ function productQuantity(order: Order, product: WholesaleProduct) {
 function productTotal(orders: Order[], product: WholesaleProduct) {
   const totals = new Map<string, number>();
   orders.forEach((order) => order.items.forEach((item) => {
-    const itemCatalog = catalogProductFor(item.productName);
+    const storedCatalog = catalogProductFor(item.productName);
     const productCatalog = catalogProductFor(product.name);
-    const itemLabel = itemCatalog?.name === "Comodín" && item.preparation ? item.preparation : item.productName;
+    const itemLabel = storedCatalog?.name === "Comodín" && item.preparation ? item.preparation : item.productName;
+    const itemCatalog = storedCatalog?.name === "Comodín" ? catalogProductFor(itemLabel) ?? storedCatalog : storedCatalog;
     const matches = product.name === "Comodín"
       ? itemCatalog?.name === "Comodín" && !item.preparation
       : productCatalog && productCatalog.name !== "Comodín"
@@ -159,6 +167,15 @@ function FormSubmissionDialog({ order, onClose }: { order: Order; onClose: () =>
   </div>;
 }
 
+function FormSubmissionAction({ order }: { order: Order }) {
+  const [open, setOpen] = useState(false);
+  if (!order.formData?.order_text) return null;
+  return <>
+    <button aria-label={`Ver formulario original de ${order.orderNumber}`} className="form-source-link row-icon-action tooltip-icon-action" data-tooltip="Formulario original" onClick={() => setOpen(true)} type="button"><Icon name="receipt" /><span className="sr-only">Ver formulario original</span></button>
+    {open && <FormSubmissionDialog onClose={() => setOpen(false)} order={order} />}
+  </>;
+}
+
 function FilterMenu({ label, options, selected, onChange }: { label: string; options: Array<{ value: string; label: string; count: number }>; selected: string[]; onChange: (values: string[]) => void }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -199,8 +216,10 @@ function productsForOrders(orders: Order[]) {
   let needsFallback = false;
 
   orders.forEach((order) => order.items.forEach((item) => {
-    const catalog = catalogProductFor(item.productName);
-    const name = catalog?.name === "Comodín" ? item.preparation?.trim() : catalog ? undefined : item.productName.trim();
+    const storedCatalog = catalogProductFor(item.productName);
+    const itemLabel = storedCatalog?.name === "Comodín" && item.preparation ? item.preparation.trim() : item.productName.trim();
+    const catalog = storedCatalog?.name === "Comodín" ? catalogProductFor(itemLabel) ?? storedCatalog : storedCatalog;
+    const name = catalog?.name === "Comodín" ? itemLabel : catalog ? undefined : itemLabel;
     if (!name) {
       if (catalog?.name === "Comodín") needsFallback = true;
       return;
@@ -234,12 +253,14 @@ async function downloadWholesaleOrders(orders: Order[], products: WholesaleProdu
   }));
   worksheet.columns = variant === "planilla" ? [
     { header: "Cliente", key: "customer", width: 28 },
+    { header: "Productos", key: "productCount", width: 11 },
     { header: "Ruta", key: "zone", width: 18 },
     ...productColumns,
   ] : [
     { header: "Pedido", key: "orderNumber", width: 16 },
     { header: "Fecha", key: "receivedAt", width: 22 },
     { header: "Cliente", key: "customer", width: 28 },
+    { header: "Productos", key: "productCount", width: 11 },
     { header: "Teléfono", key: "phone", width: 18 },
     { header: "Dirección", key: "address", width: 34 },
     { header: "Ruta", key: "zone", width: 18 },
@@ -253,6 +274,7 @@ async function downloadWholesaleOrders(orders: Order[], products: WholesaleProdu
     orderNumber: order.orderNumber,
     receivedAt: dateTime.format(new Date(order.receivedAt)),
     customer: wholesaleCustomerName(order),
+    productCount: order.items.length,
     phone: order.phone,
     address: order.address,
     zone: order.route,
@@ -293,9 +315,10 @@ function printWholesaleOrders(orders: Order[], products: WholesaleProduct[], sel
   printWindow.opener = null;
   const routes = [...new Set(orders.map((order) => wholesaleRouteLabel(order.route)))].join(" · ") || "Sin pedidos";
   const day = dayLabel.format(new Date(`${selectedDay}T12:00:00Z`));
-  const headerCells = ["Cliente", "Ruta", ...products.map((product) => product.name === "Blanda" ? "Blanda C/L/T/B/R" : product.name)];
+  const headerCells = ["Cliente", "Productos", "Ruta", ...products.map((product) => product.name === "Blanda" ? "Blanda C/L/T/B/R" : product.name)];
   const rows = orders.map((order) => [
     wholesaleCustomerName(order),
+    String(order.items.length),
     wholesaleRouteLabel(order.route),
     ...products.map((product) => productQuantity(order, product)),
   ]);
@@ -311,10 +334,11 @@ function printWholesaleOrders(orders: Order[], products: WholesaleProduct[], sel
     th, td { border: 1px solid #94a3b8; padding: 3px 4px; overflow-wrap: anywhere; text-align: center; vertical-align: middle; }
     thead th { background: #dbeafe; font-size: 8px; }
     th:first-child, td:first-child { width: 19%; text-align: left; font-weight: 700; }
-    th:nth-child(2), td:nth-child(2) { width: 10%; text-align: left; }
+    th:nth-child(2), td:nth-child(2) { width: 7%; }
+    th:nth-child(3), td:nth-child(3) { width: 10%; text-align: left; }
     tfoot th, tfoot td { background: #eef2ff; font-weight: 700; }
     tr { break-inside: avoid; }
-  </style></head><body><header><div><h1>Planilla de pedidos mayoristas</h1><p>${escapeHtml(day)} · ${escapeHtml(routes)}</p></div><strong>${orders.length} pedidos</strong></header><table><thead><tr>${headerCells.map((cell) => `<th>${escapeHtml(cell)}</th>`).join("")}</tr></thead><tbody>${rows.map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join("")}</tr>`).join("")}</tbody>${orders.length ? `<tfoot><tr><th>Total</th><td>${orders.length} pedidos</td>${totals.map((total) => `<td>${escapeHtml(total || "—")}</td>`).join("")}</tr></tfoot>` : ""}</table><script>window.addEventListener('load',()=>{window.focus();window.print();});<\/script></body></html>`;
+  </style></head><body><header><div><h1>Planilla de pedidos mayoristas</h1><p>${escapeHtml(day)} · ${escapeHtml(routes)}</p></div><strong>${orders.length} pedidos</strong></header><table><thead><tr>${headerCells.map((cell) => `<th>${escapeHtml(cell)}</th>`).join("")}</tr></thead><tbody>${rows.map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join("")}</tr>`).join("")}</tbody>${orders.length ? `<tfoot><tr><th>Total</th><td>${orders.reduce((sum, order) => sum + order.items.length, 0)}</td><td>${orders.length} pedidos</td>${totals.map((total) => `<td>${escapeHtml(total || "—")}</td>`).join("")}</tr></tfoot>` : ""}</table><script>window.addEventListener('load',()=>{window.focus();window.print();});<\/script></body></html>`;
   printWindow.document.open();
   printWindow.document.write(html);
   printWindow.document.close();
@@ -462,30 +486,38 @@ function WholesaleOrdersTable({ isAdmin, orders: allOrders, pendingId, onStatusC
   const [creatingOrder, setCreatingOrder] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editNotice, setEditNotice] = useState<string>();
-  const [formOrder, setFormOrder] = useState<Order>();
   const [routePendingId, setRoutePendingId] = useState<string>();
+  const [deletingId, setDeletingId] = useState<string>();
+  const [preparedPendingKey, setPreparedPendingKey] = useState<string>();
+  const [preparedOverrides, setPreparedOverrides] = useState<Record<string, boolean>>({});
   const [draftRows, setDraftRows] = useState<Record<string, { routeName: string; notes: string; quantities: Record<string, string> }>>({});
-  const searchTerms = searchText(query).split(/[\s\-()+]+/).filter(Boolean);
+  const searchTerms = useMemo(() => searchText(query).split(/[\s\-()+]+/).filter(Boolean), [query]);
   // "Hoy" se recalcula en cada refresco para que el panel avance solo al cambiar el día.
   const today = bogotaDay.format(new Date());
-  const selectedDay = addDays(today, dayOffset);
-  const dayOrders = allOrders.filter((order) => serviceDay(order) === selectedDay);
   // La bandeja de ayuda es exclusiva para solicitudes originadas en el chat y sin
   // pedido. Los pedidos normales nunca se ocultan por su estado operativo.
-  const chatHelpRequests = dayOrders.filter(isHelpWithoutOrder);
-  const customerOrders = dayOrders.filter((order) => !isHelpWithoutOrder(order));
-  const dispatchedOrders = customerOrders.filter(isClosed);
-  const openOrders = customerOrders.filter((order) => !isClosed(order));
+  const { selectedDay, chatHelpRequests, dispatchedOrders, openOrders } = useMemo(() => {
+    const day = addDays(today, dayOffset);
+    const dayOrders = allOrders.filter((order) => serviceDay(order) === day);
+    const help = dayOrders.filter(isHelpWithoutOrder);
+    const customerOrders = dayOrders.filter((order) => !isHelpWithoutOrder(order));
+    return {
+      selectedDay: day,
+      chatHelpRequests: help,
+      dispatchedOrders: customerOrders.filter(isClosed),
+      openOrders: customerOrders.filter((order) => !isClosed(order)),
+    };
+  }, [allOrders, dayOffset, today]);
   const orders = listMode === "help" ? chatHelpRequests : listMode === "dispatched" ? dispatchedOrders : openOrders;
   const helpCount = chatHelpRequests.length;
   const dispatchedCount = dispatchedOrders.length;
   const orderCount = openOrders.length;
   const pendingByDay = (offset: number) => allOrders.filter((order) => !isClosed(order) && serviceDay(order) === addDays(today, offset)).length;
-  const products = productsForOrders(orders);
-  const orderCuts = new Map(orders.map((order) => [
+  const products = useMemo(() => productsForOrders(orders), [orders]);
+  const orderCuts = useMemo(() => new Map(orders.map((order) => [
     order.id,
     new Set(products.filter((product) => productAmounts(order, product).size > 0).map((product) => product.name)),
-  ]));
+  ])), [orders, products]);
 
   // Cada filtro calcula sus opciones con los demás filtros aplicados, como el autofiltro de Excel.
   const passes = (order: Order, skip?: TableFilter) => (
@@ -499,20 +531,26 @@ function WholesaleOrdersTable({ isAdmin, orders: allOrders, pendingId, onStatusC
     return counts;
   };
   const zoneCounts = countBy("zones", (order) => [order.route]);
-  const routeValues = [...new Set([...wholesaleRoutes, unassignedWholesaleRoute, ...orders.map((order) => order.route)])];
+  const routeValues = useMemo(() => [...new Set([...wholesaleRoutes, unassignedWholesaleRoute, ...orders.map((order) => order.route)])], [orders]);
   const zoneOptions = routeValues.map((zone) => ({ value: zone, label: wholesaleRouteLabel(zone), count: zoneCounts.get(zone) ?? 0 }));
   const cutCounts = countBy("cuts", (order) => [...(orderCuts.get(order.id) ?? [])]);
   const cutOptions = products.filter((product) => cutCounts.has(product.name) || cuts.includes(product.name)).map((product) => ({ value: product.name, label: product.name, count: cutCounts.get(product.name) ?? 0 }));
 
-  const visibleOrders = orders.filter((order) => passes(order));
-  const normallyVisibleProducts = products.filter((product) => {
-    if (cuts.length) return cuts.includes(product.name) || (editing && extraColumns.includes(product.name));
-    if (visibleOrders.some((order) => orderCuts.get(order.id)?.has(product.name))) return true;
-    return editing && (extraColumns.includes(product.name) || visibleOrders.some((order) => draftRows[order.id]?.quantities[product.name]?.trim()));
-  });
-  const visibleProducts = editing
-    ? [...normallyVisibleProducts.filter((product) => !extraColumns.includes(product.name)), ...extraColumns.map((name) => products.find((product) => product.name === name)).filter((product): product is WholesaleProduct => Boolean(product))]
-    : normallyVisibleProducts;
+  const visibleOrders = useMemo(() => orders.filter((order) => (
+    (!zones.length || zones.includes(order.route))
+    && (!cuts.length || cuts.some((cut) => orderCuts.get(order.id)?.has(cut)))
+    && matchesSearch(order, searchTerms)
+  )), [cuts, orderCuts, orders, searchTerms, zones]);
+  const visibleProducts = useMemo(() => {
+    const normallyVisibleProducts = products.filter((product) => {
+      if (cuts.length) return cuts.includes(product.name) || (editing && extraColumns.includes(product.name));
+      if (visibleOrders.some((order) => orderCuts.get(order.id)?.has(product.name))) return true;
+      return editing && (extraColumns.includes(product.name) || visibleOrders.some((order) => draftRows[order.id]?.quantities[product.name]?.trim()));
+    });
+    return editing
+      ? [...normallyVisibleProducts.filter((product) => !extraColumns.includes(product.name)), ...extraColumns.map((name) => products.find((product) => product.name === name)).filter((product): product is WholesaleProduct => Boolean(product))]
+      : normallyVisibleProducts;
+  }, [cuts, draftRows, editing, extraColumns, orderCuts, products, visibleOrders]);
   const hiddenProducts = products.filter((product) => !visibleProducts.includes(product));
   const categories = visibleProducts.reduce<Array<{ name: string; count: number }>>((groups, product) => {
     const last = groups.at(-1);
@@ -520,7 +558,7 @@ function WholesaleOrdersTable({ isAdmin, orders: allOrders, pendingId, onStatusC
     else groups.push({ name: product.category, count: 1 });
     return groups;
   }, []);
-  const totals = visibleProducts.map((product) => productTotal(visibleOrders, product));
+  const totals = useMemo(() => visibleProducts.map((product) => productTotal(visibleOrders, product)), [visibleOrders, visibleProducts]);
   const visibleHelpWithoutOrder = visibleOrders.filter(isHelpWithoutOrder).length;
   const visibleOrderCount = visibleOrders.length - visibleHelpWithoutOrder;
   const visibleSummary = [
@@ -587,6 +625,28 @@ function WholesaleOrdersTable({ isAdmin, orders: allOrders, pendingId, onStatusC
     setEditNotice(result.message);
     if (result.ok) router.refresh();
   };
+  const removeOrder = async (order: Order) => {
+    const customer = wholesaleCustomerName(order);
+    if (!window.confirm(`¿Eliminar definitivamente el pedido ${order.orderNumber} de ${customer}? Esta acción no se puede deshacer.`)) return;
+    setDeletingId(order.id);
+    setEditNotice(undefined);
+    const result = await deleteWholesaleOrder(order.id);
+    setDeletingId(undefined);
+    setEditNotice(result.message);
+    if (result.ok) router.refresh();
+  };
+  const togglePrepared = async (order: Order, product: WholesaleProduct, current: boolean) => {
+    const key = `${order.id}:${product.name}`;
+    const next = !current;
+    setPreparedPendingKey(key);
+    setPreparedOverrides((values) => ({ ...values, [key]: next }));
+    setEditNotice(undefined);
+    const result = await setWholesaleProductPrepared(order.id, product.name, next);
+    setPreparedPendingKey(undefined);
+    setEditNotice(result.message);
+    if (!result.ok) setPreparedOverrides((values) => ({ ...values, [key]: current }));
+    else router.refresh();
+  };
   if (view === "wallet" && isAdmin) return <><div className="wholesale-tabs"><button onClick={() => setView("orders")} type="button">Pedidos</button><button aria-current="page" type="button">Cartera</button></div><WholesaleWallet orders={allOrders} /></>;
   return (
     <>
@@ -640,37 +700,43 @@ function WholesaleOrdersTable({ isAdmin, orders: allOrders, pendingId, onStatusC
       <div aria-label="Planilla desplazable de pedidos mayoristas" className="matrix-scroll" ref={matrixScrollRef} tabIndex={0}>
         <table className={`order-matrix wholesale-matrix ${showInfoColumns ? "with-order-info" : "without-order-info"}`}>
           <thead>
-            <tr className="category-row"><th colSpan={showInfoColumns ? 3 : 1}>Pedido recibido</th>{categories.map((category, index) => <th colSpan={category.count} key={`${category.name}-${index}`}>{category.name}</th>)}</tr>
-            <tr><th>Cliente</th>{showInfoColumns && <><th>Teléfono</th><th>Ruta</th></>}{visibleProducts.map((product) => <th className={product.name === "Blanda" ? "is-blanda-column" : undefined} key={product.name} title={product.name === "Blanda" ? "C = Capón · L = Lomo · T = Tetafula · B = Calavera · R = Relajado/abierto" : undefined}>{product.name}{product.name === "Blanda" && <small className="unit-label">C/L/T/B/R</small>}</th>)}</tr>
+            <tr className="category-row"><th colSpan={showInfoColumns ? 4 : 2}>Pedido recibido</th>{categories.map((category, index) => <th colSpan={category.count} key={`${category.name}-${index}`}>{category.name}</th>)}</tr>
+            <tr><th>Cliente</th><th className="product-count-column">Productos</th>{showInfoColumns && <><th>Teléfono</th><th>Ruta</th></>}{visibleProducts.map((product) => <th className={product.name === "Blanda" ? "is-blanda-column" : undefined} key={product.name} title={product.name === "Blanda" ? "C = Capón · L = Lomo · T = Tetafula · B = Calavera · R = Relajado/abierto" : undefined}>{product.name}{product.name === "Blanda" && <small className="unit-label">C/L/T/B/R</small>}</th>)}</tr>
           </thead>
           <tbody>
             {visibleOrders.map((order) => <tr className={isClosed(order) ? "is-dispatched" : undefined} key={order.id}>
-              <th scope="row"><div className="matrix-client"><span><span className="client-heading-line" title={order.businessName && order.businessName !== order.customer ? order.businessName : order.customer}><strong>{order.businessName && order.businessName !== order.customer ? order.businessName : order.customer}</strong></span><small className="client-order-number">Pedido {order.orderNumber}</small></span><div className="matrix-row-actions"><ConversationLink order={order} />{order.formData?.order_text && <button aria-label={`Ver formulario original de ${order.orderNumber}`} className="form-source-link row-icon-action tooltip-icon-action" data-tooltip="Formulario original" onClick={() => setFormOrder(order)} type="button"><Icon name="receipt" /><span className="sr-only">Ver formulario original</span></button>}{isAdmin && safeExternalUrl(order.formData?.payment_proof) && <a aria-label={`Abrir comprobante de ${order.orderNumber}`} className="payment-proof-link row-icon-action tooltip-icon-action" data-tooltip="Comprobante adjunto" href={safeExternalUrl(order.formData?.payment_proof)} rel="noreferrer" target="_blank"><Icon name="receipt" /><span className="sr-only">Ver comprobante adjunto</span></a>}{isHelpWithoutOrder(order)
+              <th scope="row"><div className="matrix-client"><span><span className="client-heading-line" title={order.businessName && order.businessName !== order.customer ? order.businessName : order.customer}><strong>{order.businessName && order.businessName !== order.customer ? order.businessName : order.customer}</strong></span><small className="client-order-number">Pedido {order.orderNumber}</small></span><div className="matrix-row-actions"><ConversationLink order={order} /><FormSubmissionAction order={order} />{isAdmin && safeExternalUrl(order.formData?.payment_proof) && <a aria-label={`Abrir comprobante de ${order.orderNumber}`} className="payment-proof-link row-icon-action tooltip-icon-action" data-tooltip="Comprobante adjunto" href={safeExternalUrl(order.formData?.payment_proof)} rel="noreferrer" target="_blank"><Icon name="receipt" /><span className="sr-only">Ver comprobante adjunto</span></a>}{isHelpWithoutOrder(order)
                 ? <span className="no-order-badge">Sin pedido</span>
                 : isClosed(order)
                   ? <button aria-label="Volver a pedidos pendientes" className="dispatch-action is-done row-icon-action tooltip-icon-action" data-tooltip="Volver a pedidos" disabled={pendingId === order.id || editing} onClick={() => onStatusChange(order, "new")} type="button">{pendingId === order.id ? "…" : <Icon name="undo" />}<span className="sr-only">Volver a pedidos pendientes</span></button>
                   : <>
                     <button aria-label="Marcar como despachado" className="dispatch-action row-icon-action tooltip-icon-action" data-tooltip="Despachado" disabled={pendingId === order.id || editing} onClick={() => onStatusChange(order, "dispatched")} type="button">{pendingId === order.id ? "…" : <Icon name="truck" />}<span className="sr-only">Marcar como despachado</span></button>
                     {dayOffset === 1 && <button aria-label="Adelantar pedido a hoy" className="advance-action row-icon-action tooltip-icon-action" data-tooltip="Adelantar a hoy" disabled={saving || editing} onClick={() => void advanceOrder(order)} type="button"><Icon name="calendar" /><span className="sr-only">Adelantar pedido a hoy</span></button>}
-                  </>}</div></div></th>
+                  </>}<button aria-label={`Eliminar ${order.orderNumber}`} className="delete-order-action row-icon-action tooltip-icon-action" data-tooltip="Eliminar pedido" disabled={deletingId === order.id || editing} onClick={() => void removeOrder(order)} type="button">{deletingId === order.id ? "…" : <Icon name="trash" />}<span className="sr-only">Eliminar pedido</span></button></div></div></th>
+              <td className="product-count-column"><strong>{order.items.length}</strong></td>
               {showInfoColumns && <>
                 <td>{order.phone}</td>
                 <td className={editing ? "matrix-route-cell is-editing" : "matrix-route-cell"}><select aria-label={`Ruta de ${order.businessName ?? order.customer}`} disabled={routePendingId === order.id} onChange={(event) => editing ? setDraftRows((current) => ({ ...current, [order.id]: { ...current[order.id], routeName: event.target.value } })) : void saveRoute(order, event.target.value)} value={editing ? draftRows[order.id]?.routeName ?? order.route : order.route}>{![...wholesaleRoutes, unassignedWholesaleRoute].includes(order.route as (typeof wholesaleRoutes)[number] | typeof unassignedWholesaleRoute) && <option value={order.route}>{order.route}</option>}<option value={unassignedWholesaleRoute}>Sin clasificar</option>{wholesaleRoutes.map((route) => <option key={route} value={route}>{wholesaleRouteLabel(route)}</option>)}</select></td>
               </>}
               {visibleProducts.map((product) => {
                 const value = productQuantity(order, product);
+                const preparedKey = `${order.id}:${product.name}`;
+                const matchingItems = productItems(order, product);
+                const storedPrepared = matchingItems.length > 0 && matchingItems.every((item) => item.prepared);
+                const prepared = preparedOverrides[preparedKey] ?? storedPrepared;
                 const placeholder = product.name === "Blanda" ? "5 C / 2 L / 1 R" : product.name === "Comodín" ? "2 producto" : "Cantidad";
                 const title = product.name === "Blanda" ? "Usa C=capón, L=lomo, T=tetafula, B=calavera y R=relajado/abierto. Puedes añadir kg o lb si aplica." : product.name === "Comodín" ? "Escribe cantidad y nombre del producto. Ejemplo: 2 producto especial." : "Escribe el número y añade kg, lb o und solamente cuando corresponda.";
-                return <td className={`${editing ? "matrix-quantity-cell is-editing" : value ? "matrix-quantity-cell has-value" : "matrix-quantity-cell"}${product.name === "Blanda" ? " is-blanda-column" : ""}`} key={product.name}>{editing ? <input aria-label={`${product.name} de ${order.orderNumber}`} onChange={(event) => updateDraft(order.id, product.name, event.target.value)} placeholder={placeholder} title={title} value={draftRows[order.id]?.quantities[product.name] ?? ""} /> : value || ""}</td>;
+                const cellTitle = value && !editing ? `${title} Doble clic para marcar como ${prepared ? "pendiente" : "alistado"}.` : title;
+                return <td aria-label={value && !editing ? `${product.name} de ${order.orderNumber}: ${value}. ${prepared ? "Alistado" : "Pendiente"}` : undefined} className={`${editing ? "matrix-quantity-cell is-editing" : value ? "matrix-quantity-cell has-value" : "matrix-quantity-cell"}${prepared ? " is-prepared" : ""}${preparedPendingKey === preparedKey ? " is-prepared-pending" : ""}${product.name === "Blanda" ? " is-blanda-column" : ""}`} key={product.name} onDoubleClick={value && !editing ? () => void togglePrepared(order, product, prepared) : undefined} onKeyDown={value && !editing ? (event) => { if (event.key === "Enter") void togglePrepared(order, product, prepared); } : undefined} tabIndex={value && !editing ? 0 : undefined} title={cellTitle}>{editing ? <input aria-label={`${product.name} de ${order.orderNumber}`} onChange={(event) => updateDraft(order.id, product.name, event.target.value)} placeholder={placeholder} title={title} value={draftRows[order.id]?.quantities[product.name] ?? ""} /> : value || ""}</td>;
               })}
             </tr>)}
-            {!visibleOrders.length && <tr><td className="matrix-empty" colSpan={visibleProducts.length + (showInfoColumns ? 3 : 1)}>{hasFilters ? "Ningún pedido coincide con los filtros." : listMode === "dispatched" ? "No hay pedidos despachados para este día." : listMode === "help" ? "No hay solicitudes de ayuda para este día." : "No hay pedidos pendientes para este día."}</td></tr>}
+            {!visibleOrders.length && <tr><td className="matrix-empty" colSpan={visibleProducts.length + (showInfoColumns ? 4 : 2)}>{hasFilters ? "Ningún pedido coincide con los filtros." : listMode === "dispatched" ? "No hay pedidos despachados para este día." : listMode === "help" ? "No hay solicitudes de ayuda para este día." : "No hay pedidos pendientes para este día."}</td></tr>}
           </tbody>
-          {visibleOrders.length > 0 && visibleProducts.length > 0 && <tfoot><tr><th scope="row">{showInfoColumns ? "Total" : `Total · ${visibleSummary}`}</th>{showInfoColumns && <td colSpan={2}>{visibleSummary}</td>}{totals.map((total, index) => <td key={visibleProducts[index].name}>{total || "—"}</td>)}</tr></tfoot>}
+          {visibleOrders.length > 0 && visibleProducts.length > 0 && <tfoot><tr><th scope="row">{showInfoColumns ? "Total" : `Total · ${visibleSummary}`}</th><td className="product-count-column">{visibleOrders.reduce((sum, order) => sum + order.items.length, 0)}</td>{showInfoColumns && <td colSpan={2}>{visibleSummary}</td>}{totals.map((total, index) => <td key={visibleProducts[index].name}>{total || "—"}</td>)}</tr></tfoot>}
         </table>
       </div>
       </div>
-    </section>{formOrder && <FormSubmissionDialog onClose={() => setFormOrder(undefined)} order={formOrder} />}</>
+    </section></>
   );
 }
 
@@ -706,8 +772,11 @@ export function OrdersPanel({ initialOrders, loadError, retailCatalog = [], view
 
   const moveOrder = async (order: Order, phase: OperationalPhase) => {
     const status = phaseStatus[phase]; setPendingId(order.id); setNotice(undefined);
-    const result = await updateOrderStatus(order.id, status); if (!result.ok) { setNotice(result.message); setPendingId(undefined); return; }
     setOrders((current) => current.map((item) => item.id === order.id ? { ...item, status } : item));
+    const result = await updateOrderStatus(order.id, status); if (!result.ok) {
+      setOrders((current) => current.map((item) => item.id === order.id ? { ...item, status: order.status } : item));
+      setNotice(result.message); setPendingId(undefined); return;
+    }
     setNotice(result.message === "Estado actualizado."
       ? `${order.orderNumber} pasó a “${phaseLabels[phase]}” y se sincronizó con el pipeline.`
       : result.message);
