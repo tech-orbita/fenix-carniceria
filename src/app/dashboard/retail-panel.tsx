@@ -104,7 +104,10 @@ function isQuote(order: Order) {
 }
 
 function isHelpRequest(order: Order) {
-  return order.helpRequest === true || (["incident", "needs_review"].includes(order.status) && order.items.length === 0);
+  // Una solicitud inicial puede convertirse después en un pedido real. En ese
+  // caso la marca histórica de ayuda no debe ocultar editar, imprimir, cobrar
+  // ni las etapas operativas del pedido.
+  return order.items.length === 0 && (order.helpRequest === true || ["incident", "needs_review"].includes(order.status));
 }
 
 function helpNoteSections(value: string) {
