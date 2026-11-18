@@ -38,7 +38,7 @@ export type ManualRetailOrderInput = {
   orderText: string;
   notes: string;
 };
-type ManualRetailOrderResult = { ok: boolean; message: string; orderId?: string };
+type ManualRetailOrderResult = { ok: boolean; message: string; orderId?: string; createdOrder?: Order };
 
 const LOGO_SRC = "/logo-fenix.png";
 const quantityFormat = new Intl.NumberFormat("es-CO", { maximumFractionDigits: 3 });

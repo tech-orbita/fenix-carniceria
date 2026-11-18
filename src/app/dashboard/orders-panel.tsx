@@ -951,7 +951,13 @@ export function OrdersPanel({ hasMoreOrders = false, initialOrders, loadedOrderP
     setNotice(undefined);
     const result = await createManualRetailOrder(draft);
     setNotice(result.message);
-    if (result.ok) router.refresh();
+    if (result.ok && result.createdOrder) {
+      const createdOrder = result.createdOrder;
+      setOrders((current) => current.some((order) => order.id === createdOrder.id)
+        ? current
+        : [createdOrder, ...current]);
+      router.refresh();
+    }
     return result;
   };
 

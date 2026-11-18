@@ -6,14 +6,14 @@ import { requireViewer } from "@/lib/auth/viewer";
 import { createClient } from "@/lib/supabase/server";
 import { catalogProductFor, normalizeProductName, normalizeWholesaleUnit, parseOrderText, toKilograms, UNSPECIFIED_WHOLESALE_UNIT } from "@/lib/orders/product-parser";
 import { retailBillMessage, retailDispatchMessage } from "@/lib/orders/retail-bill";
+import { loadRetailCatalog } from "@/lib/orders/retail-agent";
 import { normalizeRetailItems } from "@/lib/orders/retail-normalization";
-import type { RetailCatalogProduct } from "@/lib/orders/retail-normalization";
 import { wholesaleDispatchMessage } from "@/lib/orders/wholesale-messages";
 import { findHighLevelConversationByPhone, sendHighLevelMessage, sendWholesalePaymentSummary, syncHighLevelOrderFields, syncOrderPipeline, syncWholesalePipeline } from "@/lib/orders/highlevel-pipeline";
 import { customerIdentityKey, wholesaleRoutes } from "@/lib/orders/wholesale-routes";
-import type { HighLevelContext, OrderPipelineStage } from "@/lib/orders/highlevel-pipeline";
+import type { HighLevelContext, HighLevelConversationLookup, OrderPipelineStage } from "@/lib/orders/highlevel-pipeline";
 
-import type { OrderStatus } from "./types";
+import type { Order, OrderStatus } from "./types";
 
 // Las acciones usan la sesión del usuario: RLS solo deja tocar pedidos de su segmento.
 async function sessionClient() {
@@ -389,6 +389,24 @@ export type ManualRetailOrderInput = {
   notes: string;
 };
 
+async function findManualOrderConversation(phone: string): Promise<HighLevelConversationLookup> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      findHighLevelConversationByPhone(phone),
+      new Promise<HighLevelConversationLookup>((resolve) => {
+        timeout = setTimeout(() => resolve({
+          ok: false,
+          found: false,
+          message: "La consulta de Orbita tardó demasiado; el pedido se guardó sin vincular la conversación.",
+        }), 2_500);
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
+
 export async function createManualRetailOrder(input: ManualRetailOrderInput) {
   const customerName = input.customerName?.trim();
   const phone = input.phone?.replace(/[^\d+]/g, "").trim();
@@ -409,20 +427,12 @@ export async function createManualRetailOrder(input: ManualRetailOrderInput) {
   }
 
   const supabase = await sessionClient();
-  const [{ data: products, error: productError }, { data: prices, error: priceError }, highLevelLookup] = await Promise.all([
-    supabase.from("products").select("id,name,catalog_key").eq("active", true),
-    supabase.from("product_prices").select("product_id,amount,unit").eq("segment", "minorista").in("unit", ["kilo", "unidad"]).is("valid_until", null),
-    findHighLevelConversationByPhone(phone),
+  // El catálogo se lee con el cliente interno, igual que al cargar el panel. Las
+  // tablas de catálogo no se exponen a los operadores mediante RLS.
+  const [catalog, highLevelLookup] = await Promise.all([
+    loadRetailCatalog(),
+    findManualOrderConversation(phone),
   ]);
-  if (productError || priceError) return { ok: false as const, message: "No se pudo consultar el catálogo minorista." };
-
-  const amounts = new Map((prices ?? []).map((price) => [`${price.product_id}:${price.unit}`, Number(price.amount)]));
-  const catalog = (products ?? []).flatMap<RetailCatalogProduct>((product) => {
-    const pricePerKg = amounts.get(`${product.id}:kilo`);
-    const pricePerUnit = amounts.get(`${product.id}:unidad`);
-    if (Number.isFinite(pricePerUnit)) return [{ id: String(product.id), name: String(product.name), catalogKey: String(product.catalog_key), pricePerUnit: pricePerUnit!, saleUnit: "und" as const }];
-    return Number.isFinite(pricePerKg) ? [{ id: String(product.id), name: String(product.name), catalogKey: String(product.catalog_key), pricePerKg: pricePerKg!, saleUnit: "kg" as const }] : [];
-  });
   const normalizedItems = normalizeRetailItems([], orderText, catalog);
   // El botón es una entrada manual de emergencia: nunca debe perder el pedido
   // solo porque una línea aún no coincide con el catálogo. Esas líneas entran
@@ -482,13 +492,13 @@ export async function createManualRetailOrder(input: ManualRetailOrderInput) {
     payment_status: paymentMethod === "credit" ? "credit" : "pending",
     subtotal,
     notes,
-  }).select("id,order_number").single();
+  }).select("id,order_number,received_at,delivery_fee,adjustments,total").single();
   if (orderError || !order) {
     console.error("[manual-retail-order] No se pudo crear el pedido", { code: orderError?.code, message: orderError?.message });
     return { ok: false as const, message: "No se pudo crear el pedido. Intenta nuevamente; el formulario conservará los datos." };
   }
 
-  const { error: itemsError } = await supabase.from("order_items").insert(items.map((item, sortOrder) => ({
+  const { data: savedItems, error: itemsError } = await supabase.from("order_items").insert(items.map((item, sortOrder) => ({
     order_id: order.id,
     product_id: item.product_id,
     product_name: item.product_name,
@@ -499,18 +509,50 @@ export async function createManualRetailOrder(input: ManualRetailOrderInput) {
     notes: item.notes,
     unit_price: item.unit_price,
     sort_order: sortOrder,
-  })));
-  if (itemsError) {
-    console.error("[manual-retail-order] No se pudieron guardar los productos", { code: itemsError.code, message: itemsError.message });
+  }))).select("id,product_name,quantity,unit,actual_quantity,preparation,notes,unit_price");
+  if (itemsError || !savedItems) {
+    console.error("[manual-retail-order] No se pudieron guardar los productos", { code: itemsError?.code, message: itemsError?.message });
     await supabase.from("orders").delete().eq("id", order.id).eq("customer_type", "retail");
     return { ok: false as const, message: "No se pudieron guardar los productos del pedido." };
   }
 
   revalidatePath("/");
   revalidatePath("/dashboard");
+  const createdOrder: Order = {
+    id: String(order.id),
+    orderNumber: order.order_number,
+    customerType: "retail",
+    customer: customerName,
+    phone,
+    receivedAt: order.received_at,
+    deliveryDate: "Sin fecha",
+    fulfillment,
+    address: fulfillment === "delivery" ? address! : "Recoge en tienda",
+    route: "Sin clasificar",
+    source: "manual",
+    paymentMethod: paymentMethod ?? undefined,
+    paymentStatus: paymentMethod === "credit" ? "credit" : "pending",
+    deliveryFee: Number(order.delivery_fee),
+    adjustments: Number(order.adjustments),
+    total: Number(order.total),
+    status: "received",
+    items: savedItems.map((item) => ({
+      id: String(item.id),
+      productName: item.product_name,
+      quantity: Number(item.quantity),
+      unit: item.unit,
+      actualQuantity: item.actual_quantity == null ? undefined : Number(item.actual_quantity),
+      preparation: item.preparation ?? undefined,
+      notes: item.notes ?? undefined,
+      unitPrice: Number(item.unit_price),
+    })),
+    highLevel: highLevelContext,
+    notes: notes ?? undefined,
+  };
   return {
     ok: true as const,
     orderId: String(order.id),
+    createdOrder,
     message: `${order.order_number} fue creado en Nuevos para ${customerName}.${unmatched ? ` ${unmatched === 1 ? "Un producto necesita" : `${unmatched} productos necesitan`} confirmar precio o nombre.` : ""}${highLevelLookup.ok && highLevelLookup.found ? " Conversación de Orbita vinculada." : " No se encontró una conversación de Orbita para ese teléfono."}`,
   };
 }
