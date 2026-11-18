@@ -3322,16 +3322,24 @@ a {
   color: #155fb8;
 }
 
-.orders-app .form-submission-modal {
+.orders-app.form-submission-portal {
   position: fixed;
-  z-index: 2147483000;
+  z-index: 2147483647;
   inset: 0;
   isolation: isolate;
+  background: var(--canvas);
+}
+
+.orders-app.form-submission-portal .form-submission-modal {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
   display: grid;
   place-items: center;
   padding: 16px;
-  background: rgb(8 27 52 / 52%);
-  backdrop-filter: blur(3px);
+  /* El fondo es deliberadamente opaco: la planilla usa encabezados y
+     columnas sticky, que no deben quedar visibles al revisar el formulario. */
+  background: var(--canvas);
 }
 
 .orders-app .form-submission-dialog {
