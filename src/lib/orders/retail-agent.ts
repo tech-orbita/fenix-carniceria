@@ -96,19 +96,30 @@ export async function loadRetailCatalog(): Promise<RetailCatalogProduct[]> {
   });
 }
 
-async function findCustomerId(phone: string) {
-  if (!phone) return null;
+async function findCustomerId(phone: string, contactId = "") {
+  if (!phone && !contactId) return null;
   const supabase = createAdminClient();
+  if (phone) {
+    const { data } = await supabase
+      .from("customers")
+      .select("id")
+      .eq("customer_type", "retail")
+      .eq("identity_key", customerIdentityKey("retail", { name: "Cliente WhatsApp", phone }))
+      .maybeSingle();
+    if (data?.id) return data.id;
+  }
+  if (!contactId) return null;
   const { data } = await supabase
     .from("customers")
     .select("id")
     .eq("customer_type", "retail")
-    .eq("identity_key", customerIdentityKey("retail", { name: "Cliente WhatsApp", phone }))
+    .eq("ghl_contact_id", contactId)
+    .limit(1)
     .maybeSingle();
   return data?.id ?? null;
 }
 
-async function findLatestOrder(customerId: number, from?: string) {
+async function findLatestOrder(customerId: number, from?: string, openOnly = false) {
   const supabase = createAdminClient();
   let query = supabase
     .from("orders")
@@ -118,11 +129,12 @@ async function findLatestOrder(customerId: number, from?: string) {
     .order("received_at", { ascending: false })
     .limit(1);
   if (from) query = query.gte("received_at", from);
+  if (openOnly) query = query.in("status", ["received", "preparing", "ready", "incident", "needs_review"]);
   const { data } = await query.maybeSingle();
   return data;
 }
 
-async function findLatestOrderByContactId(contactId: string, from?: string) {
+async function findLatestOrderByContactId(contactId: string, from?: string, openOnly = false) {
   if (!contactId) return null;
   const supabase = createAdminClient();
   let query = supabase
@@ -133,25 +145,27 @@ async function findLatestOrderByContactId(contactId: string, from?: string) {
     .order("received_at", { ascending: false })
     .limit(1);
   if (from) query = query.gte("received_at", from);
+  if (openOnly) query = query.in("status", ["received", "preparing", "ready", "incident", "needs_review"]);
   const { data } = await query.maybeSingle();
   return data;
 }
 
 function findCurrentOrder(customerId: number) {
-  return findLatestOrder(customerId, retailOrderDayStart());
+  return findLatestOrder(customerId, retailOrderDayStart(), true);
 }
 
 export async function retailOrderContext(value: unknown) {
   const body = value && typeof value === "object" ? value as RetailAgentPayload : {};
   const phone = cleanPhone(body.customer?.phone);
-  const customerId = await findCustomerId(phone);
+  const contactId = String(body.contactId ?? "").trim();
+  const customerId = await findCustomerId(phone, contactId);
   const cutoff = retailOrderDayStart();
   const [currentByCustomer, latestByCustomer] = customerId
-    ? await Promise.all([findLatestOrder(customerId, cutoff), findLatestOrder(customerId)])
+    ? await Promise.all([findLatestOrder(customerId, cutoff, true), findLatestOrder(customerId)])
     : [null, null];
   const [currentOrder, latestOrder] = await Promise.all([
-    currentByCustomer ?? findLatestOrderByContactId(String(body.contactId ?? "").trim(), cutoff),
-    latestByCustomer ?? findLatestOrderByContactId(String(body.contactId ?? "").trim()),
+    currentByCustomer ?? findLatestOrderByContactId(contactId, cutoff, true),
+    latestByCustomer ?? findLatestOrderByContactId(contactId),
   ]);
   const currentSource = (currentOrder?.source_payload ?? {}) as Record<string, unknown>;
   const latestSource = (latestOrder?.source_payload ?? {}) as Record<string, unknown>;
@@ -178,22 +192,25 @@ export async function upsertRetailOrder(value: unknown) {
   }
   const body = value as RetailAgentPayload;
   const phone = cleanPhone(body.customer?.phone);
+  const contactId = String(body.contactId ?? "").trim();
   const items = normalizeRetailItems(
     Array.isArray(body.items) ? body.items : [],
     String(body.rawOrderText ?? ""),
     await loadRetailCatalog(),
   );
-  if (!phone || !items.length || !String(body.rawOrderText ?? "").trim()) {
-    return NextResponse.json({ error: "Phone, order text and at least one item are required" }, { status: 422 });
+  if ((!phone && !contactId) || !items.length || !String(body.rawOrderText ?? "").trim()) {
+    return NextResponse.json({ error: "Phone or contactId, order text and at least one item are required" }, { status: 422 });
   }
 
   const supabase = createAdminClient();
-  const existingCustomerId = await findCustomerId(phone);
+  const existingCustomerId = await findCustomerId(phone, contactId);
   const { data: existingCustomer } = existingCustomerId
-    ? await supabase.from("customers").select("name,tax_id,address,neighborhood,city,route_id").eq("id", existingCustomerId).single()
+    ? await supabase.from("customers").select("name,phone,tax_id,address,neighborhood,city,route_id,identity_key").eq("id", existingCustomerId).single()
     : { data: null };
   const name = String(body.customer?.name ?? existingCustomer?.name ?? "Cliente WhatsApp").trim();
-  const identityKey = customerIdentityKey("retail", { name, phone });
+  const effectivePhone = phone || existingCustomer?.phone || "";
+  const identityKey = existingCustomer?.identity_key
+    || (effectivePhone ? customerIdentityKey("retail", { name, phone: effectivePhone }) : `ghl-contact:${contactId}`);
   const address = String(body.delivery?.address ?? body.customer?.address ?? existingCustomer?.address ?? "").trim();
   const { data: customer, error: customerError } = await supabase
     .from("customers")
@@ -201,7 +218,8 @@ export async function upsertRetailOrder(value: unknown) {
       customer_type: "retail",
       identity_key: identityKey,
       name,
-      phone,
+      phone: effectivePhone || null,
+      ghl_contact_id: contactId || null,
       tax_id: String(body.customer?.document ?? existingCustomer?.tax_id ?? "").trim() || null,
       address: address || null,
       neighborhood: String(body.customer?.neighborhood ?? existingCustomer?.neighborhood ?? "").trim() || null,
@@ -238,6 +256,7 @@ export async function upsertRetailOrder(value: unknown) {
   }, 0);
 
   if (openOrder) {
+    const nextStatus = ["incident", "needs_review"].includes(openOrder.status) ? "received" : openOrder.status;
     const { error: updateError } = await supabase.from("orders").update({
       source_payload: sourcePayload,
       extraction_confidence: body.confidence ?? null,
@@ -246,6 +265,7 @@ export async function upsertRetailOrder(value: unknown) {
       payment_method: paymentMethod(body.paymentMethod),
       notes: String(body.notes ?? "").trim() || null,
       subtotal,
+      status: nextStatus,
     }).eq("id", openOrder.id);
     if (updateError) return NextResponse.json({ error: "Could not update order" }, { status: 500 });
 
@@ -255,14 +275,14 @@ export async function upsertRetailOrder(value: unknown) {
     if (itemsError) return NextResponse.json({ error: "Could not save order items" }, { status: 500 });
     const highLevelContext = { contactId: body.contactId, locationId: body.locationId, conversationId: body.conversationId };
     const [pipeline, orderFields, tag] = await Promise.all([
-      syncRetailPipeline(highLevelContext, pipelineStageForRetailStatus(openOrder.status), `${name} · ${openOrder.order_number}`, subtotal),
+      syncRetailPipeline(highLevelContext, pipelineStageForRetailStatus(nextStatus), `${name} · ${openOrder.order_number}`, subtotal),
       syncHighLevelOrderFields(highLevelContext, { orderNumber: openOrder.order_number, total: subtotal }),
       ensureHighLevelContactTag(highLevelContext, "cliente minorista"),
     ]);
     return NextResponse.json({
       id: openOrder.id,
       order_number: openOrder.order_number,
-      status: openOrder.status,
+      status: nextStatus,
       adjusted: true,
       pipeline_synced: pipeline.ok,
       pipeline_message: pipeline.ok ? undefined : pipeline.message,

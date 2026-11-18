@@ -40,6 +40,11 @@ export type HighLevelContext = {
   conversationId?: string;
 };
 
+export type HighLevelConversationLookup =
+  | { ok: true; found: true; context: Required<HighLevelContext> }
+  | { ok: true; found: false; context?: HighLevelContext }
+  | { ok: false; found: false; message: string };
+
 export type WholesalePipelineStage =
   | "order_placed"
   | "preparing"
@@ -128,6 +133,51 @@ async function ghlFetch<T>(path: string, token: string, init?: RequestInit): Pro
     throw new HighLevelHttpError(response.status, `Orbita respondió ${response.status}${detail ? `: ${detail.slice(0, 300)}` : ""}`);
   }
   return (body ? JSON.parse(body) : {}) as T;
+}
+
+function highLevelPhone(phone: string) {
+  const digits = phone.replace(/\D/g, "");
+  if (!digits) return "";
+  if (digits.length === 10) return `+57${digits}`;
+  return `+${digits}`;
+}
+
+export async function findHighLevelConversationByPhone(phone: string): Promise<HighLevelConversationLookup> {
+  const token = process.env.GHL_PRIVATE_INTEGRATION_TOKEN?.trim();
+  const locationId = process.env.GHL_LOCATION_ID?.trim();
+  const normalizedPhone = highLevelPhone(phone);
+  if (!token || !locationId || !normalizedPhone) {
+    return { ok: false, found: false, message: "Falta configurar Orbita o el teléfono no es válido." };
+  }
+
+  try {
+    const contactSearch = new URLSearchParams({ locationId, phone: normalizedPhone, limit: "20" });
+    const contactResult = await ghlFetch<{ contacts?: Array<{ id?: string; phone?: string }> }>(
+      `/contacts/lookup?${contactSearch}`,
+      token,
+      { headers: { Version: "v3" } },
+    );
+    const requestedDigits = normalizedPhone.replace(/\D/g, "");
+    const contact = contactResult.contacts?.find((candidate) => candidate.phone?.replace(/\D/g, "") === requestedDigits)
+      ?? contactResult.contacts?.find((candidate) => candidate.id);
+    if (!contact?.id) return { ok: true, found: false };
+
+    const conversationSearch = new URLSearchParams({ locationId, contactId: contact.id, sort: "desc", limit: "20" });
+    const conversationResult = await ghlFetch<{ conversations?: Array<{ id?: string; contactId?: string }> }>(
+      `/conversations/search?${conversationSearch}`,
+      token,
+      { headers: { Version: "v3" } },
+    );
+    const conversation = conversationResult.conversations?.find((candidate) => candidate.id && (!candidate.contactId || candidate.contactId === contact.id));
+    if (!conversation?.id) return { ok: true, found: false, context: { locationId, contactId: contact.id } };
+    return { ok: true, found: true, context: { locationId, contactId: contact.id, conversationId: conversation.id } };
+  } catch (error) {
+    return {
+      ok: false,
+      found: false,
+      message: error instanceof Error ? error.message : "No se pudo consultar la conversación de Orbita.",
+    };
+  }
 }
 
 async function contactCustomFields(locationId: string, token: string) {

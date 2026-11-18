@@ -9,7 +9,7 @@ import { retailBillMessage, retailDispatchMessage } from "@/lib/orders/retail-bi
 import { normalizeRetailItems } from "@/lib/orders/retail-normalization";
 import type { RetailCatalogProduct } from "@/lib/orders/retail-normalization";
 import { wholesaleDispatchMessage } from "@/lib/orders/wholesale-messages";
-import { sendHighLevelMessage, sendWholesalePaymentSummary, syncHighLevelOrderFields, syncOrderPipeline, syncWholesalePipeline } from "@/lib/orders/highlevel-pipeline";
+import { findHighLevelConversationByPhone, sendHighLevelMessage, sendWholesalePaymentSummary, syncHighLevelOrderFields, syncOrderPipeline, syncWholesalePipeline } from "@/lib/orders/highlevel-pipeline";
 import { customerIdentityKey, wholesaleRoutes } from "@/lib/orders/wholesale-routes";
 import type { HighLevelContext, OrderPipelineStage } from "@/lib/orders/highlevel-pipeline";
 
@@ -360,9 +360,10 @@ export async function createManualRetailOrder(input: ManualRetailOrderInput) {
   }
 
   const supabase = await sessionClient();
-  const [{ data: products, error: productError }, { data: prices, error: priceError }] = await Promise.all([
+  const [{ data: products, error: productError }, { data: prices, error: priceError }, highLevelLookup] = await Promise.all([
     supabase.from("products").select("id,name,catalog_key").eq("active", true),
     supabase.from("product_prices").select("product_id,amount,unit").eq("segment", "minorista").in("unit", ["kilo", "unidad"]).is("valid_until", null),
+    findHighLevelConversationByPhone(phone),
   ]);
   if (productError || priceError) return { ok: false as const, message: "No se pudo consultar el catálogo minorista." };
 
@@ -392,17 +393,25 @@ export async function createManualRetailOrder(input: ManualRetailOrderInput) {
     phone,
     address: address ?? existingCustomer?.address ?? null,
     city: existingCustomer?.city || "Barranquilla",
+    ...(highLevelLookup.ok && highLevelLookup.context?.contactId ? { ghl_contact_id: highLevelLookup.context.contactId } : {}),
   }, { onConflict: "customer_type,identity_key" }).select("id").single();
   if (customerError || !customer) return { ok: false as const, message: "No se pudo guardar el cliente." };
 
   const subtotal = items.reduce((sum, item) => sum + (item.actual_quantity ?? item.quantity) * item.unit_price, 0);
   const unmatched = items.filter((item) => !item.product_id || item.unit_price <= 0).length;
+  const highLevelContext = highLevelLookup.ok ? highLevelLookup.context : undefined;
   const { data: order, error: orderError } = await supabase.from("orders").insert({
     customer_type: "retail",
     customer_id: customer.id,
     source: "manual",
-    source_payload: { manual_entry: { order_text: orderText }, customer: { name: customerName, phone, address } },
-    status: unmatched ? "needs_review" : "received",
+    source_payload: {
+      manual_entry: { order_text: orderText },
+      customer: { name: customerName, phone, address },
+      ...(highLevelContext ?? {}),
+    },
+    // Un pedido agregado por un operador siempre debe aparecer en Nuevos.
+    // Los productos pendientes se indican en el aviso, sin esconder el pedido en Ayuda.
+    status: "received",
     fulfillment_type: fulfillment,
     delivery_address: fulfillment === "delivery" ? address : null,
     payment_method: paymentMethod,
@@ -433,9 +442,7 @@ export async function createManualRetailOrder(input: ManualRetailOrderInput) {
   revalidatePath("/dashboard");
   return {
     ok: true as const,
-    message: unmatched
-      ? `${order.order_number} fue creado y quedó en Requiere ayuda porque ${unmatched === 1 ? "un producto necesita" : `${unmatched} productos necesitan`} confirmar precio o nombre.`
-      : `${order.order_number} fue creado correctamente para ${customerName}.`,
+    message: `${order.order_number} fue creado en Nuevos para ${customerName}.${unmatched ? ` ${unmatched === 1 ? "Un producto necesita" : `${unmatched} productos necesitan`} confirmar precio o nombre.` : ""}${highLevelLookup.ok && highLevelLookup.found ? " Conversación de Orbita vinculada." : " No se encontró una conversación de Orbita para ese teléfono."}`,
   };
 }
 

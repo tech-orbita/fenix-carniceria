@@ -13,9 +13,32 @@ afterEach(() => {
 
 function configure() {
   process.env.GHL_PRIVATE_INTEGRATION_TOKEN = "test-token";
+  process.env.GHL_LOCATION_ID = "location-test";
   delete process.env.GHL_RETAIL_PIPELINE_ID;
   delete process.env.GHL_RETAIL_STAGE_PAID_ID;
 }
+
+test("encuentra la conversación minorista por el teléfono ingresado", async () => {
+  configure();
+  const { findHighLevelConversationByPhone } = await import("../src/lib/orders/highlevel-pipeline.ts");
+  const requests = [];
+  globalThis.fetch = async (input, init = {}) => {
+    requests.push({ url: String(input), init });
+    if (String(input).includes("/contacts/lookup?")) return Response.json({ contacts: [{ id: "contact-phone", phone: "+573502582962" }] });
+    if (String(input).includes("/conversations/search?")) return Response.json({ conversations: [{ id: "conversation-phone", contactId: "contact-phone" }] });
+    return Response.json({});
+  };
+
+  const result = await findHighLevelConversationByPhone("350 258 2962");
+
+  assert.deepEqual(result, {
+    ok: true,
+    found: true,
+    context: { locationId: "location-test", contactId: "contact-phone", conversationId: "conversation-phone" },
+  });
+  assert.match(requests[0].url, /phone=%2B573502582962/);
+  assert.match(requests[1].url, /contactId=contact-phone/);
+});
 
 test("mueve una oportunidad minorista existente a Pago", async () => {
   configure();
