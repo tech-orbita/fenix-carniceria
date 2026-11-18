@@ -277,3 +277,8 @@ export function requiresRetailHelp(reason: string) {
 export function isDirectRetailOrderPhrase(value: string) {
   return /\bcarne\s+(?:en\s+)?trocitos\b/.test(normalizeProductName(value));
 }
+
+export function isStandaloneRetailHelpPayload(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  return (value as Record<string, unknown>).helpWithoutOrder === true;
+}

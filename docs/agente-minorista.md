@@ -7,7 +7,7 @@ Esta guía separa las responsabilidades del agente conversacional, HighLevel y n
 - n8n lee únicamente los mensajes nuevos del cliente y anexa productos al pedido abierto del día.
 - El pedido completo se conserva en el panel, aunque el cliente agregue productos en mensajes separados.
 - Los datos existentes de nombre, teléfono, cédula y dirección se reutilizan como respaldo.
-- La confirmación automática de n8n está desactivada con `SEND_CONFIRMATION=false`. Debe conservarse así mientras el agente conversacional confirme cada acción.
+- La confirmación automática de n8n está activada con `SEND_CONFIRMATION=true`. n8n es la única fuente de confirmación porque incluye el número real devuelto por el panel.
 - El panel sincroniza el pedido con el pipeline `Minoristas` y permite gestionar preparación, despacho, ayuda y pago.
 - El flujo no confirma pagos ni horas exactas de entrega.
 
@@ -44,7 +44,10 @@ PEDIDOS
 - Cuando el cliente agregue un producto a un pedido abierto, confirma solo la modificación. Ejemplo: “Listo, agregué 1 pechuga deshuesada tajada.” No envíes de nuevo el resumen completo y no preguntes si desea algo más.
 - Solo muestra el resumen completo una vez: cuando el cliente indique de forma clara que terminó, que la lista está completa o que desea registrar el pedido.
 - No pidas una confirmación adicional si el cliente ya dijo “exacto”, “listo”, “ese es todo” o una expresión equivalente.
-- Después de ejecutar la acción de registro, afirma que el pedido quedó registrado únicamente si la acción respondió correctamente.
+- Después de ejecutar la acción de registro, no afirmes que el pedido quedó registrado ni repitas una confirmación. El workflow enviará el mensaje con el número real únicamente si el panel respondió correctamente.
+- Si el cliente responde a un mensaje anterior que contiene una lista y escribe “me falta este”, “este también”, “aparte”, “por separado” o una frase equivalente, toma también la lista citada como parte del pedido y ejecuta la acción de registro. No lo transfieras por ambigüedad si el texto citado permite identificar productos y cantidades.
+- Cada lista nueva enviada después de que el pedido anterior fue despachado debe crear un pedido nuevo. No reutilices el estado ni el número del pedido despachado.
+- Una oportunidad abierta, ganada, en preparación o despachada en el CRM no prueba por sí sola que la nueva lista quedó registrada. La única confirmación válida es la respuesta exitosa de la acción, que debe incluir el número del pedido creado o actualizado.
 - Si el total todavía depende del peso real, indica de forma breve que el equipo confirmará el valor. No inventes el total.
 - Para recogida en tienda, registra esa modalidad. Para domicilio, usa la dirección guardada o la nueva dirección indicada.
 - Interpreta “domi” y variantes o errores ortográficos reconocibles de “domicilio” (por ejemplo “domicilo”, “domilio” o “domisilio”) como entrega a domicilio. No obligues al cliente a escribir la palabra exacta.
@@ -86,7 +89,7 @@ En **Conversation AI > agente minorista > Goals/Intent > Setup your Actions**:
 2. Mapea cédula, dirección, barrio y zona a sus campos reales del contacto. Configura ejemplos claros para cada campo personalizado.
 3. Conserva nombre y teléfono en el flujo de recopilación estándar del agente. En WhatsApp, el teléfono normalmente ya pertenece al contacto; solo debe pedirse si está vacío o si se necesita otro número de recepción.
 4. Para cambios de dirección ya registrada, agrega una acción separada **Trigger Workflow** llamada `Actualizar dirección minorista`. Ese workflow debe vaciar dirección, barrio y zona, colocar `Registro Minorista Completo = No` y permitir que Contact Info capture los valores nuevos. No lo ejecutes para un cliente nuevo. Para otros tipos de cambio crea una acción específica o transfiere al equipo, evitando borrar datos que el cliente no pidió modificar.
-5. Mantén una sola acción para registrar el pedido y una sola fuente de mensajes de confirmación. Con `SEND_CONFIRMATION=false`, la confirmación la envía el agente.
+5. Mantén una sola acción para registrar el pedido y una sola fuente de mensajes de confirmación. Con `SEND_CONFIRMATION=true`, la confirmación la envía n8n con el número real; el agente no debe enviar otro mensaje de registro. Configura la acción para activarse también cuando el cliente envíe una lista directa o responda/cite una lista con frases como “me falta este”, “este también” o “aparte”.
 6. En la acción que dispara `Fénix · Minoristas · Pedido IA → Panel`, incluye también esta condición explícita: **“Activa este flujo cuando el cliente envíe una imagen, documento, comprobante, soporte o recibo de pago, aunque no esté haciendo un pedido.”** El workflow ya clasifica el archivo y crea el caso en `Requiere ayuda`; si el agente solo responde en el chat pero no ejecuta la acción, el panel nunca recibirá el caso.
 7. Configura **Human Handover/Stop Bot** para que la intervención manual pause las respuestas automáticas.
 
@@ -117,3 +120,6 @@ La acción Contact Info guarda los datos; este workflow verifica que estén comp
 8. Atención manual: cuando un empleado responde, el agente se detiene.
 9. Preparación ambigua: “quiero filete” provoca una sola pregunta concreta para definir si es relajado o entero antes de registrar.
 10. Despacho: al marcar un pedido minorista como despachado desde el panel, el cliente recibe el aviso por WhatsApp; para recogida se informa que ya está listo en tienda.
+11. Pedido posterior al despacho: una lista nueva crea otro número de pedido y no mueve el pedido despachado a “Requiere ayuda”.
+12. Respuesta citada: al responder una lista con “me falta este” o “este también”, la acción registra los productos citados y devuelve el nuevo número antes de confirmarlo al cliente.
+13. Consulta sin pedido: preguntar “¿sí van a enviar mi pedido?” no crea una alerta vacía ni permite responder “registrado” si no existe un pedido con productos en el panel.

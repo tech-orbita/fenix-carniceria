@@ -6,7 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { ensureHighLevelContactTag, syncHighLevelOrderFields, syncRetailPipeline } from "@/lib/orders/highlevel-pipeline";
 import type { OrderPipelineStage } from "@/lib/orders/highlevel-pipeline";
 import { customerIdentityKey } from "@/lib/orders/wholesale-routes";
-import { isDirectRetailOrderPhrase, normalizeRetailItems, requiresRetailHelp } from "@/lib/orders/retail-normalization";
+import { isDirectRetailOrderPhrase, isStandaloneRetailHelpPayload, normalizeRetailItems, requiresRetailHelp } from "@/lib/orders/retail-normalization";
 import type { RetailCatalogProduct, RetailInputItem } from "@/lib/orders/retail-normalization";
 import { retailOrderDayStart } from "@/lib/orders/retail-order-window";
 
@@ -46,6 +46,7 @@ type RetailHelpPayload = {
   locationId?: string;
   contactId?: string;
   conversationId?: string;
+  contextUntil?: string;
   sourceEventId?: string;
   reason?: string;
   customer?: { name?: string; phone?: string };
@@ -127,11 +128,11 @@ async function findLatestOrder(customerId: number, from?: string, openOnly = fal
     .eq("customer_type", "retail")
     .eq("customer_id", customerId)
     .order("received_at", { ascending: false })
-    .limit(1);
+    .limit(openOnly ? 20 : 1);
   if (from) query = query.gte("received_at", from);
   if (openOnly) query = query.in("status", ["received", "preparing", "ready", "incident", "needs_review"]);
-  const { data } = await query.maybeSingle();
-  return data;
+  const { data } = await query;
+  return (data ?? []).find((order) => !openOnly || !isStandaloneRetailHelpPayload(order.source_payload)) ?? null;
 }
 
 async function findLatestOrderByContactId(contactId: string, from?: string, openOnly = false) {
@@ -143,11 +144,11 @@ async function findLatestOrderByContactId(contactId: string, from?: string, open
     .eq("customer_type", "retail")
     .eq("source_payload->>contactId", contactId)
     .order("received_at", { ascending: false })
-    .limit(1);
+    .limit(openOnly ? 20 : 1);
   if (from) query = query.gte("received_at", from);
   if (openOnly) query = query.in("status", ["received", "preparing", "ready", "incident", "needs_review"]);
-  const { data } = await query.maybeSingle();
-  return data;
+  const { data } = await query;
+  return (data ?? []).find((order) => !openOnly || !isStandaloneRetailHelpPayload(order.source_payload)) ?? null;
 }
 
 function findCurrentOrder(customerId: number) {
@@ -407,6 +408,7 @@ export async function flagRetailHelpRequest(value: unknown) {
     locationId: body.locationId ?? null,
     contactId: body.contactId ?? null,
     conversationId: body.conversationId ?? null,
+    contextUntil: body.contextUntil ?? null,
     sourceEventId: body.sourceEventId ?? null,
     helpReason: reason,
     helpWithoutOrder: true,
