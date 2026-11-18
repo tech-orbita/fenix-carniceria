@@ -6,7 +6,7 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-import { catalogProductFor, normalizeProductName, UNSPECIFIED_WHOLESALE_UNIT, wholesaleProductCatalog, wholesaleUnitFor } from "@/lib/orders/product-parser";
+import { catalogProductFor, isWholesaleCommunicationText, normalizeProductName, UNSPECIFIED_WHOLESALE_UNIT, wholesaleProductCatalog, wholesaleUnitFor } from "@/lib/orders/product-parser";
 import type { RetailCatalogProduct } from "@/lib/orders/retail-normalization";
 import type { WholesaleProduct } from "@/lib/orders/product-parser";
 import { wholesaleServiceDay } from "@/lib/orders/wholesale-service-day";
@@ -280,6 +280,7 @@ function productsForOrders(orders: Order[]) {
   orders.forEach((order) => order.items.forEach((item) => {
     const storedCatalog = catalogProductFor(item.productName);
     const itemLabel = storedCatalog?.name === "Comodín" && item.preparation ? item.preparation.trim() : item.productName.trim();
+    if (isWholesaleCommunicationText(itemLabel)) return;
     const catalog = storedCatalog?.name === "Comodín" ? catalogProductFor(itemLabel) ?? storedCatalog : storedCatalog;
     const name = catalog?.name === "Comodín" ? itemLabel : catalog ? undefined : itemLabel;
     if (!name) {

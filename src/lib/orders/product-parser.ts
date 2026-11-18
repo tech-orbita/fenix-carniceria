@@ -10,7 +10,7 @@ export const wholesaleProductCatalog: readonly WholesaleProduct[] = [
   { category: "Res · cortes", name: "Molida especial", aliases: ["molida especial", "carne molida especial", "carne molida", "molida"] },
   { category: "Res · cortes", name: "Espaldilla", aliases: ["espaldilla", "espaldi"] },
   { category: "Res · cortes", name: "Atravesado", aliases: ["pollo atravesado", "atravesado"] },
-  { category: "Res · cortes", name: "Bollo", aliases: ["bollo"] },
+  { category: "Res · cortes", name: "Bollo", aliases: ["bollito pequeño", "bollito pequeno", "bollito", "bollo pequeño", "bollo pequeno", "bollo"] },
   { category: "Res · cortes", name: "Costilla", aliases: ["costilla de res", "costilla res", "costillitas", "costillita", "costilla", "costillo"] },
   { category: "Res · cortes", name: "Hueso", aliases: ["hueso de res", "hueso res", "hueso"] },
   { category: "Res · vísceras", name: "Hígado", aliases: ["higado", "hígado"] },
@@ -47,7 +47,7 @@ export const wholesaleProductCatalog: readonly WholesaleProduct[] = [
   { category: "Pollo", name: "Muslos de pollo", aliases: ["muslos de pollo", "muslo de pollo", "muslos pollo"] },
   { category: "Pollo", name: "Pechuga", aliases: ["pechuga relajada", "pechuga relajado", "pechuga", "pechugas"] },
   { category: "Pollo", name: "Pechuga congela", aliases: ["pechuga congelada", "pechuga congela"] },
-  { category: "Pollo", name: "Pollo entero", aliases: ["pollo entero"] },
+  { category: "Pollo", name: "Pollo entero", aliases: ["pollos enteros", "pollo entero", "pollos", "pollo"] },
   { category: "Pescado", name: "Bassa selecta", aliases: ["bassa selecta", "basa selecta"] },
   { category: "Pescado", name: "Bassa", aliases: ["bassa", "basa"] },
   { category: "Otros productos", name: "Butifarra", aliases: ["butifarra"] },
@@ -92,6 +92,24 @@ export function normalizeProductName(value: string) {
     .toLocaleLowerCase("es")
     .replace(/[^a-z0-9]+/g, " ")
     .trim();
+}
+
+// Una línea social o de cortesía puede compartir el mismo campo libre con el
+// pedido. No debe convertirse en producto ni crear una columna en la planilla.
+export function isWholesaleCommunicationText(value: string) {
+  const normalized = normalizeProductName(value);
+  const withoutGreeting = normalized.replace(/^(?:hola )?(?:buenos dias|buenas tardes|buenas noches)(?: senores| equipo)?(?: |$)/, "");
+  if (normalized && !withoutGreeting) return true;
+  return [
+    /^(?:hola|buen dia|buena tarde|buena noche)$/,
+    /^(?:muchas )?gracias(?: de antemano)?$/,
+    /^por favor(?: me| nos)? (?:pueden|podrian|piden) (?:enviar|mandar|despachar)(?: lo siguiente)?$/,
+    /^por favor$/,
+    /^por (?:ahora|haora) (?:eso|seria todo)$/,
+    /^(?:eso es|seria) todo(?: por ahora)?$/,
+    /^pedido no especificado$/,
+    /^pago del pedido\b/,
+  ].some((pattern) => pattern.test(withoutGreeting));
 }
 
 export function catalogProductFor(value: string) {
@@ -200,6 +218,7 @@ export function parseOrderTextDetailed(text: string): ParsedWholesaleOrder {
   // cuánto despacha, en vez de desaparecer del pedido.
   const addItemWithoutQuantity = (productValue: string) => {
     const requestedName = readableProductName(productValue);
+    if (isWholesaleCommunicationText(requestedName)) return;
     const catalogProduct = catalogProductFor(requestedName);
     if (!requestedName) return;
     unresolved.push(productValue.trim());

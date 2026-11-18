@@ -30,6 +30,19 @@ test("ninguna línea ambigua desaparece de la tabla mayorista", () => {
   assert.match(order.notes, /producto secreto/i);
   assert.match(order.notes, /3 libras corte extraterrestre/i);
 });
+
+test("separa expresiones de comunicación de los productos del pedido", () => {
+  const order = mapHighLevelForm({
+    ...base,
+    "Coloca tu Pedido": "Buenos días\nPor favor me pueden enviar\n3 lb de molida especial\n1 bollito pequeño\n2 pollos\nGracias",
+  }, "mayorista-cliente");
+  assert.deepEqual(order.items, [
+    { product_name: "Molida especial", quantity: 3, unit: "lb" },
+    { product_name: "Bollo", quantity: 1, unit: "cantidad" },
+    { product_name: "Pollo entero", quantity: 2, unit: "cantidad" },
+  ]);
+  assert.equal(order.notes, undefined);
+});
 test("nuevo: registra los campos activos del cliente", () => {
   const order = mapHighLevelForm({
     "Nombre del Negocio": "Asados",
