@@ -5505,10 +5505,11 @@ a {
 }
 
 /* Productos queda junto al cliente y Ruta es la cuarta columna informativa. */
-.orders-app .wholesale-matrix .product-count-column {
-  width: 68px;
-  min-width: 68px;
-  max-width: 68px;
+.orders-app .dashboard-content:has(.wholesale-workspace) .wholesale-matrix .product-count-column {
+  width: 34px;
+  min-width: 34px;
+  max-width: 34px;
+  padding-inline: 2px;
   text-align: center;
 }
 

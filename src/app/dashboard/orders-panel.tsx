@@ -701,7 +701,7 @@ function WholesaleOrdersTable({ isAdmin, orders: allOrders, pendingId, onStatusC
         <table className={`order-matrix wholesale-matrix ${showInfoColumns ? "with-order-info" : "without-order-info"}`}>
           <thead>
             <tr className="category-row"><th colSpan={showInfoColumns ? 4 : 2}>Pedido recibido</th>{categories.map((category, index) => <th colSpan={category.count} key={`${category.name}-${index}`}>{category.name}</th>)}</tr>
-            <tr><th>Cliente</th><th className="product-count-column">Productos</th>{showInfoColumns && <><th>Teléfono</th><th>Ruta</th></>}{visibleProducts.map((product) => <th className={product.name === "Blanda" ? "is-blanda-column" : undefined} key={product.name} title={product.name === "Blanda" ? "C = Capón · L = Lomo · T = Tetafula · B = Calavera · R = Relajado/abierto" : undefined}>{product.name}{product.name === "Blanda" && <small className="unit-label">C/L/T/B/R</small>}</th>)}</tr>
+            <tr><th>Cliente</th><th className="product-count-column" title="Productos"><span aria-hidden="true">P</span><span className="sr-only">Productos</span></th>{showInfoColumns && <><th>Teléfono</th><th>Ruta</th></>}{visibleProducts.map((product) => <th className={product.name === "Blanda" ? "is-blanda-column" : undefined} key={product.name} title={product.name === "Blanda" ? "C = Capón · L = Lomo · T = Tetafula · B = Calavera · R = Relajado/abierto" : undefined}>{product.name}{product.name === "Blanda" && <small className="unit-label">C/L/T/B/R</small>}</th>)}</tr>
           </thead>
           <tbody>
             {visibleOrders.map((order) => <tr className={isClosed(order) ? "is-dispatched" : undefined} key={order.id}>
