@@ -401,6 +401,27 @@ test("separa chuleta ahumada y hueso de cerdo de sus equivalentes genéricos", (
   ]);
 });
 
+test("mantiene cada tipo de hueso en su propia columna", () => {
+  const order = mapHighLevelForm({
+    ...base,
+    "Coloca tu Pedido": "4 libras de hueso blanco\n5 libras de hueso negro\n3 libras de hueso especial\n3 libras de hueso carnudo\n2 libras de hueso de res",
+  }, "mayorista-cliente");
+  assert.deepEqual(order.items, [
+    { product_name: "Hueso blanco", quantity: 4, unit: "lb" },
+    { product_name: "Hueso negro", quantity: 5, unit: "lb" },
+    { product_name: "Hueso especial", quantity: 3, unit: "lb" },
+    { product_name: "Hueso carnudo", quantity: 3, unit: "lb" },
+    { product_name: "Hueso", quantity: 2, unit: "lb" },
+  ]);
+});
+
+test("conserva un tipo de hueso desconocido en vez de sumarlo al hueso de res", () => {
+  const order = mapHighLevelForm({ ...base, "Coloca tu Pedido": "2 libras de hueso rojo" }, "mayorista-cliente");
+  assert.deepEqual(order.items, [
+    { product_name: "Comodín", quantity: 2, unit: "lb", preparation: "Hueso rojo" },
+  ]);
+});
+
 test("mantiene cada pedido porcionado en un solo renglón con su gramaje", () => {
   const order = mapHighLevelForm({
     ...base,

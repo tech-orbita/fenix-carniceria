@@ -13,7 +13,10 @@ export const wholesaleProductCatalog: readonly WholesaleProduct[] = [
   { category: "Res · cortes", name: "Bollo", aliases: ["bollito pequeño", "bollito pequeno", "bollito", "bollo pequeño", "bollo pequeno", "bollo"] },
   { category: "Res · cortes", name: "Costilla", aliases: ["costilla de res", "costilla res", "costilla", "costillo"] },
   { category: "Res · cortes", name: "Costillita", aliases: ["costillitas", "costillita"] },
-  { category: "Res · cortes", name: "Hueso", aliases: ["hueso de res", "hueso res", "hueso"] },
+  { category: "Res · cortes", name: "Hueso carnudo", aliases: ["huesos de res carnudos", "hueso de res carnudo", "huesos carnudos", "hueso carnudo"] },
+  { category: "Res · cortes", name: "Hueso negro", aliases: ["huesos negros especiales", "hueso negro especial", "huesos negros", "hueso negro"] },
+  { category: "Res · cortes", name: "Hueso especial", aliases: ["huesos especiales", "hueso especial"] },
+  { category: "Res · cortes", name: "Hueso", aliases: ["hueso de res", "hueso res", "huesos", "hueso"] },
   { category: "Res · vísceras", name: "Hígado", aliases: ["higado", "hígado"] },
   { category: "Res · vísceras", name: "Corazón", aliases: ["corazon", "corazón"] },
   { category: "Res · vísceras", name: "Panza", aliases: ["panza"] },
@@ -34,7 +37,7 @@ export const wholesaleProductCatalog: readonly WholesaleProduct[] = [
   { category: "Res · cortes", name: "Asado de Tira", aliases: ["asado de tira"] },
   { category: "Res · cortes", name: "Jarreton", aliases: ["jarreton", "jarretón"] },
   { category: "Res · cortes", name: "Jarrete", aliases: ["jarrete", "jarrtee"] },
-  { category: "Res · cortes", name: "Hueso paleta", aliases: ["hueso de paleta", "hueso paleta"] },
+  { category: "Res · cortes", name: "Hueso paleta", aliases: ["huesos paleteros", "hueso paletero", "hueso de paleta", "hueso paleta"] },
   { category: "Res · cortes", name: "Molida corriente", aliases: ["molida corriente", "carne molida corriente"] },
   { category: "Res · cortes", name: "Sobrebarriga", aliases: ["sobrebarriga", "sobre barriga"] },
   { category: "Res · vísceras", name: "Pata", aliases: ["patas de res", "pata de res", "para de res", "pata res", "patas", "pata"], defaultUnit: "und" },
@@ -124,7 +127,14 @@ export function catalogProductFor(value: string) {
   const normalized = normalizeProductName(value);
   const candidates = wholesaleProductCatalog.flatMap((product) =>
     product.aliases.map((alias) => ({ product, alias: normalizeProductName(alias) })),
-  ).filter(({ alias }) => normalized === alias || normalized.includes(alias))
+  ).filter(({ product, alias }) => {
+    if (normalized === alias) return true;
+    // "Hueso" solo identifica la columna genérica cuando viene solo. Un
+    // descriptor desconocido (p. ej. "hueso rojo") debe conservarse como una
+    // columna independiente, no sumarse silenciosamente como hueso de res.
+    if (product.name === "Hueso" && ["hueso", "huesos"].includes(alias)) return false;
+    return normalized.includes(alias);
+  })
     // Priorizar el primer producto escrito evita que "rabo sin hueso" se
     // clasifique como Hueso. Si empiezan en la misma posición gana el alias
     // más específico (por ejemplo, "hueso de paleta" sobre "hueso").
