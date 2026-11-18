@@ -227,6 +227,76 @@ test("recupera del historial el proveedor SMS personalizado antes de enviar", as
   });
 });
 
+test("minoristas responde por el proveedor del mensaje entrante más reciente", async () => {
+  configure();
+  const requests = [];
+  globalThis.fetch = async (input, init = {}) => {
+    requests.push({ url: String(input), init });
+    if (String(input).includes("/conversations/search?")) return Response.json({ conversations: [{
+      id: "conversation-retail-origin",
+      lastMessageType: "TYPE_CUSTOM_PROVIDER_SMS",
+      lastChannelAccount: [{ value: "provider-unrelated" }],
+    }] });
+    if (String(input).includes("/conversations/conversation-retail-origin/messages?")) return Response.json({ messages: { messages: [
+      {
+        direction: "outbound",
+        dateAdded: "2026-11-18T12:00:00.000Z",
+        conversationProviderId: "provider-outbound",
+      },
+      {
+        direction: "inbound",
+        dateAdded: "2026-11-18T11:59:00.000Z",
+        conversationProviderId: "provider-retail-newest",
+      },
+      {
+        direction: "inbound",
+        dateAdded: "2026-11-18T10:00:00.000Z",
+        conversationProviderId: "provider-retail-older",
+      },
+    ] } });
+    return Response.json({ messageId: "message-retail-origin" });
+  };
+
+  const result = await sendHighLevelMessage(
+    { locationId: "location-retail", contactId: "contact-retail", conversationId: "conversation-retail-origin" },
+    "Cuenta minorista",
+    { channel: "SMS", replyViaOriginProvider: true },
+  );
+
+  assert.equal(result.ok, true);
+  const sent = requests.find((request) => request.url.endsWith("/conversations/messages"));
+  assert.deepEqual(JSON.parse(String(sent.init.body)), {
+    type: "Custom",
+    contactId: "contact-retail",
+    message: "Cuenta minorista",
+    conversationProviderId: "provider-retail-newest",
+  });
+});
+
+test("minoristas no usa SMS si no encuentra el proveedor de origen", async () => {
+  configure();
+  const requests = [];
+  globalThis.fetch = async (input, init = {}) => {
+    requests.push({ url: String(input), init });
+    if (String(input).includes("/conversations/search?")) return Response.json({ conversations: [{
+      id: "conversation-retail-without-origin",
+      lastMessageType: "TYPE_SMS",
+    }] });
+    if (String(input).includes("/conversations/conversation-retail-without-origin/messages?")) return Response.json({ messages: { messages: [] } });
+    return Response.json({ messageId: "unexpected-message" });
+  };
+
+  const result = await sendHighLevelMessage(
+    { locationId: "location-retail", contactId: "contact-retail", conversationId: "conversation-retail-without-origin" },
+    "Cuenta minorista",
+    { channel: "SMS", replyViaOriginProvider: true },
+  );
+
+  assert.equal(result.ok, false);
+  assert.match(result.message, /no tiene un mensaje entrante/i);
+  assert.equal(requests.some((request) => request.url.endsWith("/conversations/messages")), false);
+});
+
 test("envía como SMS cuando la conversación usa el canal SMS estándar", async () => {
   configure();
   const requests = [];

@@ -24,6 +24,8 @@ type Conversation = {
 type ConversationMessage = {
   messageType?: string;
   conversationProviderId?: string;
+  direction?: string;
+  dateAdded?: string;
 };
 
 type CustomField = {
@@ -320,7 +322,7 @@ export function syncRetailPipeline(
 export async function sendHighLevelMessage(
   context: HighLevelContext,
   message: string,
-  options: { channel?: "SMS" | "WhatsApp" } = {},
+  options: { channel?: "SMS" | "WhatsApp"; replyViaOriginProvider?: boolean } = {},
 ) {
   const config = await resolvedConfiguration(context);
   if (!config) return { ok: false as const, message: "El pedido no tiene un contacto de Orbita asociado." };
@@ -334,23 +336,46 @@ export async function sendHighLevelMessage(
     // falla porque ese canal nativo no está conectado en la subcuenta.
     const requestedChannel = options.channel ?? "SMS";
     const usesSmsChannel = requestedChannel === "SMS";
-    let providerId = conversation?.lastChannelAccount?.[0]?.value ?? conversation?.conversationProviderId;
+    let providerId = options.replyViaOriginProvider
+      ? undefined
+      : conversation?.lastChannelAccount?.[0]?.value ?? conversation?.conversationProviderId;
 
     // La búsqueda de conversaciones no siempre devuelve el proveedor del canal.
     // En conversaciones SMS personalizadas (como el número conectado por QR), el
     // identificador sí viene en el historial y GHL lo exige para enviar como Custom.
-    if (usesSmsChannel && !providerId && conversation?.id && (requestedChannel === "SMS" || messageType === "TYPE_CUSTOM_PROVIDER_SMS")) {
+    if (usesSmsChannel && conversation?.id && (options.replyViaOriginProvider || (!providerId && (requestedChannel === "SMS" || messageType === "TYPE_CUSTOM_PROVIDER_SMS")))) {
       try {
         const history = await ghlFetch<{ messages?: { messages?: ConversationMessage[] } }>(
           `/conversations/${encodeURIComponent(conversation.id)}/messages?limit=20`,
           config.token,
           { headers: { Version: "v3" } },
         );
-        providerId = history.messages?.messages?.find((item) => item.conversationProviderId)?.conversationProviderId;
-      } catch {
+        const messages = history.messages?.messages ?? [];
+        providerId = options.replyViaOriginProvider
+          ? messages
+            .filter((item) => item.direction?.toLowerCase() === "inbound" && item.conversationProviderId)
+            .sort((left, right) => Date.parse(right.dateAdded ?? "") - Date.parse(left.dateAdded ?? ""))[0]
+            ?.conversationProviderId
+          : messages.find((item) => item.conversationProviderId)?.conversationProviderId;
+      } catch (error) {
+        if (options.replyViaOriginProvider) {
+          return {
+            ok: false as const,
+            message: error instanceof Error
+              ? `No se pudo identificar el proveedor de origen de la conversación: ${error.message}`
+              : "No se pudo identificar el proveedor de origen de la conversación.",
+          };
+        }
         // Si el token no permite consultar el historial, GHL todavía puede enviar
         // por el proveedor SMS predeterminado sin conversationProviderId.
       }
+    }
+
+    if (options.replyViaOriginProvider && !providerId) {
+      return {
+        ok: false as const,
+        message: "La conversación minorista no tiene un mensaje entrante con proveedor de origen. No se envió por otro canal.",
+      };
     }
 
     const usesCustomProvider = usesSmsChannel && Boolean(providerId);

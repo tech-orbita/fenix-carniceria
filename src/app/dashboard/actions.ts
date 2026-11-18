@@ -89,7 +89,7 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus) {
         customer: customer?.name || "cliente",
         fulfillment: data.fulfillment_type === "pickup" ? "pickup" : "delivery",
       }),
-      { channel: "SMS" },
+      { channel: "SMS", replyViaOriginProvider: true },
     )
     : data.customer_type === "wholesale" && status === "dispatched"
       ? sendHighLevelMessage(
@@ -241,7 +241,7 @@ export async function sendRetailPaymentSummary(orderId: string) {
     deliveryFee: Number(data.delivery_fee),
     adjustments: Number(data.adjustments),
     items: billItems,
-  }));
+  }), { channel: "SMS", replyViaOriginProvider: true });
   return sent.ok ? { ok: true as const, message: "Cuenta de cobro enviada por la conversación de Orbita." } : sent;
 }
 
