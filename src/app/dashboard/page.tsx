@@ -95,7 +95,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     // Pide una fila extra para saber si existe otro lote sin ejecutar COUNT(*).
     .range(0, requestedRows);
   if (viewer.customerType) query = query.eq("customer_type", viewer.customerType);
-  if (requestedRoutes.length) query = query.in("routes.name", requestedRoutes);
+  // La relación está expuesta con el alias `order_route`; usar el nombre
+  // original (`routes.name`) dejaba el filtro sin apuntar al join seleccionado.
+  if (requestedRoutes.length) query = query.in("order_route.name", requestedRoutes);
   // Los operadores mayoristas no necesitan descargar ni procesar el catálogo
   // minorista antes de poder abrir su planilla.
   const retailCatalogPromise = viewer.customerType === "wholesale" ? Promise.resolve([]) : loadRetailCatalog();

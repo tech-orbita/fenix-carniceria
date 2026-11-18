@@ -11,7 +11,8 @@ export const wholesaleProductCatalog: readonly WholesaleProduct[] = [
   { category: "Res · cortes", name: "Espaldilla", aliases: ["espaldilla", "espaldi"] },
   { category: "Res · cortes", name: "Atravesado", aliases: ["pollo atravesado", "atravesado"] },
   { category: "Res · cortes", name: "Bollo", aliases: ["bollito pequeño", "bollito pequeno", "bollito", "bollo pequeño", "bollo pequeno", "bollo"] },
-  { category: "Res · cortes", name: "Costilla", aliases: ["costilla de res", "costilla res", "costillitas", "costillita", "costilla", "costillo"] },
+  { category: "Res · cortes", name: "Costilla", aliases: ["costilla de res", "costilla res", "costilla", "costillo"] },
+  { category: "Res · cortes", name: "Costillita", aliases: ["costillitas", "costillita"] },
   { category: "Res · cortes", name: "Hueso", aliases: ["hueso de res", "hueso res", "hueso"] },
   { category: "Res · vísceras", name: "Hígado", aliases: ["higado", "hígado"] },
   { category: "Res · vísceras", name: "Corazón", aliases: ["corazon", "corazón"] },
@@ -24,7 +25,9 @@ export const wholesaleProductCatalog: readonly WholesaleProduct[] = [
   { category: "Cerdo", name: "Pulpa cerdo", aliases: ["pulpa de cerdo", "pulpa cerdo", "pulpa de cedo", "pulpa cedo"] },
   { category: "Cerdo", name: "Lomo cerdo", aliases: ["lomo de cerdo", "lomo cerdo", "cerdo lomo", "cerdo"] },
   { category: "Cerdo", name: "Pata cerdo", aliases: ["pata de cerdo", "pata cerdo", "cerdo pata"] },
-  { category: "Cerdo", name: "Costilla cerdo", aliases: ["costillitas de cerdo", "costillita de cerdo", "costillas de cerdo", "costilla de cerdo", "costillitas cerdo", "costillita cerdo", "costillas cerdo", "costilla cerdo"] },
+  { category: "Cerdo", name: "Costillita de cerdo", aliases: ["costillitas de cerdo", "costillita de cerdo", "costillas de cerdo", "costilla de cerdo", "costillitas cerdo", "costillita cerdo", "costillas cerdo", "costilla cerdo"] },
+  { category: "Cerdo", name: "Hueso de cerdo", aliases: ["huesos de cerdo", "hueso de cerdo", "huesos cerdo", "hueso cerdo"] },
+  { category: "Cerdo", name: "Chuleta ahumada", aliases: ["chuletas ahumadas", "chuleta ahumada"] },
   { category: "Cerdo", name: "Chuleta", aliases: ["chuleta"] },
   { category: "Res · cortes", name: "Churrasco", aliases: ["churrascos", "churrasco"] },
   { category: "Otros productos", name: "Chuleto", aliases: ["chuletos", "chuleto"] },
@@ -98,11 +101,16 @@ export function normalizeProductName(value: string) {
 // pedido. No debe convertirse en producto ni crear una columna en la planilla.
 export function isWholesaleCommunicationText(value: string) {
   const normalized = normalizeProductName(value);
-  const withoutGreeting = normalized.replace(/^(?:hola )?(?:buenos dias|buenas tardes|buenas noches)(?: senores| equipo)?(?: |$)/, "");
+  const withoutGreeting = normalized.replace(/^(?:hola )?(?:(?:muy )?buenos dias|buen dia|buenas tardes|buena tarde|buenas noches|buena noche)(?: senores| equipo| muchachos)?(?: |$)/, "");
   if (normalized && !withoutGreeting) return true;
   return [
     /^(?:hola|buen dia|buena tarde|buena noche)$/,
     /^(?:muchas )?gracias(?: de antemano)?$/,
+    /^(?:este|ese) es (?:mi|el) pedido(?: para (?:hoy|manana))?$/,
+    /^(?:mi )?pedido(?: para (?:hoy|manana))?$/,
+    /^les envio (?:mi|el) pedido$/,
+    /^quedo (?:atento|atenta|pendiente)(?: gracias)?$/,
+    /^(?:feliz|bendecido) dia$/,
     /^por favor(?: me| nos)? (?:pueden|podrian|piden) (?:enviar|mandar|despachar)(?: lo siguiente)?$/,
     /^por favor$/,
     /^por (?:ahora|haora) (?:eso|seria todo)$/,

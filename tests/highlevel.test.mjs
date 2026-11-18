@@ -43,6 +43,17 @@ test("separa expresiones de comunicación de los productos del pedido", () => {
   ]);
   assert.equal(order.notes, undefined);
 });
+
+test("omite saludos e introducciones habituales aunque lleguen como líneas separadas", () => {
+  const order = mapHighLevelForm({
+    ...base,
+    "Coloca tu Pedido": "Hola\nMuy buenos días señores\nEste es mi pedido para mañana\n5 lb de chuleta ahumada\nQuedo atenta, gracias",
+  }, "mayorista-cliente");
+  assert.deepEqual(order.items, [
+    { product_name: "Chuleta ahumada", quantity: 5, unit: "lb" },
+  ]);
+  assert.equal(order.notes, undefined);
+});
 test("nuevo: registra los campos activos del cliente", () => {
   const order = mapHighLevelForm({
     "Nombre del Negocio": "Asados",
@@ -337,7 +348,7 @@ test("separa todos los productos cuando el formulario llega en una sola línea",
     { product_name: "Pulpa cerdo", quantity: 6, unit: "cantidad" },
     { product_name: "Molida corriente", quantity: 3, unit: "cantidad" },
     { product_name: "Molida especial", quantity: 2, unit: "cantidad" },
-    { product_name: "Costilla cerdo", quantity: 5, unit: "lb" },
+    { product_name: "Costillita de cerdo", quantity: 5, unit: "lb" },
     { product_name: "Bollo", quantity: 1, unit: "cantidad" },
     { product_name: "Ahumada", quantity: 6, unit: "lb" },
   ]);
@@ -346,7 +357,7 @@ test("separa todos los productos cuando el formulario llega en una sola línea",
 test("conserva R en todos los productos relajados y reconoce pechuga y muslos", () => {
   const order = mapHighLevelForm({ ...base, "Coloca tu Pedido": "13 libras de Costillitas\n10 libras de hueso\n2 libras de capón relado\n2 libras de lomo de cerdo relajado\n2 unidades de pechuga relajada\n2 libras de molida\n1 lengua\n3 libras de sobrebarriga\n3 libras de muslos de pollo" }, "mayorista-cliente");
   assert.deepEqual(order.items, [
-    { product_name: "Costilla", quantity: 13, unit: "lb" },
+    { product_name: "Costillita", quantity: 13, unit: "lb" },
     { product_name: "Hueso", quantity: 10, unit: "lb" },
     { product_name: "Blanda", quantity: 2, unit: "lb", preparation: "C/R" },
     { product_name: "Lomo cerdo", quantity: 2, unit: "lb", preparation: "R" },
@@ -371,11 +382,22 @@ test("conserva lomo ancho y expresiones exactas no numéricas del formulario", (
   ]);
 });
 
-test("costillita sola es res y solo la mención explícita de cerdo va a cerdo", () => {
-  const order = mapHighLevelForm({ ...base, "Coloca tu Pedido": "5 libras de costillita\n4 libras de costillita de cerdo" }, "mayorista-cliente");
+test("mantiene costilla, costillita y costillita de cerdo en columnas distintas", () => {
+  const order = mapHighLevelForm({ ...base, "Coloca tu Pedido": "6 libras de costilla\n5 libras de costillita\n4 libras de costillita de cerdo" }, "mayorista-cliente");
   assert.deepEqual(order.items, [
-    { product_name: "Costilla", quantity: 5, unit: "lb" },
-    { product_name: "Costilla cerdo", quantity: 4, unit: "lb" },
+    { product_name: "Costilla", quantity: 6, unit: "lb" },
+    { product_name: "Costillita", quantity: 5, unit: "lb" },
+    { product_name: "Costillita de cerdo", quantity: 4, unit: "lb" },
+  ]);
+});
+
+test("separa chuleta ahumada y hueso de cerdo de sus equivalentes genéricos", () => {
+  const order = mapHighLevelForm({ ...base, "Coloca tu Pedido": "10 lb chuleta\n8 lb chuleta ahumada\n6 lb hueso de res\n5 lb hueso de cerdo" }, "mayorista-cliente");
+  assert.deepEqual(order.items, [
+    { product_name: "Chuleta", quantity: 10, unit: "lb" },
+    { product_name: "Chuleta ahumada", quantity: 8, unit: "lb" },
+    { product_name: "Hueso", quantity: 6, unit: "lb" },
+    { product_name: "Hueso de cerdo", quantity: 5, unit: "lb" },
   ]);
 });
 
