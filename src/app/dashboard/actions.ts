@@ -374,10 +374,25 @@ export async function createManualRetailOrder(input: ManualRetailOrderInput) {
     if (Number.isFinite(pricePerUnit)) return [{ id: String(product.id), name: String(product.name), catalogKey: String(product.catalog_key), pricePerUnit: pricePerUnit!, saleUnit: "und" as const }];
     return Number.isFinite(pricePerKg) ? [{ id: String(product.id), name: String(product.name), catalogKey: String(product.catalog_key), pricePerKg: pricePerKg!, saleUnit: "kg" as const }] : [];
   });
-  const items = normalizeRetailItems([], orderText, catalog);
-  if (!items.length) {
-    return { ok: false as const, message: "No pude reconocer productos. Escribe uno por línea, por ejemplo: “5 kilos de punta gorda”." };
-  }
+  const normalizedItems = normalizeRetailItems([], orderText, catalog);
+  // El botón es una entrada manual de emergencia: nunca debe perder el pedido
+  // solo porque una línea aún no coincide con el catálogo. Esas líneas entran
+  // con precio pendiente y el operador puede completarlas desde Editar.
+  const items = normalizedItems.length ? normalizedItems : orderText
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(0, 50)
+    .map((line) => ({
+      product_id: null,
+      product_name: line,
+      quantity: 1,
+      unit: "kg",
+      actual_quantity: 1,
+      preparation: null,
+      notes: line,
+      unit_price: 0,
+    }));
 
   const identityKey = customerIdentityKey("retail", { name: customerName, phone });
   const { data: existingCustomer } = await supabase
@@ -419,7 +434,10 @@ export async function createManualRetailOrder(input: ManualRetailOrderInput) {
     subtotal,
     notes,
   }).select("id,order_number").single();
-  if (orderError || !order) return { ok: false as const, message: "No se pudo crear el pedido." };
+  if (orderError || !order) {
+    console.error("[manual-retail-order] No se pudo crear el pedido", { code: orderError?.code, message: orderError?.message });
+    return { ok: false as const, message: "No se pudo crear el pedido. Intenta nuevamente; el formulario conservará los datos." };
+  }
 
   const { error: itemsError } = await supabase.from("order_items").insert(items.map((item, sortOrder) => ({
     order_id: order.id,
@@ -434,6 +452,7 @@ export async function createManualRetailOrder(input: ManualRetailOrderInput) {
     sort_order: sortOrder,
   })));
   if (itemsError) {
+    console.error("[manual-retail-order] No se pudieron guardar los productos", { code: itemsError.code, message: itemsError.message });
     await supabase.from("orders").delete().eq("id", order.id).eq("customer_type", "retail");
     return { ok: false as const, message: "No se pudieron guardar los productos del pedido." };
   }
@@ -442,6 +461,7 @@ export async function createManualRetailOrder(input: ManualRetailOrderInput) {
   revalidatePath("/dashboard");
   return {
     ok: true as const,
+    orderId: String(order.id),
     message: `${order.order_number} fue creado en Nuevos para ${customerName}.${unmatched ? ` ${unmatched === 1 ? "Un producto necesita" : `${unmatched} productos necesitan`} confirmar precio o nombre.` : ""}${highLevelLookup.ok && highLevelLookup.found ? " Conversación de Orbita vinculada." : " No se encontró una conversación de Orbita para ese teléfono."}`,
   };
 }

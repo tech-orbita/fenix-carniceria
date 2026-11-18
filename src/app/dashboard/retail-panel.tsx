@@ -37,6 +37,7 @@ export type ManualRetailOrderInput = {
   orderText: string;
   notes: string;
 };
+type ManualRetailOrderResult = { ok: boolean; message: string; orderId?: string };
 
 const LOGO_SRC = "/logo-fenix.png";
 const quantityFormat = new Intl.NumberFormat("es-CO", { maximumFractionDigits: 3 });
@@ -470,15 +471,18 @@ function OrderDetail({ catalog, order, pending, logo, today, onAdvance, onDelete
 
 const emptyManualOrder: ManualRetailOrderInput = { customerName: "", phone: "", address: "", fulfillment: "delivery", paymentMethod: "", orderText: "", notes: "" };
 
-function ManualRetailOrderModal({ onClose, onCreate }: { onClose: () => void; onCreate: (input: ManualRetailOrderInput) => Promise<boolean> }) {
+function ManualRetailOrderModal({ onClose, onCreate }: { onClose: () => void; onCreate: (input: ManualRetailOrderInput) => Promise<ManualRetailOrderResult> }) {
   const [draft, setDraft] = useState<ManualRetailOrderInput>(emptyManualOrder);
   const [saving, setSaving] = useState(false);
+  const [notice, setNotice] = useState("");
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    setNotice("");
     setSaving(true);
-    const created = await onCreate(draft);
+    const result = await onCreate(draft);
     setSaving(false);
-    if (created) onClose();
+    setNotice(result.message);
+    if (result.ok) onClose();
   };
   const update = <Key extends keyof ManualRetailOrderInput>(key: Key, value: ManualRetailOrderInput[Key]) => setDraft((current) => ({ ...current, [key]: value }));
 
@@ -494,12 +498,12 @@ function ManualRetailOrderModal({ onClose, onCreate }: { onClose: () => void; on
         <label className="manual-order-wide">Pedido<textarea maxLength={5_000} onChange={(event) => update("orderText", event.target.value)} placeholder={"Un producto por línea. Ejemplo:\n5 kilos de punta gorda relajada\n5 kilos de carabela relajada"} required rows={7} value={draft.orderText} /></label>
         <label className="manual-order-wide">Indicaciones adicionales<textarea maxLength={2_000} onChange={(event) => update("notes", event.target.value)} placeholder="Preparación, referencia de entrega u otra observación" rows={3} value={draft.notes} /></label>
       </div>
-      <div className="manual-order-actions"><span>Si algún producto no coincide con el catálogo, quedará marcado para revisión.</span><button className="rt-button is-quiet" disabled={saving} onClick={onClose} type="button">Cancelar</button><button className="rt-button is-paid" disabled={saving} type="submit">{saving ? "Creando…" : "Crear pedido"}</button></div>
+      <div className="manual-order-actions"><span role="status">{notice || "Si algún producto no coincide con el catálogo, quedará con precio pendiente para editarlo sin perder el pedido."}</span><button className="rt-button is-quiet" disabled={saving} onClick={onClose} type="button">Cancelar</button><button className="rt-button is-paid" disabled={saving} type="submit">{saving ? "Creando…" : "Crear pedido"}</button></div>
     </form>
   </div>;
 }
 
-export function RetailPanel({ catalog, orders, pendingId, onAdvance, onCreate, onDelete, onMove, onPaymentChange, onResolveHelp, onSave, onSendBill }: { catalog: RetailCatalogProduct[]; orders: Order[]; pendingId?: string; onAdvance: (order: Order) => void; onCreate: (input: ManualRetailOrderInput) => Promise<boolean>; onDelete: (order: Order) => void; onMove: (order: Order, phase: OperationalPhase) => void; onPaymentChange: (order: Order, status: "paid" | "pending") => void; onResolveHelp: (order: Order) => void; onSave: (order: Order, details: EditableOrderDetails) => Promise<boolean>; onSendBill: (order: Order) => void }) {
+export function RetailPanel({ catalog, orders, pendingId, onAdvance, onCreate, onDelete, onMove, onPaymentChange, onResolveHelp, onSave, onSendBill }: { catalog: RetailCatalogProduct[]; orders: Order[]; pendingId?: string; onAdvance: (order: Order) => void; onCreate: (input: ManualRetailOrderInput) => Promise<ManualRetailOrderResult>; onDelete: (order: Order) => void; onMove: (order: Order, phase: OperationalPhase) => void; onPaymentChange: (order: Order, status: "paid" | "pending") => void; onResolveHelp: (order: Order) => void; onSave: (order: Order, details: EditableOrderDetails) => Promise<boolean>; onSendBill: (order: Order) => void }) {
   // "Hoy" se recalcula en cada refresco para que el periodo avance solo al cambiar el día.
   const today = bogotaDay.format(new Date());
   const [preset, setPreset] = useState<RangePreset>("today");
