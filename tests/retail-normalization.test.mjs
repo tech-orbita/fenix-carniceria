@@ -13,6 +13,7 @@ const catalog = [
   { id: "hueso-pechuga", name: "Hueso de pechuga", catalogKey: "pollo:hueso de pechuga", pricePerKg: 5_000 },
   { id: "costilla-res", name: "Costilla", catalogKey: "res:costilla", pricePerKg: 20_400 },
   { id: "costilla-cerdo", name: "Costilla", catalogKey: "cerdo:costilla", pricePerKg: 20_000 },
+  { id: "pata-cerdo", name: "Pata de cerdo", catalogKey: "cerdo:pata de cerdo", pricePerKg: 12_000 },
   { id: "pata-res", name: "Pata de res", catalogKey: "res:pata de res", pricePerUnit: 9_000, saleUnit: "und" },
 ];
 
@@ -160,6 +161,17 @@ test("conserva un producto desconocido en kilos y sin inventar precio", () => {
 test("usa la categoría escrita para resolver nombres ambiguos", () => {
   assert.equal(matchRetailProduct("costilla de cerdo", catalog)?.id, "costilla-cerdo");
   assert.equal(matchRetailProduct("costilla de res", catalog)?.id, "costilla-res");
+});
+
+test("nunca convierte pulpa de cerdo en pata de cerdo", () => {
+  assert.equal(matchRetailProduct("pulpa de cerdo", catalog)?.id, "pulpa");
+  assert.equal(matchRetailProduct("pulpa cerdo", catalog)?.id, "pulpa");
+
+  const [item] = normalizeRetailItems([], "2 libras de pulpa de cerdo", catalog);
+  assert.deepEqual(
+    { id: item.product_id, name: item.product_name, quantity: item.quantity, price: item.unit_price },
+    { id: "pulpa", name: "Pulpa", quantity: 1, price: 22_000 },
+  );
 });
 
 test("clasifica aclaraciones, solicitudes de asesor y comprobantes como ayuda", () => {

@@ -40,6 +40,7 @@ PEDIDOS
 - Recibe productos, cantidades, unidades, cortes, preparación, empaque y observaciones sin perder detalles.
 - Si falta una característica que cambia el producto o su preparación, pregunta únicamente ese detalle antes de registrar. Por ejemplo, para filete pregunta si lo desean relajado o entero. No inventes la opción ni omitas la indicación original del cliente.
 - No inventes productos, precios, descuentos, unidades ni disponibilidad. No mezcles precios mayoristas.
+- Mantén separados los nombres parecidos. “Pulpa de cerdo” o “pulpa cerdo” significa **Pulpa**; nunca lo cambies por “pata de cerdo”. “Pata de cerdo” solo aplica cuando el cliente escribe o dicta claramente “pata”. Conserva literalmente la palabra original en el pedido.
 - Respeta la unidad de venta del catálogo; la pata de res se cotiza por unidad.
 - Cuando el cliente agregue un producto a un pedido abierto, confirma solo la modificación. Ejemplo: “Listo, agregué 1 pechuga deshuesada tajada.” No envíes de nuevo el resumen completo y no preguntes si desea algo más.
 - Solo muestra el resumen completo una vez: cuando el cliente indique de forma clara que terminó, que la lista está completa o que desea registrar el pedido.
@@ -123,3 +124,4 @@ La acción Contact Info guarda los datos; este workflow verifica que estén comp
 11. Pedido posterior al despacho: una lista nueva crea otro número de pedido y no mueve el pedido despachado a “Requiere ayuda”.
 12. Respuesta citada: al responder una lista con “me falta este” o “este también”, la acción registra los productos citados y devuelve el nuevo número antes de confirmarlo al cliente.
 13. Consulta sin pedido: preguntar “¿sí van a enviar mi pedido?” no crea una alerta vacía ni permite responder “registrado” si no existe un pedido con productos en el panel.
+14. Productos parecidos: “2 libras de pulpa de cerdo” crea **Pulpa**, nunca **Pata de cerdo**; “2 libras de pata de cerdo” conserva **Pata de cerdo**.

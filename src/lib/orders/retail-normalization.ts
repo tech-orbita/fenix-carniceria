@@ -98,6 +98,18 @@ export function matchRetailProduct(value: string, catalog: readonly RetailCatalo
   const wanted = comparable(value);
   if (!wanted) return undefined;
 
+  // "Pulpa de cerdo" y "pata de cerdo" son productos distintos. La
+  // similitud de las palabras no puede convertir pulpa en pata, incluso si el
+  // nombre corto del catálogo minorista es simplemente "Pulpa".
+  const wantedTokens = new Set(wanted.split(" "));
+  if (wantedTokens.has("pulpa") && wantedTokens.has("cerdo")) {
+    const porkPulp = catalog.find((product) => {
+      const candidate = comparable(`${product.name} ${product.catalogKey}`);
+      return /\bpulpa\b/.test(candidate) && /\bcerdo\b/.test(candidate) && !/\bpata\b/.test(candidate);
+    });
+    if (porkPulp) return porkPulp;
+  }
+
   // Regla operativa de Fénix: cuando el cliente pide simplemente "carne
   // molida" se despacha la súper especial. La corriente solo se selecciona
   // cuando el cliente la menciona expresamente. Esta prioridad evita que el
@@ -117,7 +129,6 @@ export function matchRetailProduct(value: string, catalog: readonly RetailCatalo
   const exact = catalog.find((product) => comparable(product.name) === wanted);
   if (exact) return exact;
 
-  const wantedTokens = new Set(wanted.split(" "));
   const ranked = catalog.map((product) => {
     const candidate = comparable(product.name);
     const candidateTokens = new Set(candidate.split(" "));
