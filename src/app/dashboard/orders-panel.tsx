@@ -13,10 +13,11 @@ import { wholesaleServiceDay } from "@/lib/orders/wholesale-service-day";
 import { unassignedWholesaleRoute, wholesaleRouteLabel, wholesaleRoutes } from "@/lib/orders/wholesale-routes";
 import { highLevelConversationUrl as highLevelAppConversationUrl, safeHighLevelConversationUrl } from "@/lib/orders/highlevel-conversation-url";
 
-import { createManualWholesaleOrder, deleteRetailOrder, deleteWholesaleOrder, findWholesaleCustomer, resolveOrderHelp, scheduleRetailOrder, scheduleWholesaleOrder, sendRetailPaymentSummary, setWholesaleProductPrepared, updateOrderDetails, updateOrderPaymentStatus, updateOrderStatus, updateWholesalePayment, updateWholesaleRoute, updateWholesaleTable } from "./actions";
+import { createManualRetailOrder, createManualWholesaleOrder, deleteRetailOrder, deleteWholesaleOrder, findWholesaleCustomer, resolveOrderHelp, scheduleRetailOrder, scheduleWholesaleOrder, sendRetailPaymentSummary, setWholesaleProductPrepared, updateOrderDetails, updateOrderPaymentStatus, updateOrderStatus, updateWholesalePayment, updateWholesaleRoute, updateWholesaleTable } from "./actions";
 import { addDays, bogotaDay, dateTime, dayLabel, Icon, phaseLabels, phaseStatus } from "./panel-shared";
 import type { OperationalPhase } from "./panel-shared";
 import { RetailPanel } from "./retail-panel";
+import type { ManualRetailOrderInput } from "./retail-panel";
 import type { EditableOrderDetails } from "./retail-panel";
 import type { CustomerType, Order } from "./types";
 import { useOrdersRealtime } from "./use-orders-realtime";
@@ -930,6 +931,15 @@ export function OrdersPanel({ hasMoreOrders = false, initialOrders, loadedOrderP
     setNotice(result.message); setPendingId(undefined); router.refresh();
   };
 
+  const addRetailOrder = async (draft: ManualRetailOrderInput) => {
+    setNotice(undefined);
+    const result = await createManualRetailOrder(draft);
+    setNotice(result.message);
+    if (!result.ok) return false;
+    router.refresh();
+    return true;
+  };
+
   return (
     <div className="orders-app"><main className="dashboard-content">
       <div className="dashboard-topbar">
@@ -949,7 +959,7 @@ export function OrdersPanel({ hasMoreOrders = false, initialOrders, loadedOrderP
         </div>}
       </div>
       {notice && <div className="operation-notice" role="status">{notice}</div>}
-      {activeType === "wholesale" ? <WholesaleOrdersTable hasMoreOrders={hasMoreOrders} isAdmin={viewer?.role === "admin"} loadedOrderPages={loadedOrderPages} onStatusChange={(order, phase) => void moveOrder(order, phase)} orders={wholesale} pendingId={pendingId} serverRouteFilter={serverRouteFilter} /> : <RetailPanel catalog={retailCatalog} onAdvance={(order) => void advanceRetailOrder(order)} onDelete={(order) => void removeRetailOrder(order)} onMove={(order, phase) => void moveOrder(order, phase)} onPaymentChange={(order, status) => void changePaymentStatus(order, status)} onResolveHelp={(order) => void resolveHelp(order)} onSave={saveOrder} onSendBill={(order) => void sendBill(order)} orders={retail} pendingId={pendingId} />}
+      {activeType === "wholesale" ? <WholesaleOrdersTable hasMoreOrders={hasMoreOrders} isAdmin={viewer?.role === "admin"} loadedOrderPages={loadedOrderPages} onStatusChange={(order, phase) => void moveOrder(order, phase)} orders={wholesale} pendingId={pendingId} serverRouteFilter={serverRouteFilter} /> : <RetailPanel catalog={retailCatalog} onAdvance={(order) => void advanceRetailOrder(order)} onCreate={addRetailOrder} onDelete={(order) => void removeRetailOrder(order)} onMove={(order, phase) => void moveOrder(order, phase)} onPaymentChange={(order, status) => void changePaymentStatus(order, status)} onResolveHelp={(order) => void resolveHelp(order)} onSave={saveOrder} onSendBill={(order) => void sendBill(order)} orders={retail} pendingId={pendingId} />}
     </main></div>
   );
 }

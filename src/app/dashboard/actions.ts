@@ -6,6 +6,8 @@ import { requireViewer } from "@/lib/auth/viewer";
 import { createClient } from "@/lib/supabase/server";
 import { catalogProductFor, normalizeProductName, normalizeWholesaleUnit, parseOrderText, toKilograms, UNSPECIFIED_WHOLESALE_UNIT } from "@/lib/orders/product-parser";
 import { retailBillMessage, retailDispatchMessage } from "@/lib/orders/retail-bill";
+import { normalizeRetailItems } from "@/lib/orders/retail-normalization";
+import type { RetailCatalogProduct } from "@/lib/orders/retail-normalization";
 import { wholesaleDispatchMessage } from "@/lib/orders/wholesale-messages";
 import { sendHighLevelMessage, sendWholesalePaymentSummary, syncHighLevelOrderFields, syncOrderPipeline, syncWholesalePipeline } from "@/lib/orders/highlevel-pipeline";
 import { customerIdentityKey, wholesaleRoutes } from "@/lib/orders/wholesale-routes";
@@ -327,6 +329,115 @@ type ManualWholesaleOrderInput = {
   orderText: string;
   notes: string;
 };
+
+export type ManualRetailOrderInput = {
+  customerName: string;
+  phone: string;
+  address: string;
+  fulfillment: "delivery" | "pickup";
+  paymentMethod: "" | "cash" | "transfer" | "credit" | "other";
+  orderText: string;
+  notes: string;
+};
+
+export async function createManualRetailOrder(input: ManualRetailOrderInput) {
+  const customerName = input.customerName?.trim();
+  const phone = input.phone?.replace(/[^\d+]/g, "").trim();
+  const phoneDigits = phone?.replace(/\D/g, "") ?? "";
+  const address = input.address?.trim() || null;
+  const orderText = input.orderText?.trim();
+  const notes = input.notes?.trim() || null;
+  const fulfillment = input.fulfillment;
+  const paymentMethod = input.paymentMethod || null;
+
+  if (
+    !customerName || customerName.length > 160 || phoneDigits.length < 7 || phoneDigits.length > 15 ||
+    !["delivery", "pickup"].includes(fulfillment) || (fulfillment === "delivery" && !address) ||
+    (address?.length ?? 0) > 500 || !orderText || orderText.length > 5_000 ||
+    (notes?.length ?? 0) > 2_000 || (paymentMethod && !["cash", "transfer", "credit", "other"].includes(paymentMethod))
+  ) {
+    return { ok: false as const, message: "Revisa cliente, teléfono, entrega y contenido del pedido." };
+  }
+
+  const supabase = await sessionClient();
+  const [{ data: products, error: productError }, { data: prices, error: priceError }] = await Promise.all([
+    supabase.from("products").select("id,name,catalog_key").eq("active", true),
+    supabase.from("product_prices").select("product_id,amount,unit").eq("segment", "minorista").in("unit", ["kilo", "unidad"]).is("valid_until", null),
+  ]);
+  if (productError || priceError) return { ok: false as const, message: "No se pudo consultar el catálogo minorista." };
+
+  const amounts = new Map((prices ?? []).map((price) => [`${price.product_id}:${price.unit}`, Number(price.amount)]));
+  const catalog = (products ?? []).flatMap<RetailCatalogProduct>((product) => {
+    const pricePerKg = amounts.get(`${product.id}:kilo`);
+    const pricePerUnit = amounts.get(`${product.id}:unidad`);
+    if (Number.isFinite(pricePerUnit)) return [{ id: String(product.id), name: String(product.name), catalogKey: String(product.catalog_key), pricePerUnit: pricePerUnit!, saleUnit: "und" as const }];
+    return Number.isFinite(pricePerKg) ? [{ id: String(product.id), name: String(product.name), catalogKey: String(product.catalog_key), pricePerKg: pricePerKg!, saleUnit: "kg" as const }] : [];
+  });
+  const items = normalizeRetailItems([], orderText, catalog);
+  if (!items.length) {
+    return { ok: false as const, message: "No pude reconocer productos. Escribe uno por línea, por ejemplo: “5 kilos de punta gorda”." };
+  }
+
+  const identityKey = customerIdentityKey("retail", { name: customerName, phone });
+  const { data: existingCustomer } = await supabase
+    .from("customers")
+    .select("address,city")
+    .eq("customer_type", "retail")
+    .eq("identity_key", identityKey)
+    .maybeSingle();
+  const { data: customer, error: customerError } = await supabase.from("customers").upsert({
+    customer_type: "retail",
+    identity_key: identityKey,
+    name: customerName,
+    phone,
+    address: address ?? existingCustomer?.address ?? null,
+    city: existingCustomer?.city || "Barranquilla",
+  }, { onConflict: "customer_type,identity_key" }).select("id").single();
+  if (customerError || !customer) return { ok: false as const, message: "No se pudo guardar el cliente." };
+
+  const subtotal = items.reduce((sum, item) => sum + (item.actual_quantity ?? item.quantity) * item.unit_price, 0);
+  const unmatched = items.filter((item) => !item.product_id || item.unit_price <= 0).length;
+  const { data: order, error: orderError } = await supabase.from("orders").insert({
+    customer_type: "retail",
+    customer_id: customer.id,
+    source: "manual",
+    source_payload: { manual_entry: { order_text: orderText }, customer: { name: customerName, phone, address } },
+    status: unmatched ? "needs_review" : "received",
+    fulfillment_type: fulfillment,
+    delivery_address: fulfillment === "delivery" ? address : null,
+    payment_method: paymentMethod,
+    payment_status: paymentMethod === "credit" ? "credit" : "pending",
+    subtotal,
+    notes,
+  }).select("id,order_number").single();
+  if (orderError || !order) return { ok: false as const, message: "No se pudo crear el pedido." };
+
+  const { error: itemsError } = await supabase.from("order_items").insert(items.map((item, sortOrder) => ({
+    order_id: order.id,
+    product_id: item.product_id,
+    product_name: item.product_name,
+    quantity: item.quantity,
+    unit: item.unit,
+    actual_quantity: item.actual_quantity,
+    preparation: item.preparation,
+    notes: item.notes,
+    unit_price: item.unit_price,
+    sort_order: sortOrder,
+  })));
+  if (itemsError) {
+    await supabase.from("orders").delete().eq("id", order.id).eq("customer_type", "retail");
+    return { ok: false as const, message: "No se pudieron guardar los productos del pedido." };
+  }
+
+  revalidatePath("/");
+  revalidatePath("/dashboard");
+  return {
+    ok: true as const,
+    message: unmatched
+      ? `${order.order_number} fue creado y quedó en Requiere ayuda porque ${unmatched === 1 ? "un producto necesita" : `${unmatched} productos necesitan`} confirmar precio o nombre.`
+      : `${order.order_number} fue creado correctamente para ${customerName}.`,
+  };
+}
 
 export async function findWholesaleCustomer(businessNameInput: string) {
   const businessName = businessNameInput?.trim();

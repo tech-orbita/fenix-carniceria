@@ -28,6 +28,15 @@ export type EditableOrderDetails = Pick<Order, "customer" | "phone" | "address">
 type PaymentFilter = "all" | "paid" | "pending";
 type RangePreset = "today" | "tomorrow" | "yesterday" | "week" | "month" | "custom";
 type DateRange = { from: string; to: string };
+export type ManualRetailOrderInput = {
+  customerName: string;
+  phone: string;
+  address: string;
+  fulfillment: "delivery" | "pickup";
+  paymentMethod: "" | "cash" | "transfer" | "credit" | "other";
+  orderText: string;
+  notes: string;
+};
 
 const LOGO_SRC = "/logo-fenix.png";
 const quantityFormat = new Intl.NumberFormat("es-CO", { maximumFractionDigits: 3 });
@@ -96,6 +105,35 @@ function isQuote(order: Order) {
 
 function isHelpRequest(order: Order) {
   return order.helpRequest === true || (["incident", "needs_review"].includes(order.status) && order.items.length === 0);
+}
+
+function helpNoteSections(value: string) {
+  const cleaned = value.replace(/^El cliente solicita atención humana:\s*/i, "").trim();
+  const parts = cleaned.split(/\s*(CLIENTE:|FÉNIX J\.A\.:)\s*/i);
+  const messages: Array<{ speaker: "Cliente" | "Fénix J.A."; text: string }> = [];
+  for (let index = 1; index < parts.length; index += 2) {
+    const speaker = /^cliente/i.test(parts[index]) ? "Cliente" : "Fénix J.A.";
+    const text = (parts[index + 1] ?? "").trim();
+    if (!text || /^(?:Employee action log created|Opportunity (?:updated|status changed))$/i.test(text)) continue;
+    messages.push({ speaker, text });
+  }
+  const customerMessages = messages.filter((message) => message.speaker === "Cliente");
+  const relevantCustomer = customerMessages.filter((message) => !/^(?:>IMAGE<|\[IMAGEN ADJUNTA\]|Sticker|Hola)$/i.test(message.text));
+  const order = relevantCustomer.find((message) => /\b\d+(?:[.,]\d+)?\s*(?:kg|kgs|kilo|kilos|lb|lbs|libra|libras)\b/i.test(message.text));
+  const contact = relevantCustomer.find((message) => /\b\d{7,}\b/.test(message.text.replace(/\s/g, "")) && /(?:car|calle|cra|carrera|cll|direcci[oó]n|barrio)/i.test(message.text));
+  const latest = relevantCustomer.at(-1)?.text || cleaned || "El cliente requiere atención humana.";
+  return { latest, order: order?.text, contact: contact?.text, messages: messages.slice(-6) };
+}
+
+function HelpNotes({ notes }: { notes: string }) {
+  const summary = helpNoteSections(notes);
+  return <section className="rt-help-summary">
+    <div><strong>Motivo de la ayuda</strong><p>{summary.latest}</p></div>
+    {summary.order && summary.order !== summary.latest ? <div><strong>Pedido mencionado</strong><p>{summary.order}</p></div> : null}
+    {summary.contact && summary.contact !== summary.latest ? <div><strong>Datos compartidos</strong><p>{summary.contact}</p></div> : null}
+    {summary.messages.length ? <details><summary>Ver conversación reciente</summary><ol>{summary.messages.map((message, index) => <li key={`${message.speaker}-${index}`}><b>{message.speaker}</b><span>{message.text}</span></li>)}</ol></details> : null}
+    <details><summary>Ver texto original completo</summary><p className="rt-help-raw">{notes}</p></details>
+  </section>;
 }
 
 function initials(name: string) {
@@ -408,7 +446,7 @@ function OrderDetail({ catalog, order, pending, logo, today, onAdvance, onDelete
             <td>{retailItemHasPendingPrice(item) ? "Pendiente" : pendingWeight(item) ? "Por pesar" : money.format(retailLineSubtotal(item) ?? 0)}</td>
           </tr>)}</tbody>
         </table>}
-        {order.notes && <div className="rt-note"><strong>Indicaciones</strong><p>{order.notes}</p></div>}
+        {order.notes && (helpRequest || (phase === "help" && order.notes.length > 240) ? <HelpNotes notes={order.notes} /> : <div className="rt-note"><strong>Indicaciones</strong><p>{order.notes}</p></div>)}
         {!helpRequest && <section className="rt-totals">
           <div className="rt-payment">
             <span>Pago · {paymentMethodLabel(order)}</span>
@@ -427,7 +465,38 @@ function OrderDetail({ catalog, order, pending, logo, today, onAdvance, onDelete
   );
 }
 
-export function RetailPanel({ catalog, orders, pendingId, onAdvance, onDelete, onMove, onPaymentChange, onResolveHelp, onSave, onSendBill }: { catalog: RetailCatalogProduct[]; orders: Order[]; pendingId?: string; onAdvance: (order: Order) => void; onDelete: (order: Order) => void; onMove: (order: Order, phase: OperationalPhase) => void; onPaymentChange: (order: Order, status: "paid" | "pending") => void; onResolveHelp: (order: Order) => void; onSave: (order: Order, details: EditableOrderDetails) => Promise<boolean>; onSendBill: (order: Order) => void }) {
+const emptyManualOrder: ManualRetailOrderInput = { customerName: "", phone: "", address: "", fulfillment: "delivery", paymentMethod: "", orderText: "", notes: "" };
+
+function ManualRetailOrderModal({ onClose, onCreate }: { onClose: () => void; onCreate: (input: ManualRetailOrderInput) => Promise<boolean> }) {
+  const [draft, setDraft] = useState<ManualRetailOrderInput>(emptyManualOrder);
+  const [saving, setSaving] = useState(false);
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSaving(true);
+    const created = await onCreate(draft);
+    setSaving(false);
+    if (created) onClose();
+  };
+  const update = <Key extends keyof ManualRetailOrderInput>(key: Key, value: ManualRetailOrderInput[Key]) => setDraft((current) => ({ ...current, [key]: value }));
+
+  return <div aria-labelledby="manual-retail-title" aria-modal="true" className="manual-order-modal" role="dialog">
+    <form className="manual-order-form" onSubmit={(event) => void submit(event)}>
+      <div className="manual-order-heading"><div><strong id="manual-retail-title">Agregar pedido minorista</strong><small>El sistema reconocerá productos, cantidades y precios con las mismas reglas del agente.</small></div><button aria-label="Cerrar" disabled={saving} onClick={onClose} type="button">×</button></div>
+      <div className="manual-order-grid">
+        <label>Cliente<input autoFocus maxLength={160} onChange={(event) => update("customerName", event.target.value)} required value={draft.customerName} /></label>
+        <label>Teléfono<input inputMode="tel" maxLength={24} onChange={(event) => update("phone", event.target.value)} required value={draft.phone} /></label>
+        <label>Entrega<select onChange={(event) => update("fulfillment", event.target.value as ManualRetailOrderInput["fulfillment"])} value={draft.fulfillment}><option value="delivery">Domicilio</option><option value="pickup">Recoge en el punto</option></select></label>
+        <label>Método de pago<select onChange={(event) => update("paymentMethod", event.target.value as ManualRetailOrderInput["paymentMethod"])} value={draft.paymentMethod}><option value="">Por definir</option><option value="cash">Efectivo</option><option value="transfer">Transferencia</option><option value="credit">Crédito</option><option value="other">Otro</option></select></label>
+        {draft.fulfillment === "delivery" ? <label className="manual-order-wide">Dirección<input maxLength={500} onChange={(event) => update("address", event.target.value)} required value={draft.address} /></label> : null}
+        <label className="manual-order-wide">Pedido<textarea maxLength={5_000} onChange={(event) => update("orderText", event.target.value)} placeholder={"Un producto por línea. Ejemplo:\n5 kilos de punta gorda relajada\n5 kilos de carabela relajada"} required rows={7} value={draft.orderText} /></label>
+        <label className="manual-order-wide">Indicaciones adicionales<textarea maxLength={2_000} onChange={(event) => update("notes", event.target.value)} placeholder="Preparación, referencia de entrega u otra observación" rows={3} value={draft.notes} /></label>
+      </div>
+      <div className="manual-order-actions"><span>Si algún producto no coincide con el catálogo, quedará marcado para revisión.</span><button className="rt-button is-quiet" disabled={saving} onClick={onClose} type="button">Cancelar</button><button className="rt-button is-paid" disabled={saving} type="submit">{saving ? "Creando…" : "Crear pedido"}</button></div>
+    </form>
+  </div>;
+}
+
+export function RetailPanel({ catalog, orders, pendingId, onAdvance, onCreate, onDelete, onMove, onPaymentChange, onResolveHelp, onSave, onSendBill }: { catalog: RetailCatalogProduct[]; orders: Order[]; pendingId?: string; onAdvance: (order: Order) => void; onCreate: (input: ManualRetailOrderInput) => Promise<boolean>; onDelete: (order: Order) => void; onMove: (order: Order, phase: OperationalPhase) => void; onPaymentChange: (order: Order, status: "paid" | "pending") => void; onResolveHelp: (order: Order) => void; onSave: (order: Order, details: EditableOrderDetails) => Promise<boolean>; onSendBill: (order: Order) => void }) {
   // "Hoy" se recalcula en cada refresco para que el periodo avance solo al cambiar el día.
   const today = bogotaDay.format(new Date());
   const [preset, setPreset] = useState<RangePreset>("today");
@@ -436,6 +505,7 @@ export function RetailPanel({ catalog, orders, pendingId, onAdvance, onDelete, o
   const [paymentFilter, setPaymentFilter] = useState<PaymentFilter>("all");
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState("");
+  const [addingOrder, setAddingOrder] = useState(false);
   const logo = useLogoAvailable();
   const range = presetRange(preset, today, custom);
   const normalized = query.trim().toLocaleLowerCase("es");
@@ -507,7 +577,7 @@ export function RetailPanel({ catalog, orders, pendingId, onAdvance, onDelete, o
       <div className="rt-workspace">
         <aside className="rt-list">
           <div className="rt-list-head">
-            <div><h2>{phaseLabels[activePhase]}</h2><p>{visibleOrders.length} {activePhase === "help" ? visibleOrders.length === 1 ? "solicitud" : "solicitudes" : visibleOrders.length === 1 ? "pedido" : "pedidos"}</p></div>
+            <div className="rt-list-title"><div><h2>{phaseLabels[activePhase]}</h2><p>{visibleOrders.length} {activePhase === "help" ? visibleOrders.length === 1 ? "solicitud" : "solicitudes" : visibleOrders.length === 1 ? "pedido" : "pedidos"}</p></div>{activePhase === "new" ? <div className="rt-list-actions"><button className="rt-button is-paid" onClick={() => setAddingOrder(true)} type="button"><span aria-hidden="true">＋</span> Agregar pedido</button>{selected ? <button className="rt-button is-delete" disabled={pendingId === selected.id} onClick={() => onDelete(selected)} type="button"><Icon name="trash" /> Eliminar</button> : null}</div> : null}</div>
             {activePhase !== "help" && <div aria-label="Filtrar por estado de pago" className="rt-segment" role="group">{(["all", "paid", "pending"] as PaymentFilter[]).map((filter) => <button aria-pressed={paymentFilter === filter} key={filter} onClick={() => setPaymentFilter(filter)} type="button">{paymentFilterLabels[filter]}<b>{paymentCounts[filter]}</b></button>)}</div>}
           </div>
           <div className="rt-cards">
@@ -519,6 +589,7 @@ export function RetailPanel({ catalog, orders, pendingId, onAdvance, onDelete, o
           ? <OrderDetail catalog={catalog} key={selected.id} logo={logo} onAdvance={onAdvance} onDelete={onDelete} onMove={onMove} onPaymentChange={onPaymentChange} onResolveHelp={onResolveHelp} onSave={onSave} onSendBill={onSendBill} order={selected} pending={pendingId === selected.id} today={today} />
           : <div className="rt-empty is-detail"><strong>Selecciona un pedido</strong><span>Cambia el periodo, la fase o el filtro de pago para ver otros pedidos.</span></div>}</div>
       </div>
+      {addingOrder ? <ManualRetailOrderModal onClose={() => setAddingOrder(false)} onCreate={onCreate} /> : null}
     </section>
   );
 }
