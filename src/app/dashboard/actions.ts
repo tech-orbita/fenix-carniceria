@@ -266,7 +266,7 @@ export async function sendRetailPaymentSummary(orderId: string) {
   const supabase = await sessionClient();
   const { data, error } = await supabase
     .from("orders")
-    .select("order_number,received_at,payment_status,delivery_fee,adjustments,source_payload,customers(name),order_items(product_name,quantity,actual_quantity,unit,unit_price)")
+    .select("order_number,received_at,payment_method,payment_status,delivery_fee,adjustments,source_payload,customers(name),order_items(product_name,quantity,actual_quantity,unit,unit_price)")
     .eq("id", Number(orderId))
     .eq("customer_type", "retail")
     .maybeSingle();
@@ -285,6 +285,7 @@ export async function sendRetailPaymentSummary(orderId: string) {
     customer: customer?.name || "cliente",
     receivedAt: data.received_at,
     paymentStatus: data.payment_status,
+    paymentMethod: data.payment_method ?? undefined,
     deliveryFee: Number(data.delivery_fee),
     adjustments: Number(data.adjustments),
     items: billItems,
@@ -757,6 +758,7 @@ type OrderDetailsInput = {
   phone: string;
   address: string;
   notes: string;
+  paymentMethod: "" | "cash" | "transfer" | "credit" | "other";
   items: Array<{
     id: string;
     productName: string;
@@ -779,6 +781,7 @@ export async function updateOrderDetails(
   const phone = details.phone.trim();
   const address = details.address.trim();
   const notes = details.notes.trim();
+  const paymentMethod = details.paymentMethod || null;
   const normalizedItems = details.items.map((item) => item.unit === "und"
     ? { ...item, unit: "und" }
     : { ...item, ...toKilograms(item.quantity, item.unit) });
@@ -788,6 +791,7 @@ export async function updateOrderDetails(
     !phone ||
     !address ||
     !details.items.length ||
+    (paymentMethod !== null && !["cash", "transfer", "credit", "other"].includes(paymentMethod)) ||
     normalizedItems.some((item) =>
       !(/^\d+$/.test(item.id) || /^new-\d+(?:-\d+)?$/.test(item.id)) ||
       !item.productName.trim() ||
@@ -842,6 +846,7 @@ export async function updateOrderDetails(
       .update({
         delivery_address: address,
         notes: notes || null,
+        payment_method: paymentMethod,
         subtotal,
       })
       .eq("id", Number(orderId)),

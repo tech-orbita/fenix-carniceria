@@ -462,19 +462,38 @@ export async function sendHighLevelMessage(
       };
     }
 
-    const usesCustomProvider = usesSmsChannel && Boolean(providerId);
-    await ghlFetch("/conversations/messages", config.token, {
+    const originMessageType = originMessage?.messageType?.toUpperCase() ?? "";
+    // Un proveedor puede reemplazar al SMS predeterminado o crear un canal
+    // Custom adicional. Solo el segundo se envía como Custom; el primero se
+    // selecciona con type=SMS y no acepta conversationProviderId.
+    const usesCustomProvider = usesSmsChannel && Boolean(providerId) && (
+      originMessageType.includes("CUSTOM") || messageType === "TYPE_CUSTOM_PROVIDER_SMS"
+    );
+    const send = (customProvider: boolean) => ghlFetch("/conversations/messages", config.token, {
       method: "POST",
       headers: { Version: "v3" },
       body: JSON.stringify({
-        type: usesCustomProvider ? "Custom" : usesSmsChannel ? "SMS" : "WhatsApp",
+        type: customProvider ? "Custom" : usesSmsChannel ? "SMS" : "WhatsApp",
         contactId: config.contactId,
         message,
         status: "pending",
-        ...(usesCustomProvider ? { conversationProviderId: providerId } : {}),
-        ...(usesCustomProvider && originMessage?.id ? { replyMessageId: originMessage.id } : {}),
+        ...(customProvider ? { conversationProviderId: providerId } : {}),
+        ...(customProvider && originMessage?.id ? { replyMessageId: originMessage.id } : {}),
       }),
     });
+    try {
+      await send(usesCustomProvider);
+    } catch (error) {
+      // Algunos proveedores reportan mensajes entrantes como Custom aunque en
+      // la subcuenta estén configurados como reemplazo del SMS predeterminado.
+      // El 400 confirma que nada fue encolado, por lo que el reintento no duplica.
+      const unsupportedProvider = usesCustomProvider
+        && error instanceof HighLevelHttpError
+        && error.status === 400
+        && /doesn't support the specified conversation provider|does not support the specified conversation provider/i.test(error.message);
+      if (!unsupportedProvider) throw error;
+      await send(false);
+    }
     return { ok: true as const, channel: usesSmsChannel ? "SMS" as const : "WhatsApp" as const };
   } catch (error) {
     return { ok: false as const, message: error instanceof Error ? error.message : "No se pudo enviar el mensaje." };

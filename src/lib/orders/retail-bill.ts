@@ -11,6 +11,7 @@ type RetailBillOrder = {
   customer: string;
   receivedAt: string;
   paymentStatus: string;
+  paymentMethod?: string;
   deliveryFee: number;
   adjustments: number;
   items: RetailBillItem[];
@@ -71,6 +72,22 @@ function isPaid(status: string) {
   return ["paid", "verified", "pagado", "verificado"].includes(status.toLocaleLowerCase("es"));
 }
 
+const paymentMethodLabels: Record<string, string> = {
+  cash: "Efectivo",
+  transfer: "Transferencia",
+  credit: "Crédito",
+  other: "Otro",
+};
+
+function paymentMethodLine(method?: string) {
+  if (!method) return "Medio de pago: por definir";
+  const label = paymentMethodLabels[method] ?? method;
+  if (method === "cash") return `Medio de pago: ${label} al recibir`;
+  if (method === "transfer") return `Medio de pago: ${label}. Envíanos el comprobante por este chat.`;
+  if (method === "credit") return `Medio de pago: ${label}`;
+  return `Medio de pago: ${label}`;
+}
+
 export function retailBillMessage(order: RetailBillOrder) {
   const subtotal = retailOrderSubtotal(order.items);
   const total = subtotal + order.deliveryFee + order.adjustments;
@@ -89,6 +106,7 @@ export function retailBillMessage(order: RetailBillOrder) {
     ...(order.deliveryFee > 0 ? [`Domicilio: ${money.format(order.deliveryFee)}`] : []),
     ...(order.adjustments !== 0 ? [`Ajustes: ${money.format(order.adjustments)}`] : []),
     pendingValues ? "*Total pendiente de completar pesos y precios*" : `*Total a pagar: ${money.format(total)}*`,
+    paymentMethodLine(order.paymentMethod),
     "",
     isPaid(order.paymentStatus) ? "Este pedido ya figura como pagado. ¡Gracias por tu compra!" : "Quedamos atentos a tu pago y al comprobante. ¡Gracias por tu compra!",
   ].join("\n");

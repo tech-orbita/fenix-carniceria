@@ -9,6 +9,7 @@ test("arma la cuenta minorista con peso real, domicilio y total", () => {
     customer: "Ana Pérez",
     receivedAt: "2026-10-24T15:00:00.000Z",
     paymentStatus: "pending",
+    paymentMethod: "transfer",
     deliveryFee: 5_000,
     adjustments: -1_000,
     items: [
@@ -20,6 +21,7 @@ test("arma la cuenta minorista con peso real, domicilio y total", () => {
   assert.match(message, /Domicilio: \$\s?5\.000/);
   assert.match(message, /Ajustes: -\$\s?1\.000/);
   assert.match(message, /Total a pagar: \$\s?37\.000/);
+  assert.match(message, /Medio de pago: Transferencia/);
   assert.match(message, /Quedamos atentos a tu pago/);
 });
 

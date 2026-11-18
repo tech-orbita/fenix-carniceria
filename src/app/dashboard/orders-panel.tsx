@@ -855,9 +855,11 @@ export function OrdersPanel({ hasMoreOrders = false, initialOrders, loadedOrderP
   )).length;
   const { soundEnabled, toggleSound } = useOrdersRealtime(assignedType ? [assignedType] : ["wholesale", "retail"]);
 
-  // El aviso se oculta solo tras unos segundos.
+  // Los éxitos se ocultan; los errores permanecen hasta la siguiente acción
+  // para que el operador pueda leerlos y reportarlos completos.
   useEffect(() => {
     if (!notice) return;
+    if (/no se pudo|respondió \d{3}|no tiene|no se encontró|inválid|error/i.test(notice)) return;
     const timeout = window.setTimeout(() => setNotice(undefined), 4_000);
     return () => window.clearTimeout(timeout);
   }, [notice]);
@@ -886,6 +888,7 @@ export function OrdersPanel({ hasMoreOrders = false, initialOrders, loadedOrderP
       phone: details.phone,
       address: details.address,
       notes: details.notes || undefined,
+      paymentMethod: details.paymentMethod || undefined,
       items: savedItems,
     } : item));
     setNotice(`Los datos de ${order.orderNumber} fueron actualizados.`); setPendingId(undefined); router.refresh(); return true;

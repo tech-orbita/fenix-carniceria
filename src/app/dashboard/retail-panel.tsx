@@ -15,6 +15,7 @@ import type { Order } from "./types";
 
 export type EditableOrderDetails = Pick<Order, "customer" | "phone" | "address"> & {
   notes: string;
+  paymentMethod: "" | "cash" | "transfer" | "credit" | "other";
   items: Array<{
     id: string;
     productName: string;
@@ -258,6 +259,9 @@ function EditOrderForm({ catalog, order, saving, onCancel, onSave }: { catalog: 
     phone: order.phone,
     address: order.address,
     notes: order.notes ?? "",
+    paymentMethod: ["cash", "transfer", "credit", "other"].includes(order.paymentMethod ?? "")
+      ? order.paymentMethod as EditableOrderDetails["paymentMethod"]
+      : "",
     items: order.items.map((item) => {
       const normalized = pendingWeight(item)
         ? { quantity: 0, unit: "kg" }
@@ -324,6 +328,7 @@ function EditOrderForm({ catalog, order, saving, onCancel, onSave }: { catalog: 
         <label>Cliente<input onChange={(event) => setDetails((current) => ({ ...current, customer: event.target.value }))} required value={details.customer} /></label>
         <label>Teléfono<input onChange={(event) => setDetails((current) => ({ ...current, phone: event.target.value }))} required value={details.phone} /></label>
         <label className="rt-wide">Dirección<input onChange={(event) => setDetails((current) => ({ ...current, address: event.target.value }))} required value={details.address} /></label>
+        <label>Método de pago<select onChange={(event) => setDetails((current) => ({ ...current, paymentMethod: event.target.value as EditableOrderDetails["paymentMethod"] }))} value={details.paymentMethod}><option value="">Por definir</option><option value="cash">Efectivo</option><option value="transfer">Transferencia</option><option value="credit">Crédito</option><option value="other">Otro</option></select></label>
         <label className="rt-wide">Indicaciones<textarea onChange={(event) => setDetails((current) => ({ ...current, notes: event.target.value }))} rows={3} value={details.notes} /></label>
       </div>
       <fieldset className="rt-edit-items">

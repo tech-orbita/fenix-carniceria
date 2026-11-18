@@ -274,6 +274,7 @@ test("minoristas responde por el proveedor del mensaje entrante más reciente", 
         id: "inbound-retail-newest",
         direction: "inbound",
         dateAdded: "2026-11-18T11:59:00.000Z",
+        messageType: "TYPE_CUSTOM_PROVIDER_SMS",
         conversationProviderId: "provider-retail-newest",
       },
       {
@@ -301,6 +302,74 @@ test("minoristas responde por el proveedor del mensaje entrante más reciente", 
     conversationProviderId: "provider-retail-newest",
     replyMessageId: "inbound-retail-newest",
   });
+});
+
+test("usa SMS predeterminado cuando el mensaje entrante pertenece al proveedor SMS reemplazado", async () => {
+  configure();
+  const requests = [];
+  globalThis.fetch = async (input, init = {}) => {
+    requests.push({ url: String(input), init });
+    if (String(input).includes("/conversations/search?")) return Response.json({ conversations: [{
+      id: "conversation-default-provider",
+      lastMessageType: "TYPE_SMS",
+    }] });
+    if (String(input).includes("/conversations/conversation-default-provider/messages?")) return Response.json({ messages: { messages: [{
+      id: "inbound-default-provider",
+      direction: "inbound",
+      dateAdded: "2026-11-18T12:00:00.000Z",
+      messageType: "TYPE_SMS",
+      conversationProviderId: "provider-default-sms",
+    }] } });
+    return Response.json({ messageId: "message-default-provider" });
+  };
+
+  const result = await sendHighLevelMessage(
+    { locationId: "location-default", contactId: "contact-default", conversationId: "conversation-default-provider" },
+    "Cuenta minorista",
+    { channel: "SMS", replyViaOriginProvider: true },
+  );
+
+  assert.equal(result.ok, true);
+  const sent = requests.find((request) => request.url.endsWith("/conversations/messages"));
+  assert.deepEqual(JSON.parse(String(sent.init.body)), {
+    type: "SMS",
+    contactId: "contact-default",
+    message: "Cuenta minorista",
+    status: "pending",
+  });
+});
+
+test("reintenta como SMS cuando HighLevel rechaza el proveedor Custom del contacto", async () => {
+  configure();
+  const sentBodies = [];
+  globalThis.fetch = async (input, init = {}) => {
+    if (String(input).includes("/conversations/search?")) return Response.json({ conversations: [{
+      id: "conversation-provider-fallback",
+      lastMessageType: "TYPE_CUSTOM_PROVIDER_SMS",
+    }] });
+    if (String(input).includes("/conversations/conversation-provider-fallback/messages?")) return Response.json({ messages: { messages: [{
+      id: "inbound-provider-fallback",
+      direction: "inbound",
+      dateAdded: "2026-11-18T12:00:00.000Z",
+      messageType: "TYPE_CUSTOM_PROVIDER_SMS",
+      conversationProviderId: "unsupported-provider",
+    }] } });
+    sentBodies.push(JSON.parse(String(init.body)));
+    if (sentBodies.length === 1) return Response.json({ message: "Cannot send message as the contact doesn't support the specified conversation provider." }, { status: 400 });
+    return Response.json({ messageId: "message-provider-fallback" });
+  };
+
+  const result = await sendHighLevelMessage(
+    { locationId: "location-fallback", contactId: "contact-fallback", conversationId: "conversation-provider-fallback" },
+    "Cuenta minorista",
+    { channel: "SMS", replyViaOriginProvider: true },
+  );
+
+  assert.equal(result.ok, true);
+  assert.equal(sentBodies.length, 2);
+  assert.equal(sentBodies[0].type, "Custom");
+  assert.equal(sentBodies[1].type, "SMS");
+  assert.equal("conversationProviderId" in sentBodies[1], false);
 });
 
 test("minoristas no usa SMS si no encuentra el proveedor de origen", async () => {
