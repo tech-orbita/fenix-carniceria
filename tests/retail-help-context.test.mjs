@@ -20,7 +20,11 @@ test("el workflow conserva el cursor de una alerta y clasifica solo texto del cl
   assert.match(helpBody, /contextUntil/);
   assert.match(rejectedBody, /contextUntil/);
   assert.match(rejectedBody, /sourceEventId/);
-  assert.match(helpGuard, /startsWith\('CLIENTE:'\)/);
+  assert.match(helpBody, /forceRegister: true/);
+  assert.match(helpBody, /rawOrderText/);
+  assert.match(rejectedBody, /forceRegister: true/);
+  assert.match(rejectedBody, /rawOrderText/);
+  assert.match(helpGuard, /inboundMessages === 0/);
 });
 
 test("n8n confirma únicamente después del registro e incluye el número real", () => {

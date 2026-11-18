@@ -49,6 +49,9 @@ type RetailHelpPayload = {
   contextUntil?: string;
   sourceEventId?: string;
   reason?: string;
+  rawOrderText?: string;
+  forceRegister?: boolean;
+  errorCode?: string;
   customer?: { name?: string; phone?: string };
 };
 
@@ -364,8 +367,13 @@ export async function flagRetailHelpRequest(value: unknown) {
   if (!value || typeof value !== "object") return NextResponse.json({ error: "Invalid help payload" }, { status: 422 });
   const body = value as RetailHelpPayload;
   const phone = cleanPhone(body.customer?.phone);
+  const contactId = String(body.contactId ?? "").trim();
   const reason = String(body.reason ?? "El cliente requiere atención humana.").trim().slice(0, 2_000);
-  if (!phone || !reason) return NextResponse.json({ error: "Phone and reason are required" }, { status: 422 });
+  const rawOrderText = String(body.rawOrderText ?? "").trim().slice(0, 10_000);
+  const forceRegister = body.forceRegister === true;
+  if ((!phone && !contactId) || !reason) {
+    return NextResponse.json({ error: "Phone or contactId and reason are required" }, { status: 422 });
+  }
   if (isDirectRetailOrderPhrase(reason)) {
     return upsertRetailOrder({
       ...body,
@@ -375,9 +383,9 @@ export async function flagRetailHelpRequest(value: unknown) {
       notes: "Pedido recibido con descripción pendiente de precisar: carne en trocitos.",
     });
   }
-  // Fallos de OCR, extracción o integración no son solicitudes del cliente y
-  // no deben sacar un pedido de Nuevos para enviarlo a Requiere ayuda.
-  if (!requiresRetailHelp(reason)) {
+  // Las solicitudes explícitas siguen entrando a ayuda. Los fallos técnicos solo
+  // omiten este filtro cuando el workflow marca el respaldo como obligatorio.
+  if (!forceRegister && !requiresRetailHelp(reason)) {
     return NextResponse.json({ ok: true, ignored: true, reason: "No customer clarification or advisor request was detected." });
   }
 
@@ -394,13 +402,24 @@ export async function flagRetailHelpRequest(value: unknown) {
     if (duplicate) return NextResponse.json({ ok: true, ...duplicate, adjusted: false, duplicate: true });
   }
 
-  const identityKey = customerIdentityKey("retail", { name: String(body.customer?.name ?? "Cliente WhatsApp"), phone });
-  const { data: customer, error: customerError } = await supabase.from("customers").upsert({
-    customer_type: "retail",
-    identity_key: identityKey,
-    name: String(body.customer?.name ?? "Cliente WhatsApp").trim() || "Cliente WhatsApp",
-    phone,
-  }, { onConflict: "customer_type,identity_key" }).select("id,name").single();
+  const requestedName = String(body.customer?.name ?? "Cliente WhatsApp").trim() || "Cliente WhatsApp";
+  const existingCustomerId = await findCustomerId(phone, contactId);
+  const identityKey = phone
+    ? customerIdentityKey("retail", { name: requestedName, phone })
+    : `ghl-contact:${contactId}`;
+  const customerResult = existingCustomerId
+    ? await supabase.from("customers").update({
+        ...(phone ? { phone } : {}),
+        ...(contactId ? { ghl_contact_id: contactId } : {}),
+      }).eq("id", existingCustomerId).select("id,name").single()
+    : await supabase.from("customers").upsert({
+        customer_type: "retail",
+        identity_key: identityKey,
+        name: requestedName,
+        phone: phone || null,
+        ghl_contact_id: contactId || null,
+      }, { onConflict: "customer_type,identity_key" }).select("id,name").single();
+  const { data: customer, error: customerError } = customerResult;
   if (customerError || !customer) return NextResponse.json({ error: "Could not save customer" }, { status: 500 });
 
   const sourcePayload = {
@@ -411,6 +430,9 @@ export async function flagRetailHelpRequest(value: unknown) {
     contextUntil: body.contextUntil ?? null,
     sourceEventId: body.sourceEventId ?? null,
     helpReason: reason,
+    attemptedOrderText: rawOrderText || null,
+    forcedFallback: forceRegister,
+    errorCode: String(body.errorCode ?? "").trim() || null,
     helpWithoutOrder: true,
   };
   // La alerta vive en una fila independiente y sin productos. Un comprobante
@@ -423,7 +445,7 @@ export async function flagRetailHelpRequest(value: unknown) {
     source_payload: sourcePayload,
     status: "incident",
     fulfillment_type: "delivery",
-    notes: reason,
+    notes: rawOrderText ? `${reason}\n\nContenido recibido:\n${rawOrderText}`.slice(0, 10_000) : reason,
   }).select("id,order_number").single();
   if (result.error || !result.data) return NextResponse.json({ error: "Could not register help request" }, { status: 500 });
 

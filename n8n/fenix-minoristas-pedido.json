@@ -51,7 +51,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ locationId: $('Validar extracción').item.json.payload.locationId, contactId: $('Validar extracción').item.json.payload.contactId, conversationId: $('Validar extracción').item.json.conversationId || undefined, contextUntil: $('Contexto de audio').item.json.contextUntil || undefined, sourceEventId: $('Validar extracción').item.json.idempotencySeed || undefined, customer: { name: $('Validar extracción').item.json.payload.customer.name, phone: $('Validar extracción').item.json.payload.customer.phone }, reason: $('Contexto visual').item.json.paymentProof ? 'El cliente envió un comprobante de pago para validar' : /\\[ARCHIVO ADJUNTO\\]/.test($('Contexto de audio').item.json.transcript || '') ? 'El cliente envió un archivo adjunto para validar como posible comprobante de pago' : 'El cliente solicita atención humana: ' + ($('Contexto de audio').item.json.transcript || $('Validar extracción').item.json.problem) }) }}",
+        "jsonBody": "={{ JSON.stringify({ locationId: $('Validar extracción').item.json.payload.locationId, contactId: $('Validar extracción').item.json.payload.contactId, conversationId: $('Validar extracción').item.json.conversationId || undefined, contextUntil: $('Contexto de audio').item.json.contextUntil || undefined, sourceEventId: $('Validar extracción').item.json.idempotencySeed || undefined, customer: { name: $('Validar extracción').item.json.payload.customer.name, phone: $('Validar extracción').item.json.payload.customer.phone }, forceRegister: true, errorCode: 'extraction_failed', rawOrderText: $('Validar extracción').item.json.summaryText || $('Contexto de audio').item.json.transcript || '', reason: $('Contexto visual').item.json.paymentProof ? 'El cliente envió un comprobante de pago para validar' : /\\[ARCHIVO ADJUNTO\\]/.test($('Contexto de audio').item.json.transcript || '') ? 'El cliente envió un archivo adjunto para validar como posible comprobante de pago' : 'No fue posible registrar automáticamente el pedido: ' + ($('Validar extracción').item.json.problem || 'extracción incompleta') }) }}",
         "options": {
           "response": {
             "response": {
@@ -299,7 +299,7 @@
           "conditions": [
             {
               "id": "e1611a1c-c2de-48aa-888c-58c9c3df3084",
-              "leftValue": "={{ !$('Contexto visual').item.json.paymentProof && !/(asesor|asesoria|humano|persona|aclar|aclaracion|duda|confirmar|confirmacion|no\\s+entiend|ayuda|comprobante(?:\\s+de)?\\s+pago|soporte\\s+de\\s+pago|recibo\\s+de\\s+pago|\\[ARCHIVO ADJUNTO\\])/i.test(($('Contexto de audio').item.json.transcript || '').split('\\n').filter((line) => line.startsWith('CLIENTE:')).join('\\n')) }}",
+              "leftValue": "={{ $('Validar extracción').item.json.ignored === true && $('Contexto de audio').item.json.inboundMessages === 0 }}",
               "rightValue": "",
               "operator": {
                 "type": "boolean",
@@ -483,7 +483,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ locationId: $('Validar extracción').item.json.payload.locationId, contactId: $('Validar extracción').item.json.payload.contactId, conversationId: $('Validar extracción').item.json.conversationId || undefined, contextUntil: $('Contexto de audio').item.json.contextUntil || undefined, sourceEventId: $('Validar extracción').item.json.idempotencySeed || undefined, customer: { name: $('Validar extracción').item.json.payload.customer.name, phone: $('Validar extracción').item.json.payload.customer.phone }, reason: 'El panel no aceptó el pedido: ' + $json.error }) }}",
+        "jsonBody": "={{ JSON.stringify({ locationId: $('Validar extracción').item.json.payload.locationId, contactId: $('Validar extracción').item.json.payload.contactId, conversationId: $('Validar extracción').item.json.conversationId || undefined, contextUntil: $('Contexto de audio').item.json.contextUntil || undefined, sourceEventId: $('Validar extracción').item.json.idempotencySeed || undefined, customer: { name: $('Validar extracción').item.json.payload.customer.name, phone: $('Validar extracción').item.json.payload.customer.phone }, forceRegister: true, errorCode: 'panel_rejected', rawOrderText: $('Validar extracción').item.json.summaryText || $('Contexto de audio').item.json.transcript || '', reason: 'El panel no aceptó el pedido: ' + ($json.error || 'error desconocido') }) }}",
         "options": {
           "response": {
             "response": {
