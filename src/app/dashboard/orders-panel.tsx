@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -10,6 +11,7 @@ import type { RetailCatalogProduct } from "@/lib/orders/retail-normalization";
 import type { WholesaleProduct } from "@/lib/orders/product-parser";
 import { wholesaleServiceDay } from "@/lib/orders/wholesale-service-day";
 import { unassignedWholesaleRoute, wholesaleRouteLabel, wholesaleRoutes } from "@/lib/orders/wholesale-routes";
+import { highLevelConversationUrl as highLevelAppConversationUrl, safeHighLevelConversationUrl } from "@/lib/orders/highlevel-conversation-url";
 
 import { createManualWholesaleOrder, deleteWholesaleOrder, findWholesaleCustomer, resolveOrderHelp, scheduleRetailOrder, scheduleWholesaleOrder, sendRetailPaymentSummary, setWholesaleProductPrepared, updateOrderDetails, updateOrderPaymentStatus, updateOrderStatus, updateWholesalePayment, updateWholesaleRoute, updateWholesaleTable } from "./actions";
 import { addDays, bogotaDay, dateTime, dayLabel, Icon, phaseLabels, phaseStatus } from "./panel-shared";
@@ -131,6 +133,11 @@ function isHelpWithoutOrder(order: Order) {
 }
 
 function highLevelConversationUrl(order: Order) {
+  const explicitUrl = safeHighLevelConversationUrl(order.highLevel?.conversationUrl);
+  if (explicitUrl) return explicitUrl.toString();
+  if (order.highLevel?.locationId && order.highLevel.conversationId) {
+    return highLevelAppConversationUrl(order.highLevel.locationId, order.highLevel.conversationId).toString();
+  }
   return `/api/conversation/${encodeURIComponent(order.id)}`;
 }
 
@@ -148,33 +155,88 @@ function safeExternalUrl(value?: string) {
   }
 }
 
-function ConversationLink({ order }: { order: Order }) {
+const ConversationLink = memo(function ConversationLink({ order }: { order: Order }) {
   const customer = order.customer;
   if (!hasHighLevelConversation(order)) {
     return <button aria-label={`Conversación no disponible para ${customer}`} className="conversation-link is-disabled" disabled title="Este pedido no tiene una conversación asociada" type="button"><Icon name="chat" /><span className="sr-only">Conversación no disponible</span></button>;
   }
   return <a aria-label={`Abrir conversación con ${customer}`} className="conversation-link" href={highLevelConversationUrl(order)} rel="noreferrer" target="_blank" title={`Abrir conversación con ${customer}`}><Icon name="chat" /><span className="sr-only">Abrir conversación</span></a>;
+});
+
+type FormSubmissionDetails = { form: string; orderText: string };
+
+const formSubmissionCache = new Map<string, FormSubmissionDetails | Promise<FormSubmissionDetails>>();
+
+function loadFormSubmission(order: Order) {
+  if (order.formData?.order_text) {
+    const details = { form: order.formData.form || "Pedido mayorista", orderText: order.formData.order_text };
+    formSubmissionCache.set(order.id, details);
+    return Promise.resolve(details);
+  }
+  const cached = formSubmissionCache.get(order.id);
+  if (cached) return Promise.resolve(cached);
+  const request = fetch(`/api/orders/${encodeURIComponent(order.id)}/form`, { credentials: "same-origin" })
+    .then(async (response) => {
+      const body = await response.json() as { error?: string; form?: string; orderText?: string };
+      if (!response.ok || !body.orderText) throw new Error(body.error || "No se pudo abrir el formulario.");
+      const details = { form: body.form || "Pedido mayorista", orderText: body.orderText };
+      formSubmissionCache.set(order.id, details);
+      return details;
+    })
+    .catch((error) => {
+      formSubmissionCache.delete(order.id);
+      throw error;
+    });
+  formSubmissionCache.set(order.id, request);
+  return request;
 }
 
-function FormSubmissionDialog({ order, onClose }: { order: Order; onClose: () => void }) {
-  return <div className="form-submission-modal" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-    <section aria-labelledby="form-submission-title" aria-modal="true" className="form-submission-dialog" role="dialog">
-      <header><div><strong id="form-submission-title">Formulario original · {order.orderNumber}</strong><small>{order.formData?.form || "Pedido mayorista"}</small></div><button aria-label="Cerrar formulario original" onClick={onClose} type="button">×</button></header>
-      <p>Este es el texto exacto enviado por el cliente. Úsalo para verificar cada corte antes de preparar el pedido.</p>
-      <pre>{order.formData?.order_text || "El formulario no incluyó texto de pedido."}</pre>
+function FormSubmissionDialog({ details, error, loading, order, onClose }: { details?: FormSubmissionDetails; error?: string; loading: boolean; order: Order; onClose: () => void }) {
+  const dialogRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.addEventListener("keydown", closeOnEscape);
+    dialogRef.current?.focus();
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [onClose]);
+
+  return createPortal(<div className="orders-app form-submission-portal"><div className="form-submission-modal" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <section aria-describedby="form-submission-description" aria-labelledby="form-submission-title" aria-modal="true" className="form-submission-dialog" ref={dialogRef} role="dialog" tabIndex={-1}>
+      <header><div><strong id="form-submission-title">Formulario original · {order.orderNumber}</strong><small>{details?.form || order.formData?.form || "Pedido mayorista"}</small></div><button aria-label="Cerrar formulario original" onClick={onClose} type="button">×</button></header>
+      <p id="form-submission-description">Este es el texto exacto enviado por el cliente. Úsalo para verificar cada corte antes de preparar el pedido.</p>
+      <pre aria-busy={loading}>{loading ? "Cargando formulario…" : error || details?.orderText || "El formulario no incluyó texto de pedido."}</pre>
       <footer>{hasHighLevelConversation(order) && <a className="outline-action" href={highLevelConversationUrl(order)} rel="noreferrer" target="_blank"><Icon name="chat" /> Abrir conversación</a>}<button className="primary-action" onClick={onClose} type="button">Listo</button></footer>
     </section>
-  </div>;
+  </div></div>, document.body);
 }
 
-function FormSubmissionAction({ order }: { order: Order }) {
+const FormSubmissionAction = memo(function FormSubmissionAction({ order }: { order: Order }) {
   const [open, setOpen] = useState(false);
-  if (!order.formData?.order_text) return null;
+  const [details, setDetails] = useState<FormSubmissionDetails | undefined>(() => order.formData?.order_text ? { form: order.formData.form, orderText: order.formData.order_text } : undefined);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string>();
+  if (order.source !== "form" && !order.formData?.form) return null;
+  const preload = () => { void loadFormSubmission(order).catch(() => undefined); };
+  const show = () => {
+    setOpen(true);
+    setError(undefined);
+    if (details) return;
+    setLoading(true);
+    void loadFormSubmission(order)
+      .then(setDetails)
+      .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "No se pudo abrir el formulario."))
+      .finally(() => setLoading(false));
+  };
   return <>
-    <button aria-label={`Ver formulario original de ${order.orderNumber}`} className="form-source-link row-icon-action tooltip-icon-action" data-tooltip="Formulario original" onClick={() => setOpen(true)} type="button"><Icon name="receipt" /><span className="sr-only">Ver formulario original</span></button>
-    {open && <FormSubmissionDialog onClose={() => setOpen(false)} order={order} />}
+    <button aria-label={`Ver formulario original de ${order.orderNumber}`} className="form-source-link row-icon-action tooltip-icon-action" data-tooltip="Formulario original" onClick={show} onFocus={preload} onPointerEnter={preload} type="button"><Icon name="receipt" /><span className="sr-only">Ver formulario original</span></button>
+    {open && <FormSubmissionDialog details={details} error={error} loading={loading} onClose={() => setOpen(false)} order={order} />}
   </>;
-}
+});
 
 function FilterMenu({ label, options, selected, onChange }: { label: string; options: Array<{ value: string; label: string; count: number }>; selected: string[]; onChange: (values: string[]) => void }) {
   const [open, setOpen] = useState(false);
@@ -274,7 +336,7 @@ async function downloadWholesaleOrders(orders: Order[], products: WholesaleProdu
     orderNumber: order.orderNumber,
     receivedAt: dateTime.format(new Date(order.receivedAt)),
     customer: wholesaleCustomerName(order),
-    productCount: order.items.length,
+    productCount: products.filter((product) => productAmounts(order, product).size > 0).length,
     phone: order.phone,
     address: order.address,
     zone: order.route,
@@ -318,7 +380,7 @@ function printWholesaleOrders(orders: Order[], products: WholesaleProduct[], sel
   const headerCells = ["Cliente", "Productos", "Ruta", ...products.map((product) => product.name === "Blanda" ? "Blanda C/L/T/B/R" : product.name)];
   const rows = orders.map((order) => [
     wholesaleCustomerName(order),
-    String(order.items.length),
+    String(products.filter((product) => productAmounts(order, product).size > 0).length),
     wholesaleRouteLabel(order.route),
     ...products.map((product) => productQuantity(order, product)),
   ]);
@@ -338,14 +400,12 @@ function printWholesaleOrders(orders: Order[], products: WholesaleProduct[], sel
     th:nth-child(3), td:nth-child(3) { width: 10%; text-align: left; }
     tfoot th, tfoot td { background: #eef2ff; font-weight: 700; }
     tr { break-inside: avoid; }
-  </style></head><body><header><div><h1>Planilla de pedidos mayoristas</h1><p>${escapeHtml(day)} · ${escapeHtml(routes)}</p></div><strong>${orders.length} pedidos</strong></header><table><thead><tr>${headerCells.map((cell) => `<th>${escapeHtml(cell)}</th>`).join("")}</tr></thead><tbody>${rows.map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join("")}</tr>`).join("")}</tbody>${orders.length ? `<tfoot><tr><th>Total</th><td>${orders.reduce((sum, order) => sum + order.items.length, 0)}</td><td>${orders.length} pedidos</td>${totals.map((total) => `<td>${escapeHtml(total || "—")}</td>`).join("")}</tr></tfoot>` : ""}</table><script>window.addEventListener('load',()=>{window.focus();window.print();});<\/script></body></html>`;
+  </style></head><body><header><div><h1>Planilla de pedidos mayoristas</h1><p>${escapeHtml(day)} · ${escapeHtml(routes)}</p></div><strong>${orders.length} pedidos</strong></header><table><thead><tr>${headerCells.map((cell) => `<th>${escapeHtml(cell)}</th>`).join("")}</tr></thead><tbody>${rows.map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join("")}</tr>`).join("")}</tbody>${orders.length ? `<tfoot><tr><th>Total</th><td>${orders.reduce((sum, order) => sum + products.filter((product) => productAmounts(order, product).size > 0).length, 0)}</td><td>${orders.length} pedidos</td>${totals.map((total) => `<td>${escapeHtml(total || "—")}</td>`).join("")}</tr></tfoot>` : ""}</table><script>window.addEventListener('load',()=>{window.focus();window.print();});<\/script></body></html>`;
   printWindow.document.open();
   printWindow.document.write(html);
   printWindow.document.close();
   return true;
 }
-
-type TableFilter = "zones" | "cuts" | "query";
 
 const emptyManualOrder = {
   businessName: "",
@@ -468,7 +528,7 @@ function WholesaleWallet({ orders }: { orders: Order[] }) {
   </section>;
 }
 
-function WholesaleOrdersTable({ isAdmin, orders: allOrders, pendingId, onStatusChange }: { isAdmin: boolean; orders: Order[]; pendingId?: string; onStatusChange: (order: Order, phase: OperationalPhase) => void }) {
+function WholesaleOrdersTable({ hasMoreOrders, isAdmin, loadedOrderPages, orders: allOrders, pendingId, serverRouteFilter, onStatusChange }: { hasMoreOrders: boolean; isAdmin: boolean; loadedOrderPages: number; orders: Order[]; pendingId?: string; serverRouteFilter: string[]; onStatusChange: (order: Order, phase: OperationalPhase) => void }) {
   const router = useRouter();
   const matrixScrollRef = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState("");
@@ -479,7 +539,7 @@ function WholesaleOrdersTable({ isAdmin, orders: allOrders, pendingId, onStatusC
   // de la tablet a los cortes. Ruta, teléfono y comentario siguen disponibles
   // bajo “Mostrar datos” cuando se necesiten.
   const [showInfoColumns, setShowInfoColumns] = useState(false);
-  const [zones, setZones] = useState<string[]>([]);
+  const [zones, setZones] = useState<string[]>(serverRouteFilter);
   const [cuts, setCuts] = useState<string[]>([]);
   const [extraColumns, setExtraColumns] = useState<string[]>([]);
   const [editing, setEditing] = useState(false);
@@ -487,6 +547,7 @@ function WholesaleOrdersTable({ isAdmin, orders: allOrders, pendingId, onStatusC
   const [saving, setSaving] = useState(false);
   const [editNotice, setEditNotice] = useState<string>();
   const [routePendingId, setRoutePendingId] = useState<string>();
+  const [routeOverrides, setRouteOverrides] = useState<Record<string, string>>({});
   const [deletingId, setDeletingId] = useState<string>();
   const [preparedPendingKey, setPreparedPendingKey] = useState<string>();
   const [preparedOverrides, setPreparedOverrides] = useState<Record<string, boolean>>({});
@@ -508,7 +569,12 @@ function WholesaleOrdersTable({ isAdmin, orders: allOrders, pendingId, onStatusC
       openOrders: customerOrders.filter((order) => !isClosed(order)),
     };
   }, [allOrders, dayOffset, today]);
-  const orders = listMode === "help" ? chatHelpRequests : listMode === "dispatched" ? dispatchedOrders : openOrders;
+  const baseOrders = listMode === "help" ? chatHelpRequests : listMode === "dispatched" ? dispatchedOrders : openOrders;
+  // Refleja la ruta elegida en el acto; el refresco del servidor confirma después
+  // el dato persistido sin hacer que el operador espere viendo el valor anterior.
+  const orders = useMemo(() => baseOrders.map((order) => routeOverrides[order.id]
+    ? { ...order, route: routeOverrides[order.id] }
+    : order), [baseOrders, routeOverrides]);
   const helpCount = chatHelpRequests.length;
   const dispatchedCount = dispatchedOrders.length;
   const orderCount = openOrders.length;
@@ -519,22 +585,30 @@ function WholesaleOrdersTable({ isAdmin, orders: allOrders, pendingId, onStatusC
     new Set(products.filter((product) => productAmounts(order, product).size > 0).map((product) => product.name)),
   ])), [orders, products]);
 
-  // Cada filtro calcula sus opciones con los demás filtros aplicados, como el autofiltro de Excel.
-  const passes = (order: Order, skip?: TableFilter) => (
-    (skip === "zones" || !zones.length || zones.includes(order.route))
-    && (skip === "cuts" || !cuts.length || cuts.some((cut) => orderCuts.get(order.id)?.has(cut)))
-    && (skip === "query" || matchesSearch(order, searchTerms))
-  );
-  const countBy = (filter: TableFilter, keyOf: (order: Order) => string[]) => {
+  // Cada filtro calcula sus opciones con los demás filtros aplicados, como el
+  // autofiltro de Excel. Se memoriza para que abrir un menú o un formulario no
+  // recorra nuevamente toda la planilla.
+  const zoneCounts = useMemo(() => {
     const counts = new Map<string, number>();
-    orders.filter((order) => passes(order, filter)).forEach((order) => keyOf(order).forEach((key) => counts.set(key, (counts.get(key) ?? 0) + 1)));
+    orders.forEach((order) => {
+      if (cuts.length && !cuts.some((cut) => orderCuts.get(order.id)?.has(cut))) return;
+      if (!matchesSearch(order, searchTerms)) return;
+      counts.set(order.route, (counts.get(order.route) ?? 0) + 1);
+    });
     return counts;
-  };
-  const zoneCounts = countBy("zones", (order) => [order.route]);
+  }, [cuts, orderCuts, orders, searchTerms]);
   const routeValues = useMemo(() => [...new Set([...wholesaleRoutes, unassignedWholesaleRoute, ...orders.map((order) => order.route)])], [orders]);
-  const zoneOptions = routeValues.map((zone) => ({ value: zone, label: wholesaleRouteLabel(zone), count: zoneCounts.get(zone) ?? 0 }));
-  const cutCounts = countBy("cuts", (order) => [...(orderCuts.get(order.id) ?? [])]);
-  const cutOptions = products.filter((product) => cutCounts.has(product.name) || cuts.includes(product.name)).map((product) => ({ value: product.name, label: product.name, count: cutCounts.get(product.name) ?? 0 }));
+  const zoneOptions = useMemo(() => routeValues.map((zone) => ({ value: zone, label: wholesaleRouteLabel(zone), count: zoneCounts.get(zone) ?? 0 })), [routeValues, zoneCounts]);
+  const cutCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    orders.forEach((order) => {
+      if (zones.length && !zones.includes(order.route)) return;
+      if (!matchesSearch(order, searchTerms)) return;
+      orderCuts.get(order.id)?.forEach((cut) => counts.set(cut, (counts.get(cut) ?? 0) + 1));
+    });
+    return counts;
+  }, [orderCuts, orders, searchTerms, zones]);
+  const cutOptions = useMemo(() => products.filter((product) => cutCounts.has(product.name) || cuts.includes(product.name)).map((product) => ({ value: product.name, label: product.name, count: cutCounts.get(product.name) ?? 0 })), [cutCounts, cuts, products]);
 
   const visibleOrders = useMemo(() => orders.filter((order) => (
     (!zones.length || zones.includes(order.route))
@@ -566,7 +640,19 @@ function WholesaleOrdersTable({ isAdmin, orders: allOrders, pendingId, onStatusC
     visibleHelpWithoutOrder > 0 ? `${visibleHelpWithoutOrder} ${visibleHelpWithoutOrder === 1 ? "solicitud de ayuda" : "solicitudes de ayuda"}` : "",
   ].filter(Boolean).join(" · ");
   const hasFilters = zones.length > 0 || cuts.length > 0 || searchTerms.length > 0;
-  const clearFilters = () => { setZones([]); setCuts([]); setQuery(""); };
+  const updateDashboardQuery = (nextZones: string[], nextPage = 1) => {
+    const params = new URLSearchParams(window.location.search);
+    if (nextZones.length) params.set("routes", nextZones.join(","));
+    else params.delete("routes");
+    if (nextPage > 1) params.set("page", String(nextPage));
+    else params.delete("page");
+    router.replace(`/dashboard${params.size ? `?${params.toString()}` : ""}`, { scroll: false });
+  };
+  const changeZones = (values: string[]) => {
+    setZones(values);
+    updateDashboardQuery(values);
+  };
+  const clearFilters = () => { setZones([]); setCuts([]); setQuery(""); updateDashboardQuery([]); };
   const scrollMatrix = (left: number, top: number) => matrixScrollRef.current?.scrollBy({ left, top, behavior: "smooth" });
   const addExtraColumn = (name: string) => {
     if (!name) return;
@@ -574,12 +660,15 @@ function WholesaleOrdersTable({ isAdmin, orders: allOrders, pendingId, onStatusC
     window.requestAnimationFrame(() => window.requestAnimationFrame(() => matrixScrollRef.current?.scrollTo({ left: matrixScrollRef.current.scrollWidth, behavior: "smooth" })));
   };
   const saveRoute = async (order: Order, routeName: string) => {
+    const previousRoute = order.route;
+    setRouteOverrides((current) => ({ ...current, [order.id]: routeName }));
     setRoutePendingId(order.id);
     setEditNotice(undefined);
     const result = await updateWholesaleRoute(order.id, routeName);
     setRoutePendingId(undefined);
     setEditNotice(result.message);
     if (result.ok) router.refresh();
+    else setRouteOverrides((current) => ({ ...current, [order.id]: previousRoute }));
   };
 
   const beginEditing = () => {
@@ -660,7 +749,7 @@ function WholesaleOrdersTable({ isAdmin, orders: allOrders, pendingId, onStatusC
             <button aria-label="Día siguiente" disabled={editing} onClick={() => setDayOffset((current) => current + 1)} title={`${pendingByDay(dayOffset + 1)} pendientes`} type="button">›</button>
             {dayOffset !== 0 && <button className="day-today" disabled={editing} onClick={() => setDayOffset(0)} type="button">Hoy</button>}
           </div>
-          <FilterMenu label="Ruta" onChange={setZones} options={zoneOptions} selected={zones} />
+          <FilterMenu label="Ruta" onChange={changeZones} options={zoneOptions} selected={zones} />
           <FilterMenu label="Corte" onChange={setCuts} options={cutOptions} selected={cuts} />
           <label className={query ? "table-search is-filtered" : "table-search"}>
             <Icon name="search" />
@@ -713,7 +802,7 @@ function WholesaleOrdersTable({ isAdmin, orders: allOrders, pendingId, onStatusC
                     <button aria-label="Marcar como despachado" className="dispatch-action row-icon-action tooltip-icon-action" data-tooltip="Despachado" disabled={pendingId === order.id || editing} onClick={() => onStatusChange(order, "dispatched")} type="button">{pendingId === order.id ? "…" : <Icon name="truck" />}<span className="sr-only">Marcar como despachado</span></button>
                     {dayOffset === 1 && <button aria-label="Adelantar pedido a hoy" className="advance-action row-icon-action tooltip-icon-action" data-tooltip="Adelantar a hoy" disabled={saving || editing} onClick={() => void advanceOrder(order)} type="button"><Icon name="calendar" /><span className="sr-only">Adelantar pedido a hoy</span></button>}
                   </>}<button aria-label={`Eliminar ${order.orderNumber}`} className="delete-order-action row-icon-action tooltip-icon-action" data-tooltip="Eliminar pedido" disabled={deletingId === order.id || editing} onClick={() => void removeOrder(order)} type="button">{deletingId === order.id ? "…" : <Icon name="trash" />}<span className="sr-only">Eliminar pedido</span></button></div></div></th>
-              <td className="product-count-column"><strong>{order.items.length}</strong></td>
+              <td className="product-count-column"><strong>{orderCuts.get(order.id)?.size ?? 0}</strong></td>
               {showInfoColumns && <>
                 <td>{order.phone}</td>
                 <td className={editing ? "matrix-route-cell is-editing" : "matrix-route-cell"}><select aria-label={`Ruta de ${order.businessName ?? order.customer}`} disabled={routePendingId === order.id} onChange={(event) => editing ? setDraftRows((current) => ({ ...current, [order.id]: { ...current[order.id], routeName: event.target.value } })) : void saveRoute(order, event.target.value)} value={editing ? draftRows[order.id]?.routeName ?? order.route : order.route}>{![...wholesaleRoutes, unassignedWholesaleRoute].includes(order.route as (typeof wholesaleRoutes)[number] | typeof unassignedWholesaleRoute) && <option value={order.route}>{order.route}</option>}<option value={unassignedWholesaleRoute}>Sin clasificar</option>{wholesaleRoutes.map((route) => <option key={route} value={route}>{wholesaleRouteLabel(route)}</option>)}</select></td>
@@ -726,21 +815,22 @@ function WholesaleOrdersTable({ isAdmin, orders: allOrders, pendingId, onStatusC
                 const prepared = preparedOverrides[preparedKey] ?? storedPrepared;
                 const placeholder = product.name === "Blanda" ? "5 C / 2 L / 1 R" : product.name === "Comodín" ? "2 producto" : "Cantidad";
                 const title = product.name === "Blanda" ? "Usa C=capón, L=lomo, T=tetafula, B=calavera y R=relajado/abierto. Puedes añadir kg o lb si aplica." : product.name === "Comodín" ? "Escribe cantidad y nombre del producto. Ejemplo: 2 producto especial." : "Escribe el número y añade kg, lb o und solamente cuando corresponda.";
-                const cellTitle = value && !editing ? `${title} Doble clic para marcar como ${prepared ? "pendiente" : "alistado"}.` : title;
-                return <td aria-label={value && !editing ? `${product.name} de ${order.orderNumber}: ${value}. ${prepared ? "Alistado" : "Pendiente"}` : undefined} className={`${editing ? "matrix-quantity-cell is-editing" : value ? "matrix-quantity-cell has-value" : "matrix-quantity-cell"}${prepared ? " is-prepared" : ""}${preparedPendingKey === preparedKey ? " is-prepared-pending" : ""}${product.name === "Blanda" ? " is-blanda-column" : ""}`} key={product.name} onDoubleClick={value && !editing ? () => void togglePrepared(order, product, prepared) : undefined} onKeyDown={value && !editing ? (event) => { if (event.key === "Enter") void togglePrepared(order, product, prepared); } : undefined} tabIndex={value && !editing ? 0 : undefined} title={cellTitle}>{editing ? <input aria-label={`${product.name} de ${order.orderNumber}`} onChange={(event) => updateDraft(order.id, product.name, event.target.value)} placeholder={placeholder} title={title} value={draftRows[order.id]?.quantities[product.name] ?? ""} /> : value || ""}</td>;
+                const cellTitle = value && !editing ? `${title} Doble clic para marcar como ${prepared ? "pendiente" : "listo"}.` : title;
+                return <td aria-label={value && !editing ? `${product.name} de ${order.orderNumber}: ${value}. ${prepared ? "Listo" : "Pendiente"}` : undefined} className={`${editing ? "matrix-quantity-cell is-editing" : value ? "matrix-quantity-cell has-value" : "matrix-quantity-cell"}${prepared ? " is-prepared" : ""}${preparedPendingKey === preparedKey ? " is-prepared-pending" : ""}${product.name === "Blanda" ? " is-blanda-column" : ""}`} key={product.name} onDoubleClick={value && !editing ? () => void togglePrepared(order, product, prepared) : undefined} onKeyDown={value && !editing ? (event) => { if (event.key === "Enter") void togglePrepared(order, product, prepared); } : undefined} tabIndex={value && !editing ? 0 : undefined} title={cellTitle}>{editing ? <input aria-label={`${product.name} de ${order.orderNumber}`} onChange={(event) => updateDraft(order.id, product.name, event.target.value)} placeholder={placeholder} title={title} value={draftRows[order.id]?.quantities[product.name] ?? ""} /> : value || ""}</td>;
               })}
             </tr>)}
             {!visibleOrders.length && <tr><td className="matrix-empty" colSpan={visibleProducts.length + (showInfoColumns ? 4 : 2)}>{hasFilters ? "Ningún pedido coincide con los filtros." : listMode === "dispatched" ? "No hay pedidos despachados para este día." : listMode === "help" ? "No hay solicitudes de ayuda para este día." : "No hay pedidos pendientes para este día."}</td></tr>}
           </tbody>
-          {visibleOrders.length > 0 && visibleProducts.length > 0 && <tfoot><tr><th scope="row">{showInfoColumns ? "Total" : `Total · ${visibleSummary}`}</th><td className="product-count-column">{visibleOrders.reduce((sum, order) => sum + order.items.length, 0)}</td>{showInfoColumns && <td colSpan={2}>{visibleSummary}</td>}{totals.map((total, index) => <td key={visibleProducts[index].name}>{total || "—"}</td>)}</tr></tfoot>}
+          {visibleOrders.length > 0 && visibleProducts.length > 0 && <tfoot><tr><th scope="row">{showInfoColumns ? "Total" : `Total · ${visibleSummary}`}</th><td className="product-count-column">{visibleOrders.reduce((sum, order) => sum + (orderCuts.get(order.id)?.size ?? 0), 0)}</td>{showInfoColumns && <td colSpan={2}>{visibleSummary}</td>}{totals.map((total, index) => <td key={visibleProducts[index].name}>{total || "—"}</td>)}</tr></tfoot>}
         </table>
       </div>
       </div>
+      {hasMoreOrders && <button className="outline-action load-more-orders" onClick={() => updateDashboardQuery(zones, loadedOrderPages + 1)} type="button">Cargar 100 pedidos anteriores</button>}
     </section></>
   );
 }
 
-export function OrdersPanel({ initialOrders, loadError, retailCatalog = [], viewer }: { initialOrders: Order[]; loadError?: string; retailCatalog?: RetailCatalogProduct[]; viewer?: Viewer }) {
+export function OrdersPanel({ hasMoreOrders = false, initialOrders, loadedOrderPages = 1, loadError, retailCatalog = [], serverRouteFilter = [], viewer }: { hasMoreOrders?: boolean; initialOrders: Order[]; loadedOrderPages?: number; loadError?: string; retailCatalog?: RetailCatalogProduct[]; serverRouteFilter?: string[]; viewer?: Viewer }) {
   const router = useRouter();
   const [orders, setOrders] = useState(initialOrders);
   // Sincroniza los datos refrescados del servidor sin remontar el panel (conserva día, filtros y edición).
@@ -849,7 +939,7 @@ export function OrdersPanel({ initialOrders, loadError, retailCatalog = [], view
         </div>}
       </div>
       {notice && <div className="operation-notice" role="status">{notice}</div>}
-      {activeType === "wholesale" ? <WholesaleOrdersTable isAdmin={viewer?.role === "admin"} onStatusChange={(order, phase) => void moveOrder(order, phase)} orders={wholesale} pendingId={pendingId} /> : <RetailPanel catalog={retailCatalog} onAdvance={(order) => void advanceRetailOrder(order)} onMove={(order, phase) => void moveOrder(order, phase)} onPaymentChange={(order, status) => void changePaymentStatus(order, status)} onResolveHelp={(order) => void resolveHelp(order)} onSave={saveOrder} onSendBill={(order) => void sendBill(order)} orders={retail} pendingId={pendingId} />}
+      {activeType === "wholesale" ? <WholesaleOrdersTable hasMoreOrders={hasMoreOrders} isAdmin={viewer?.role === "admin"} loadedOrderPages={loadedOrderPages} onStatusChange={(order, phase) => void moveOrder(order, phase)} orders={wholesale} pendingId={pendingId} serverRouteFilter={serverRouteFilter} /> : <RetailPanel catalog={retailCatalog} onAdvance={(order) => void advanceRetailOrder(order)} onMove={(order, phase) => void moveOrder(order, phase)} onPaymentChange={(order, status) => void changePaymentStatus(order, status)} onResolveHelp={(order) => void resolveHelp(order)} onSave={saveOrder} onSendBill={(order) => void sendBill(order)} orders={retail} pendingId={pendingId} />}
     </main></div>
   );
 }

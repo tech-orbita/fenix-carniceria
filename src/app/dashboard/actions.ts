@@ -548,7 +548,7 @@ export async function setWholesaleProductPrepared(orderId: string, productName: 
   const { error } = await supabase.from("order_items").update({ is_prepared: prepared }).in("id", matchingIds).eq("order_id", Number(orderId));
   if (error) return { ok: false as const, message: "No se pudo cambiar el estado de alistamiento." };
   revalidatePath("/dashboard");
-  return { ok: true as const, message: prepared ? "Producto marcado como alistado." : "Producto devuelto a pendiente." };
+  return { ok: true as const, message: prepared ? "Producto marcado como listo." : "Producto devuelto a pendiente." };
 }
 
 type OrderDetailsInput = {

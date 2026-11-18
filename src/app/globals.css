@@ -3324,8 +3324,9 @@ a {
 
 .orders-app .form-submission-modal {
   position: fixed;
-  z-index: 1100;
+  z-index: 2147483000;
   inset: 0;
+  isolation: isolate;
   display: grid;
   place-items: center;
   padding: 16px;
@@ -5536,7 +5537,7 @@ a {
 .orders-app .wholesale-matrix .matrix-quantity-cell.is-prepared::after {
   display: block;
   margin-top: 2px;
-  content: "✓ ALISTADO";
+  content: "✓ LISTO";
   font-size: 9px;
   font-weight: 900;
   letter-spacing: 0.04em;
@@ -5544,6 +5545,11 @@ a {
 
 .orders-app .wholesale-matrix .matrix-quantity-cell.is-prepared-pending {
   opacity: 0.65;
+}
+
+.orders-app .load-more-orders {
+  align-self: center;
+  margin: 10px auto 2px;
 }
 
 .orders-app .matrix-row-actions .delete-order-action {

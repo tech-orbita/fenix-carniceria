@@ -1,9 +1,9 @@
 import { requireViewer } from "@/lib/auth/viewer";
 import { hasSupabaseEnvironment } from "@/lib/supabase/config";
 import { createClient } from "@/lib/supabase/server";
-import { normalizeProductName, parseOrderText } from "@/lib/orders/product-parser";
 import { loadRetailCatalog } from "@/lib/orders/retail-agent";
 import { retailCatalogPrice } from "@/lib/orders/retail-normalization";
+import { unassignedWholesaleRoute, wholesaleRoutes } from "@/lib/orders/wholesale-routes";
 
 import "../auth.css";
 import { OrdersPanel } from "./orders-panel";
@@ -12,36 +12,26 @@ import type { Order } from "./types";
 
 export const dynamic = "force-dynamic";
 
-function objectValue(value: unknown) {
-  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
-}
-
 function cleanAddress(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim().replace(/,\s*$/, "") : undefined;
 }
 
-function formAddressDetails(sourcePayload: unknown) {
-  const payload = objectValue(sourcePayload);
-  const formData = objectValue(payload?.form_data);
-  const original = objectValue(formData?.original_payload);
-  const customData = objectValue(original?.customData);
-  const location = objectValue(original?.location);
-  return {
-    contact: cleanAddress(customData?.address) ?? cleanAddress(original?.address1) ?? cleanAddress(original?.full_address),
-    location: cleanAddress(location?.address) ?? cleanAddress(location?.fullAddress),
-  };
+const dashboardPageSize = 100;
+const allowedRouteFilters = new Set<string>([...wholesaleRoutes, unassignedWholesaleRoute]);
+
+function routeFilters(value: string | string[] | undefined) {
+  const raw = Array.isArray(value) ? value.join(",") : value ?? "";
+  return [...new Set(raw.split(",").map((route) => route.trim()).filter((route) => allowedRouteFilters.has(route)))];
 }
 
-function sameAddress(left?: string | null, right?: string | null) {
-  if (!left || !right) return false;
-  const normalize = (value: string) => value.normalize("NFD").replace(/\p{M}/gu, "").toLocaleLowerCase("es").replace(/[^a-z0-9]/g, "");
-  return normalize(left) === normalize(right) || normalize(right).startsWith(normalize(left));
-}
-
-export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ demo?: string }> }) {
-  const { demo } = await searchParams;
+export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ demo?: string; page?: string; routes?: string | string[] }> }) {
+  const { demo, page: rawPage, routes: rawRoutes } = await searchParams;
+  const requestedRoutes = routeFilters(rawRoutes);
+  const page = Math.min(10, Math.max(1, Number.parseInt(rawPage ?? "1", 10) || 1));
+  const requestedRows = page * dashboardPageSize;
   if (process.env.NODE_ENV !== "production" && demo === "contacto") {
-    return <OrdersPanel initialOrders={demoOrders()} loadError="Vista previa local: empresa y persona de contacto separadas." />;
+    const demoRows = demoOrders().filter((order) => !requestedRoutes.length || requestedRoutes.includes(order.route));
+    return <OrdersPanel initialOrders={demoRows} loadError="Vista previa local: empresa y persona de contacto separadas." serverRouteFilter={requestedRoutes} />;
   }
 
   if (!hasSupabaseEnvironment()) {
@@ -51,6 +41,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const viewer = await requireViewer();
   const supabase = await createClient();
   const canSeeWholesaleWallet = viewer.role === "admin";
+  const orderRouteSelection = requestedRoutes.length ? "order_route:routes!inner(name)" : "order_route:routes(name)";
 
   // RLS limita las filas al segmento del usuario; el filtro explícito lo deja claro.
   let query = supabase
@@ -60,7 +51,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       order_number,
       customer_type,
       source,
-      source_payload,
       status,
       fulfillment_type,
       requested_delivery_at,
@@ -72,8 +62,23 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       total,
       notes,
       received_at,
-      customers (name, business_name, phone, address),
-      routes (name),
+      form_name:source_payload->form_data->>form,
+      form_tax_id:source_payload->form_data->>tax_id,
+      form_billing:source_payload->form_data->>billing,
+      form_maps_url:source_payload->form_data->>maps_url,
+      form_receiver_phone:source_payload->form_data->>receiver_phone,
+      form_payment_proof:source_payload->form_data->>payment_proof,
+      form_contact_id:source_payload->form_data->>contact_id,
+      form_location_id:source_payload->form_data->>location_id,
+      form_conversation_id:source_payload->form_data->>conversation_id,
+      form_conversation_url:source_payload->form_data->>conversation_url,
+      payload_contact_id:source_payload->>contactId,
+      payload_location_id:source_payload->>locationId,
+      payload_conversation_id:source_payload->>conversationId,
+      payload_conversation_url:source_payload->>conversationUrl,
+      help_without_order:source_payload->>helpWithoutOrder,
+      customers (name, business_name, phone, address, routes (name)),
+      ${orderRouteSelection},
       order_items (
         id,
         product_name,
@@ -86,23 +91,26 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         is_prepared
       )
     `)
-    .order("received_at", { ascending: false });
+    .order("received_at", { ascending: false })
+    // Pide una fila extra para saber si existe otro lote sin ejecutar COUNT(*).
+    .range(0, requestedRows);
   if (viewer.customerType) query = query.eq("customer_type", viewer.customerType);
-  const [{ data: rows, error: ordersError }, retailCatalog] = await Promise.all([query, loadRetailCatalog()]);
+  if (requestedRoutes.length) query = query.in("routes.name", requestedRoutes);
+  // Los operadores mayoristas no necesitan descargar ni procesar el catálogo
+  // minorista antes de poder abrir su planilla.
+  const retailCatalogPromise = viewer.customerType === "wholesale" ? Promise.resolve([]) : loadRetailCatalog();
+  const [{ data: queriedRows, error: ordersError }, retailCatalog] = await Promise.all([query, retailCatalogPromise]);
+  const hasMoreOrders = (queriedRows?.length ?? 0) > requestedRows;
+  const rows = queriedRows?.slice(0, requestedRows);
 
   const orders: Order[] = ordersError
     ? []
     : (rows ?? []).map((row) => {
         const customer = Array.isArray(row.customers) ? row.customers[0] : row.customers;
-        const route = Array.isArray(row.routes) ? row.routes[0] : row.routes;
+        const route = Array.isArray(row.order_route) ? row.order_route[0] : row.order_route;
+        const customerRouteRelation = customer?.routes;
+        const customerRoute = Array.isArray(customerRouteRelation) ? customerRouteRelation[0] : customerRouteRelation;
 
-        const sourcePayload = row.source_payload && typeof row.source_payload === "object" ? row.source_payload : {};
-        const formData = sourcePayload.form_data && typeof sourcePayload.form_data === "object" ? sourcePayload.form_data : undefined;
-        const submittedCustomer = objectValue(sourcePayload.customer);
-        const submittedName = typeof submittedCustomer?.name === "string" && submittedCustomer.name.trim() ? submittedCustomer.name.trim() : undefined;
-        const submittedBusiness = typeof submittedCustomer?.business_name === "string" && submittedCustomer.business_name.trim() ? submittedCustomer.business_name.trim() : undefined;
-        const submittedPhone = typeof submittedCustomer?.phone === "string" && submittedCustomer.phone.trim() ? submittedCustomer.phone.trim() : undefined;
-        const submittedAddress = cleanAddress(submittedCustomer?.address);
         const storedItems = (row.order_items ?? []).map((item) => {
           const storedPrice = Number(item.unit_price);
           const catalogPrice = row.customer_type === "retail"
@@ -122,59 +130,35 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             prepared: item.is_prepared === true,
           };
         });
-        const reparsedItems = row.customer_type === "wholesale" && typeof formData?.order_text === "string"
-          ? parseOrderText(formData.order_text)
-          : [];
-        const reparsedMatchesStored = reparsedItems.length === storedItems.length && reparsedItems.every((item, index) => (
-          normalizeProductName(item.product_name) === normalizeProductName(storedItems[index]?.productName ?? "")
-          && (item.preparation ?? "") === (storedItems[index]?.preparation ?? "")
-        ));
-        const canUseReparsedItems = reparsedItems.length > 0 && storedItems.every((item) => item.actualQuantity == null);
-        const items = canUseReparsedItems
-          ? reparsedItems.map((item, index) => ({
-              id: `parsed-${row.id}-${index}`,
-              productName: item.product_name,
-              quantity: item.quantity,
-              unit: item.unit,
-              displayUnit: item.unit,
-              preparation: item.preparation,
-              notes: item.notes,
-              unitPrice: 0,
-              prepared: storedItems[index]?.prepared ?? false,
-            }))
-          : reparsedMatchesStored
-            ? storedItems.map((item, index) => ({ ...item, displayUnit: reparsedItems[index].unit }))
-            : storedItems;
-        const addresses = formAddressDetails(sourcePayload);
-        const storedAddress = [row.delivery_address, customer?.address]
-          .map(cleanAddress)
-          .find((address) => address && !sameAddress(address, addresses.location));
+        const items = storedItems;
+        const storedAddress = cleanAddress(row.delivery_address) ?? cleanAddress(customer?.address);
         const canSeeOrderPayments = row.customer_type === "retail" || canSeeWholesaleWallet;
-        const safeFormData = formData ? {
-          form: String(formData.form ?? ""),
-          order_text: String(formData.order_text ?? ""),
-          tax_id: typeof formData.tax_id === "string" ? formData.tax_id : undefined,
-          billing: typeof formData.billing === "string" ? formData.billing : undefined,
-          maps_url: typeof formData.maps_url === "string" ? formData.maps_url : undefined,
-          receiver_phone: typeof formData.receiver_phone === "string" ? formData.receiver_phone : undefined,
-          payment_proof: canSeeOrderPayments && typeof formData.payment_proof === "string" ? formData.payment_proof : undefined,
-          contact_id: typeof formData.contact_id === "string" ? formData.contact_id : undefined,
-          location_id: typeof formData.location_id === "string" ? formData.location_id : undefined,
-          conversation_id: typeof formData.conversation_id === "string" ? formData.conversation_id : undefined,
-          conversation_url: typeof formData.conversation_url === "string" ? formData.conversation_url : undefined,
+        const safeFormData = row.source === "form" ? {
+          form: row.form_name ?? "Pedido mayorista",
+          tax_id: row.form_tax_id ?? undefined,
+          billing: row.form_billing ?? undefined,
+          maps_url: row.form_maps_url ?? undefined,
+          receiver_phone: row.form_receiver_phone ?? undefined,
+          payment_proof: canSeeOrderPayments ? row.form_payment_proof ?? undefined : undefined,
+          contact_id: row.form_contact_id ?? undefined,
+          location_id: row.form_location_id ?? undefined,
+          conversation_id: row.form_conversation_id ?? undefined,
+          conversation_url: row.form_conversation_url ?? undefined,
         } : undefined;
         return {
           id: String(row.id),
           orderNumber: row.order_number,
           customerType: row.customer_type,
-          customer: submittedName ?? customer?.name ?? "Cliente sin nombre",
-          businessName: submittedBusiness ?? customer?.business_name ?? undefined,
-          phone: submittedPhone ?? customer?.phone ?? "Sin teléfono",
+          customer: customer?.name ?? "Cliente sin nombre",
+          businessName: customer?.business_name ?? undefined,
+          phone: customer?.phone ?? "Sin teléfono",
           receivedAt: row.received_at,
           deliveryDate: row.requested_delivery_at?.slice(0, 10) ?? "Sin fecha",
           fulfillment: row.fulfillment_type,
-          address: submittedAddress ?? addresses.contact ?? storedAddress ?? "Sin dirección",
-          route: route?.name ?? "Sin clasificar",
+          address: storedAddress ?? "Sin dirección",
+          // La clasificación pertenece al cliente. Usarla como fuente principal
+          // evita que un pedido antiguo o sin ruta desaparezca del filtro recién asignado.
+          route: customerRoute?.name ?? route?.name ?? "Sin clasificar",
           source: row.source,
           paymentMethod: canSeeOrderPayments ? row.payment_method ?? undefined : undefined,
           paymentStatus: canSeeOrderPayments ? row.payment_status : "restricted",
@@ -185,15 +169,15 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           items,
           formData: safeFormData,
           highLevel: {
-            contactId: formData?.contact_id ?? sourcePayload.contactId,
-            locationId: formData?.location_id ?? sourcePayload.locationId,
-            conversationId: formData?.conversation_id ?? sourcePayload.conversationId,
-            conversationUrl: formData?.conversation_url ?? sourcePayload.conversationUrl,
+            contactId: row.form_contact_id ?? row.payload_contact_id ?? undefined,
+            locationId: row.form_location_id ?? row.payload_location_id ?? undefined,
+            conversationId: row.form_conversation_id ?? row.payload_conversation_id ?? undefined,
+            conversationUrl: row.form_conversation_url ?? row.payload_conversation_url ?? undefined,
           },
-          helpRequest: sourcePayload.helpWithoutOrder === true,
+          helpRequest: row.help_without_order === "true",
           notes: row.notes ?? undefined,
         };
       });
 
-  return <OrdersPanel initialOrders={orders} retailCatalog={retailCatalog} viewer={viewer} loadError={ordersError ? "No se pudieron cargar los pedidos. Intenta nuevamente." : undefined} />;
+  return <OrdersPanel hasMoreOrders={hasMoreOrders} initialOrders={orders} loadedOrderPages={page} retailCatalog={retailCatalog} serverRouteFilter={requestedRoutes} viewer={viewer} loadError={ordersError ? "No se pudieron cargar los pedidos. Intenta nuevamente." : undefined} />;
 }
