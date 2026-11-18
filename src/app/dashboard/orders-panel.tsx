@@ -13,7 +13,7 @@ import { wholesaleServiceDay } from "@/lib/orders/wholesale-service-day";
 import { unassignedWholesaleRoute, wholesaleRouteLabel, wholesaleRoutes } from "@/lib/orders/wholesale-routes";
 import { highLevelConversationUrl as highLevelAppConversationUrl, safeHighLevelConversationUrl } from "@/lib/orders/highlevel-conversation-url";
 
-import { createManualWholesaleOrder, deleteWholesaleOrder, findWholesaleCustomer, resolveOrderHelp, scheduleRetailOrder, scheduleWholesaleOrder, sendRetailPaymentSummary, setWholesaleProductPrepared, updateOrderDetails, updateOrderPaymentStatus, updateOrderStatus, updateWholesalePayment, updateWholesaleRoute, updateWholesaleTable } from "./actions";
+import { createManualWholesaleOrder, deleteRetailOrder, deleteWholesaleOrder, findWholesaleCustomer, resolveOrderHelp, scheduleRetailOrder, scheduleWholesaleOrder, sendRetailPaymentSummary, setWholesaleProductPrepared, updateOrderDetails, updateOrderPaymentStatus, updateOrderStatus, updateWholesalePayment, updateWholesaleRoute, updateWholesaleTable } from "./actions";
 import { addDays, bogotaDay, dateTime, dayLabel, Icon, phaseLabels, phaseStatus } from "./panel-shared";
 import type { OperationalPhase } from "./panel-shared";
 import { RetailPanel } from "./retail-panel";
@@ -920,6 +920,15 @@ export function OrdersPanel({ hasMoreOrders = false, initialOrders, loadedOrderP
     setNotice(result.message); setPendingId(undefined); router.refresh();
   };
 
+  const removeRetailOrder = async (order: Order) => {
+    if (!window.confirm(`¿Eliminar definitivamente el pedido ${order.orderNumber} de ${order.customer}? Esta acción no se puede deshacer.`)) return;
+    setPendingId(order.id); setNotice(undefined);
+    const result = await deleteRetailOrder(order.id);
+    if (!result.ok) { setNotice(result.message); setPendingId(undefined); return; }
+    setOrders((current) => current.filter((item) => item.id !== order.id));
+    setNotice(result.message); setPendingId(undefined); router.refresh();
+  };
+
   return (
     <div className="orders-app"><main className="dashboard-content">
       <div className="dashboard-topbar">
@@ -939,7 +948,7 @@ export function OrdersPanel({ hasMoreOrders = false, initialOrders, loadedOrderP
         </div>}
       </div>
       {notice && <div className="operation-notice" role="status">{notice}</div>}
-      {activeType === "wholesale" ? <WholesaleOrdersTable hasMoreOrders={hasMoreOrders} isAdmin={viewer?.role === "admin"} loadedOrderPages={loadedOrderPages} onStatusChange={(order, phase) => void moveOrder(order, phase)} orders={wholesale} pendingId={pendingId} serverRouteFilter={serverRouteFilter} /> : <RetailPanel catalog={retailCatalog} onAdvance={(order) => void advanceRetailOrder(order)} onMove={(order, phase) => void moveOrder(order, phase)} onPaymentChange={(order, status) => void changePaymentStatus(order, status)} onResolveHelp={(order) => void resolveHelp(order)} onSave={saveOrder} onSendBill={(order) => void sendBill(order)} orders={retail} pendingId={pendingId} />}
+      {activeType === "wholesale" ? <WholesaleOrdersTable hasMoreOrders={hasMoreOrders} isAdmin={viewer?.role === "admin"} loadedOrderPages={loadedOrderPages} onStatusChange={(order, phase) => void moveOrder(order, phase)} orders={wholesale} pendingId={pendingId} serverRouteFilter={serverRouteFilter} /> : <RetailPanel catalog={retailCatalog} onAdvance={(order) => void advanceRetailOrder(order)} onDelete={(order) => void removeRetailOrder(order)} onMove={(order, phase) => void moveOrder(order, phase)} onPaymentChange={(order, status) => void changePaymentStatus(order, status)} onResolveHelp={(order) => void resolveHelp(order)} onSave={saveOrder} onSendBill={(order) => void sendBill(order)} orders={retail} pendingId={pendingId} />}
     </main></div>
   );
 }

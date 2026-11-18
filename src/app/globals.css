@@ -4632,6 +4632,17 @@ a {
   background: #fff;
 }
 
+.orders-app .rt-button.is-delete {
+  border-color: #f0b1b1;
+  background: #fff1f1;
+  color: #a52828;
+}
+
+.orders-app .rt-button.is-delete:hover:not(:disabled) {
+  border-color: #c83b3b;
+  background: #ffe0e0;
+}
+
 .orders-app .rt-payment-action {
   margin-left: auto;
   white-space: nowrap;

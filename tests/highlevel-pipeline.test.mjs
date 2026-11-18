@@ -129,7 +129,7 @@ test("reconoce todas las etapas visibles del pipeline Minoristas", async () => {
   }
 });
 
-test("envía un mensaje de WhatsApp al contacto por HighLevel", async () => {
+test("permite enviar por WhatsApp cuando se solicita explícitamente", async () => {
   configure();
   let request;
   globalThis.fetch = async (input, init = {}) => {
@@ -137,13 +137,38 @@ test("envía un mensaje de WhatsApp al contacto por HighLevel", async () => {
     return Response.json({ messageId: "message-1" });
   };
 
-  const result = await sendHighLevelMessage({ locationId: "location-message", contactId: "contact-1" }, "Resumen del pedido");
+  const result = await sendHighLevelMessage(
+    { locationId: "location-message", contactId: "contact-1" },
+    "Resumen del pedido",
+    { channel: "WhatsApp" },
+  );
 
   assert.equal(result.ok, true);
   assert.equal(request.url, "https://services.leadconnectorhq.com/conversations/messages");
   assert.equal(request.init.method, "POST");
   assert.deepEqual(JSON.parse(String(request.init.body)), {
     type: "WhatsApp",
+    contactId: "contact-1",
+    message: "Resumen del pedido",
+  });
+});
+
+test("usa SMS por defecto para los mensajes automáticos de Fénix", async () => {
+  configure();
+  const requests = [];
+  globalThis.fetch = async (input, init = {}) => {
+    requests.push({ url: String(input), init });
+    if (String(input).includes("/conversations/search?")) return Response.json({ conversations: [] });
+    return Response.json({ messageId: "message-default-sms" });
+  };
+
+  const result = await sendHighLevelMessage({ locationId: "location-message", contactId: "contact-1" }, "Resumen del pedido");
+
+  assert.equal(result.ok, true);
+  assert.equal(result.channel, "SMS");
+  const sent = requests.find((request) => request.url.endsWith("/conversations/messages"));
+  assert.deepEqual(JSON.parse(String(sent.init.body)), {
+    type: "SMS",
     contactId: "contact-1",
     message: "Resumen del pedido",
   });
@@ -171,6 +196,87 @@ test("envía por el proveedor personalizado cuando el número está conectado po
     contactId: "contact-qr",
     message: "Pedido listo",
     conversationProviderId: "provider-qr",
+  });
+});
+
+test("recupera del historial el proveedor SMS personalizado antes de enviar", async () => {
+  configure();
+  const requests = [];
+  globalThis.fetch = async (input, init = {}) => {
+    requests.push({ url: String(input), init });
+    if (String(input).includes("/conversations/search?")) return Response.json({ conversations: [{
+      id: "conversation-qr-history",
+      lastMessageType: "TYPE_CUSTOM_PROVIDER_SMS",
+    }] });
+    if (String(input).includes("/conversations/conversation-qr-history/messages?")) return Response.json({ messages: { messages: [{
+      messageType: "TYPE_CUSTOM_PROVIDER_SMS",
+      conversationProviderId: "provider-from-history",
+    }] } });
+    return Response.json({ messageId: "message-qr-history" });
+  };
+
+  const result = await sendHighLevelMessage({ locationId: "location-qr", contactId: "contact-qr", conversationId: "conversation-qr-history" }, "Pedido despachado");
+
+  assert.equal(result.ok, true);
+  const sent = requests.find((request) => request.url.endsWith("/conversations/messages"));
+  assert.deepEqual(JSON.parse(String(sent.init.body)), {
+    type: "Custom",
+    contactId: "contact-qr",
+    message: "Pedido despachado",
+    conversationProviderId: "provider-from-history",
+  });
+});
+
+test("envía como SMS cuando la conversación usa el canal SMS estándar", async () => {
+  configure();
+  const requests = [];
+  globalThis.fetch = async (input, init = {}) => {
+    requests.push({ url: String(input), init });
+    if (String(input).includes("/conversations/search?")) return Response.json({ conversations: [{
+      id: "conversation-sms",
+      lastMessageType: "TYPE_SMS",
+    }] });
+    if (String(input).includes("/conversations/conversation-sms/messages?")) return Response.json({ messages: { messages: [] } });
+    return Response.json({ messageId: "message-sms" });
+  };
+
+  const result = await sendHighLevelMessage({ locationId: "location-sms", contactId: "contact-sms", conversationId: "conversation-sms" }, "Pedido despachado");
+
+  assert.equal(result.ok, true);
+  const sent = requests.find((request) => request.url.endsWith("/conversations/messages"));
+  assert.deepEqual(JSON.parse(String(sent.init.body)), {
+    type: "SMS",
+    contactId: "contact-sms",
+    message: "Pedido despachado",
+  });
+});
+
+test("fuerza SMS para el aviso de despacho aunque el último mensaje sea WhatsApp", async () => {
+  configure();
+  const requests = [];
+  globalThis.fetch = async (input, init = {}) => {
+    requests.push({ url: String(input), init });
+    if (String(input).includes("/conversations/search?")) return Response.json({ conversations: [{
+      id: "conversation-dispatch",
+      lastMessageType: "TYPE_WHATSAPP",
+    }] });
+    if (String(input).includes("/conversations/conversation-dispatch/messages?")) return Response.json({ messages: { messages: [] } });
+    return Response.json({ messageId: "message-dispatch" });
+  };
+
+  const result = await sendHighLevelMessage(
+    { locationId: "location-dispatch", contactId: "contact-dispatch", conversationId: "conversation-dispatch" },
+    "Pedido despachado",
+    { channel: "SMS" },
+  );
+
+  assert.equal(result.ok, true);
+  assert.equal(result.channel, "SMS");
+  const sent = requests.find((request) => request.url.endsWith("/conversations/messages"));
+  assert.deepEqual(JSON.parse(String(sent.init.body)), {
+    type: "SMS",
+    contactId: "contact-dispatch",
+    message: "Pedido despachado",
   });
 });
 

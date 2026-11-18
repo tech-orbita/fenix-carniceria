@@ -87,6 +87,7 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus) {
         customer: customer?.name || "cliente",
         fulfillment: data.fulfillment_type === "pickup" ? "pickup" : "delivery",
       }),
+      { channel: "SMS" },
     )
     : data.customer_type === "wholesale" && status === "dispatched"
       ? sendHighLevelMessage(
@@ -96,7 +97,7 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus) {
         customer: customer?.business_name || customer?.name || "cliente",
       }),
       )
-      : Promise.resolve({ ok: true as const, message: "" });
+      : Promise.resolve({ ok: true as const, message: "", channel: "SMS" as const });
   const [synced, sent] = await Promise.all([pipelinePromise, notificationPromise]);
 
   let message = synced.ok
@@ -108,9 +109,7 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus) {
         ? `Estado actualizado, pero no se pudo avisar al cliente: ${sent.message}`
         : `${message} Tampoco se pudo avisar al cliente: ${sent.message}`;
     } else if (message === "Estado actualizado.") {
-      message = data.customer_type === "wholesale"
-        ? "Estado actualizado y cliente mayorista notificado por WhatsApp."
-        : "Estado actualizado y cliente notificado por WhatsApp.";
+      message = `Estado actualizado y cliente${data.customer_type === "wholesale" ? " mayorista" : ""} notificado por ${sent.channel}.`;
     }
   }
 
@@ -516,6 +515,22 @@ export async function deleteWholesaleOrder(orderId: string) {
     .delete()
     .eq("id", Number(orderId))
     .eq("customer_type", "wholesale")
+    .select("order_number")
+    .maybeSingle();
+  if (error || !data) return { ok: false as const, message: "No se pudo eliminar el pedido." };
+  revalidatePath("/");
+  revalidatePath("/dashboard");
+  return { ok: true as const, message: `${data.order_number} fue eliminado.` };
+}
+
+export async function deleteRetailOrder(orderId: string) {
+  if (!/^\d+$/.test(orderId)) return { ok: false as const, message: "Pedido inválido." };
+  const supabase = await sessionClient();
+  const { data, error } = await supabase
+    .from("orders")
+    .delete()
+    .eq("id", Number(orderId))
+    .eq("customer_type", "retail")
     .select("order_number")
     .maybeSingle();
   if (error || !data) return { ok: false as const, message: "No se pudo eliminar el pedido." };

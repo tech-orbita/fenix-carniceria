@@ -21,6 +21,11 @@ type Conversation = {
   lastChannelAccount?: Array<{ value?: string }>;
 };
 
+type ConversationMessage = {
+  messageType?: string;
+  conversationProviderId?: string;
+};
+
 type CustomField = {
   id: string;
   name?: string;
@@ -312,26 +317,54 @@ export function syncRetailPipeline(
   return syncOrderPipeline(context, "retail", stage, opportunityName, monetaryValue);
 }
 
-export async function sendHighLevelMessage(context: HighLevelContext, message: string) {
+export async function sendHighLevelMessage(
+  context: HighLevelContext,
+  message: string,
+  options: { channel?: "SMS" | "WhatsApp" } = {},
+) {
   const config = await resolvedConfiguration(context);
   if (!config) return { ok: false as const, message: "El pedido no tiene un contacto de Orbita asociado." };
   try {
     const search = new URLSearchParams({ locationId: config.locationId, contactId: config.contactId });
     const result = await ghlFetch<{ conversations?: Conversation[] }>(`/conversations/search?${search}`, config.token, { headers: { Version: "2021-04-15" } });
     const conversation = result.conversations?.find((candidate) => candidate.id === context.conversationId) ?? result.conversations?.[0];
-    const providerId = conversation?.lastChannelAccount?.[0]?.value ?? conversation?.conversationProviderId;
-    const usesCustomProvider = conversation?.lastMessageType === "TYPE_CUSTOM_PROVIDER_SMS" && Boolean(providerId);
+    const messageType = conversation?.lastMessageType?.toUpperCase() ?? "";
+    // Fénix opera sus números conectados a GHL desde el compositor SMS. Aunque
+    // el proveedor entregue finalmente por WhatsApp, pedir `WhatsApp` a la API
+    // falla porque ese canal nativo no está conectado en la subcuenta.
+    const requestedChannel = options.channel ?? "SMS";
+    const usesSmsChannel = requestedChannel === "SMS";
+    let providerId = conversation?.lastChannelAccount?.[0]?.value ?? conversation?.conversationProviderId;
+
+    // La búsqueda de conversaciones no siempre devuelve el proveedor del canal.
+    // En conversaciones SMS personalizadas (como el número conectado por QR), el
+    // identificador sí viene en el historial y GHL lo exige para enviar como Custom.
+    if (usesSmsChannel && !providerId && conversation?.id && (requestedChannel === "SMS" || messageType === "TYPE_CUSTOM_PROVIDER_SMS")) {
+      try {
+        const history = await ghlFetch<{ messages?: { messages?: ConversationMessage[] } }>(
+          `/conversations/${encodeURIComponent(conversation.id)}/messages?limit=20`,
+          config.token,
+          { headers: { Version: "v3" } },
+        );
+        providerId = history.messages?.messages?.find((item) => item.conversationProviderId)?.conversationProviderId;
+      } catch {
+        // Si el token no permite consultar el historial, GHL todavía puede enviar
+        // por el proveedor SMS predeterminado sin conversationProviderId.
+      }
+    }
+
+    const usesCustomProvider = usesSmsChannel && Boolean(providerId);
     await ghlFetch("/conversations/messages", config.token, {
       method: "POST",
       headers: { Version: "v3" },
       body: JSON.stringify({
-        type: usesCustomProvider ? "Custom" : "WhatsApp",
+        type: usesCustomProvider ? "Custom" : usesSmsChannel ? "SMS" : "WhatsApp",
         contactId: config.contactId,
         message,
         ...(usesCustomProvider ? { conversationProviderId: providerId } : {}),
       }),
     });
-    return { ok: true as const };
+    return { ok: true as const, channel: usesSmsChannel ? "SMS" as const : "WhatsApp" as const };
   } catch (error) {
     return { ok: false as const, message: error instanceof Error ? error.message : "No se pudo enviar el mensaje." };
   }
