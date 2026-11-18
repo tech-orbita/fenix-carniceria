@@ -3453,6 +3453,20 @@ a {
   transform: translate(-50%, 0);
 }
 
+/* El texto del formulario sale hacia la derecha para no cubrir el nombre
+   del cliente ni el número del pedido que están encima de los iconos. */
+.orders-app .form-source-link.tooltip-icon-action::after {
+  top: 50%;
+  bottom: auto;
+  left: calc(100% + 7px);
+  transform: translate(-3px, -50%);
+}
+
+.orders-app .form-source-link.tooltip-icon-action:hover::after,
+.orders-app .form-source-link.tooltip-icon-action:focus-visible::after {
+  transform: translate(0, -50%);
+}
+
 .orders-app .no-order-badge {
   display: inline-flex;
   min-height: 28px;
