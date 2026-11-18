@@ -13,7 +13,7 @@ import { wholesaleServiceDay } from "@/lib/orders/wholesale-service-day";
 import { unassignedWholesaleRoute, wholesaleRouteLabel, wholesaleRoutes } from "@/lib/orders/wholesale-routes";
 import { highLevelConversationUrl as highLevelAppConversationUrl, safeHighLevelConversationUrl } from "@/lib/orders/highlevel-conversation-url";
 
-import { createManualRetailOrder, createManualWholesaleOrder, deleteRetailOrder, deleteWholesaleOrder, findWholesaleCustomer, resolveOrderHelp, scheduleRetailOrder, scheduleWholesaleOrder, sendRetailPaymentSummary, setWholesaleProductPrepared, updateOrderDetails, updateOrderPaymentStatus, updateOrderStatus, updateWholesalePayment, updateWholesaleRoute, updateWholesaleTable } from "./actions";
+import { convertRetailHelpToNewOrder, createManualRetailOrder, createManualWholesaleOrder, deleteRetailOrder, deleteWholesaleOrder, findWholesaleCustomer, resolveOrderHelp, scheduleRetailOrder, scheduleWholesaleOrder, sendRetailPaymentSummary, setWholesaleProductPrepared, updateOrderDetails, updateOrderPaymentStatus, updateOrderStatus, updateWholesalePayment, updateWholesaleRoute, updateWholesaleTable } from "./actions";
 import { addDays, bogotaDay, dateTime, dayLabel, Icon, phaseLabels, phaseStatus } from "./panel-shared";
 import type { OperationalPhase } from "./panel-shared";
 import { RetailPanel } from "./retail-panel";
@@ -908,6 +908,19 @@ export function OrdersPanel({ hasMoreOrders = false, initialOrders, loadedOrderP
     setNotice(result.message); setPendingId(undefined);
   };
 
+  const convertHelpToNew = async (order: Order) => {
+    setPendingId(order.id); setNotice(undefined);
+    const result = await convertRetailHelpToNewOrder(order.id);
+    if (!result.ok) { setNotice(result.message); setPendingId(undefined); return; }
+    setOrders((current) => current.map((item) => item.id === order.id ? {
+      ...item,
+      status: "received",
+      helpRequest: false,
+      items: [{ id: `converted-${order.id}`, productName: "Pedido pendiente de completar", quantity: 1, actualQuantity: 1, unit: "kg", unitPrice: 0, notes: order.notes }],
+    } : item));
+    setNotice(result.message); setPendingId(undefined); router.refresh();
+  };
+
   const sendBill = async (order: Order) => {
     setPendingId(order.id); setNotice(undefined);
     const result = await sendRetailPaymentSummary(order.id);
@@ -958,7 +971,7 @@ export function OrdersPanel({ hasMoreOrders = false, initialOrders, loadedOrderP
         </div>}
       </div>
       {notice && <div className="operation-notice" role="status">{notice}</div>}
-      {activeType === "wholesale" ? <WholesaleOrdersTable hasMoreOrders={hasMoreOrders} isAdmin={viewer?.role === "admin"} loadedOrderPages={loadedOrderPages} onStatusChange={(order, phase) => void moveOrder(order, phase)} orders={wholesale} pendingId={pendingId} serverRouteFilter={serverRouteFilter} /> : <RetailPanel catalog={retailCatalog} onAdvance={(order) => void advanceRetailOrder(order)} onCreate={addRetailOrder} onDelete={(order) => void removeRetailOrder(order)} onMove={(order, phase) => void moveOrder(order, phase)} onPaymentChange={(order, status) => void changePaymentStatus(order, status)} onResolveHelp={(order) => void resolveHelp(order)} onSave={saveOrder} onSendBill={(order) => void sendBill(order)} orders={retail} pendingId={pendingId} />}
+      {activeType === "wholesale" ? <WholesaleOrdersTable hasMoreOrders={hasMoreOrders} isAdmin={viewer?.role === "admin"} loadedOrderPages={loadedOrderPages} onStatusChange={(order, phase) => void moveOrder(order, phase)} orders={wholesale} pendingId={pendingId} serverRouteFilter={serverRouteFilter} /> : <RetailPanel catalog={retailCatalog} onAdvance={(order) => void advanceRetailOrder(order)} onConvertHelpToNew={(order) => void convertHelpToNew(order)} onCreate={addRetailOrder} onDelete={(order) => void removeRetailOrder(order)} onMove={(order, phase) => void moveOrder(order, phase)} onPaymentChange={(order, status) => void changePaymentStatus(order, status)} onResolveHelp={(order) => void resolveHelp(order)} onSave={saveOrder} onSendBill={(order) => void sendBill(order)} orders={retail} pendingId={pendingId} />}
     </main></div>
   );
 }

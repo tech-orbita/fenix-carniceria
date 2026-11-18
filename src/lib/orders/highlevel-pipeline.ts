@@ -22,6 +22,7 @@ type Conversation = {
 };
 
 type ConversationMessage = {
+  id?: string;
   messageType?: string;
   conversationProviderId?: string;
   direction?: string;
@@ -72,6 +73,14 @@ function normalize(value: string) {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("es").trim();
 }
 
+function messageTime(value?: string) {
+  if (!value) return 0;
+  const numeric = Number(value);
+  if (/^\d+$/.test(value) && Number.isFinite(numeric)) return numeric;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
 function configuration(context: HighLevelContext) {
   const token = process.env.GHL_PRIVATE_INTEGRATION_TOKEN?.trim();
   const locationId = context.locationId?.trim() || process.env.GHL_LOCATION_ID?.trim();
@@ -100,6 +109,30 @@ async function resolvedConfiguration(context: HighLevelContext) {
     });
     return null;
   }
+}
+
+async function resolvedMessageConfiguration(context: HighLevelContext) {
+  const token = process.env.GHL_PRIVATE_INTEGRATION_TOKEN?.trim();
+  const conversationId = context.conversationId?.trim();
+  // La conversación es la fuente más confiable para responder: además evita
+  // confundir conversationId con contactId en pedidos manuales o recuperados.
+  if (token && conversationId) {
+    try {
+      const conversation = await ghlFetch<{ contactId?: string; locationId?: string }>(
+        `/conversations/${encodeURIComponent(conversationId)}`,
+        token,
+        { headers: { Version: "v3" } },
+      );
+      const contactId = conversation.contactId?.trim();
+      const locationId = conversation.locationId?.trim() || context.locationId?.trim();
+      if (contactId && locationId) return { token, contactId, locationId };
+    } catch (error) {
+      console.error("[highlevel-message] No se pudo resolver el contacto desde la conversación", {
+        message: error instanceof Error ? error.message : "Error desconocido",
+      });
+    }
+  }
+  return resolvedConfiguration(context);
 }
 
 class HighLevelHttpError extends Error {
@@ -374,7 +407,7 @@ export async function sendHighLevelMessage(
   message: string,
   options: { channel?: "SMS" | "WhatsApp"; replyViaOriginProvider?: boolean } = {},
 ) {
-  const config = await resolvedConfiguration(context);
+  const config = await resolvedMessageConfiguration(context);
   if (!config) return { ok: false as const, message: "El pedido no tiene un contacto de Orbita asociado." };
   try {
     const search = new URLSearchParams({ locationId: config.locationId, contactId: config.contactId });
@@ -386,6 +419,7 @@ export async function sendHighLevelMessage(
     // falla porque ese canal nativo no está conectado en la subcuenta.
     const requestedChannel = options.channel ?? "SMS";
     const usesSmsChannel = requestedChannel === "SMS";
+    let originMessage: ConversationMessage | undefined;
     let providerId = options.replyViaOriginProvider
       ? undefined
       : conversation?.lastChannelAccount?.[0]?.value ?? conversation?.conversationProviderId;
@@ -401,12 +435,12 @@ export async function sendHighLevelMessage(
           { headers: { Version: "v3" } },
         );
         const messages = history.messages?.messages ?? [];
-        providerId = options.replyViaOriginProvider
+        originMessage = options.replyViaOriginProvider
           ? messages
             .filter((item) => item.direction?.toLowerCase() === "inbound" && item.conversationProviderId)
-            .sort((left, right) => Date.parse(right.dateAdded ?? "") - Date.parse(left.dateAdded ?? ""))[0]
-            ?.conversationProviderId
-          : messages.find((item) => item.conversationProviderId)?.conversationProviderId;
+            .sort((left, right) => messageTime(right.dateAdded) - messageTime(left.dateAdded))[0]
+          : undefined;
+        providerId = originMessage?.conversationProviderId ?? messages.find((item) => item.conversationProviderId)?.conversationProviderId;
       } catch (error) {
         if (options.replyViaOriginProvider) {
           return {
@@ -436,7 +470,9 @@ export async function sendHighLevelMessage(
         type: usesCustomProvider ? "Custom" : usesSmsChannel ? "SMS" : "WhatsApp",
         contactId: config.contactId,
         message,
+        status: "pending",
         ...(usesCustomProvider ? { conversationProviderId: providerId } : {}),
+        ...(usesCustomProvider && originMessage?.id ? { replyMessageId: originMessage.id } : {}),
       }),
     });
     return { ok: true as const, channel: usesSmsChannel ? "SMS" as const : "WhatsApp" as const };

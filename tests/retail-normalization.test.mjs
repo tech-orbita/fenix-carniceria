@@ -169,6 +169,7 @@ test("clasifica aclaraciones, solicitudes de asesor y comprobantes como ayuda", 
   assert.equal(requiresRetailHelp("Adjuntó el soporte de pago por el chat"), true);
   assert.equal(requiresRetailHelp("No se pudo leer el pedido automáticamente"), false);
   assert.equal(requiresRetailHelp("El panel no aceptó el pedido"), false);
+  assert.equal(requiresRetailHelp("Necesito carne en trocitos"), false);
 });
 
 test("asocia atravesado en posticas con Atravessado y conserva el pedido original", () => {

@@ -6,7 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { ensureHighLevelContactTag, syncHighLevelOrderFields, syncRetailPipeline } from "@/lib/orders/highlevel-pipeline";
 import type { OrderPipelineStage } from "@/lib/orders/highlevel-pipeline";
 import { customerIdentityKey } from "@/lib/orders/wholesale-routes";
-import { normalizeRetailItems, requiresRetailHelp } from "@/lib/orders/retail-normalization";
+import { isDirectRetailOrderPhrase, normalizeRetailItems, requiresRetailHelp } from "@/lib/orders/retail-normalization";
 import type { RetailCatalogProduct, RetailInputItem } from "@/lib/orders/retail-normalization";
 import { retailOrderDayStart } from "@/lib/orders/retail-order-window";
 
@@ -365,6 +365,15 @@ export async function flagRetailHelpRequest(value: unknown) {
   const phone = cleanPhone(body.customer?.phone);
   const reason = String(body.reason ?? "El cliente requiere atención humana.").trim().slice(0, 2_000);
   if (!phone || !reason) return NextResponse.json({ error: "Phone and reason are required" }, { status: 422 });
+  if (isDirectRetailOrderPhrase(reason)) {
+    return upsertRetailOrder({
+      ...body,
+      rawOrderText: reason,
+      items: [{ rawText: reason }],
+      orderAction: "new",
+      notes: "Pedido recibido con descripción pendiente de precisar: carne en trocitos.",
+    });
+  }
   // Fallos de OCR, extracción o integración no son solicitudes del cliente y
   // no deben sacar un pedido de Nuevos para enviarlo a Requiere ayuda.
   if (!requiresRetailHelp(reason)) {

@@ -267,5 +267,13 @@ export function normalizeRetailItems(
 
 export function requiresRetailHelp(reason: string) {
   const normalized = normalizeProductName(reason);
+  // Es una descripción de producto, no una solicitud de aclaración. Aunque el
+  // agente la considere ambigua, debe entrar a Nuevos para que el operario
+  // complete el corte y el precio desde Editar.
+  if (/\bcarne\s+(?:en\s+)?trocitos\b/.test(normalized)) return false;
   return /\b(?:asesor|asesoria|humano|persona|aclar|aclaracion|duda|confirmar|confirmacion|no entend|ayuda|atencion humana|comprobante(?: de)? pago|soporte de pago|recibo de pago)\b/.test(normalized);
+}
+
+export function isDirectRetailOrderPhrase(value: string) {
+  return /\bcarne\s+(?:en\s+)?trocitos\b/.test(normalizeProductName(value));
 }

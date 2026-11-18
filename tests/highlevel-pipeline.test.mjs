@@ -173,6 +173,7 @@ test("permite enviar por WhatsApp cuando se solicita explícitamente", async () 
     type: "WhatsApp",
     contactId: "contact-1",
     message: "Resumen del pedido",
+    status: "pending",
   });
 });
 
@@ -194,6 +195,7 @@ test("usa SMS por defecto para los mensajes automáticos de Fénix", async () =>
     type: "SMS",
     contactId: "contact-1",
     message: "Resumen del pedido",
+    status: "pending",
   });
 });
 
@@ -218,6 +220,7 @@ test("envía por el proveedor personalizado cuando el número está conectado po
     type: "Custom",
     contactId: "contact-qr",
     message: "Pedido listo",
+    status: "pending",
     conversationProviderId: "provider-qr",
   });
 });
@@ -246,6 +249,7 @@ test("recupera del historial el proveedor SMS personalizado antes de enviar", as
     type: "Custom",
     contactId: "contact-qr",
     message: "Pedido despachado",
+    status: "pending",
     conversationProviderId: "provider-from-history",
   });
 });
@@ -267,6 +271,7 @@ test("minoristas responde por el proveedor del mensaje entrante más reciente", 
         conversationProviderId: "provider-outbound",
       },
       {
+        id: "inbound-retail-newest",
         direction: "inbound",
         dateAdded: "2026-11-18T11:59:00.000Z",
         conversationProviderId: "provider-retail-newest",
@@ -292,7 +297,9 @@ test("minoristas responde por el proveedor del mensaje entrante más reciente", 
     type: "Custom",
     contactId: "contact-retail",
     message: "Cuenta minorista",
+    status: "pending",
     conversationProviderId: "provider-retail-newest",
+    replyMessageId: "inbound-retail-newest",
   });
 });
 
@@ -341,6 +348,7 @@ test("envía como SMS cuando la conversación usa el canal SMS estándar", async
     type: "SMS",
     contactId: "contact-sms",
     message: "Pedido despachado",
+    status: "pending",
   });
 });
 
@@ -370,6 +378,47 @@ test("fuerza SMS para el aviso de despacho aunque el último mensaje sea WhatsAp
     type: "SMS",
     contactId: "contact-dispatch",
     message: "Pedido despachado",
+    status: "pending",
+  });
+});
+
+test("resuelve el contacto real desde la conversación antes de enviar", async () => {
+  configure();
+  const requests = [];
+  globalThis.fetch = async (input, init = {}) => {
+    requests.push({ url: String(input), init });
+    if (String(input).endsWith("/conversations/conversation-real")) {
+      return Response.json({ contactId: "contact-real", locationId: "location-real" });
+    }
+    if (String(input).includes("/conversations/search?")) {
+      return Response.json({ conversations: [{ id: "conversation-real", lastMessageType: "TYPE_CUSTOM_PROVIDER_SMS" }] });
+    }
+    if (String(input).includes("/conversations/conversation-real/messages?")) {
+      return Response.json({ messages: { messages: [{
+        id: "inbound-real",
+        direction: "inbound",
+        dateAdded: "2026-11-18T14:00:00.000Z",
+        conversationProviderId: "provider-real",
+      }] } });
+    }
+    return Response.json({ messageId: "sent-real" });
+  };
+
+  const result = await sendHighLevelMessage(
+    { locationId: "location-real", contactId: "conversation-real", conversationId: "conversation-real" },
+    "Cuenta corregida",
+    { channel: "SMS", replyViaOriginProvider: true },
+  );
+
+  assert.equal(result.ok, true);
+  const sent = requests.find((request) => request.url.endsWith("/conversations/messages"));
+  assert.deepEqual(JSON.parse(String(sent.init.body)), {
+    type: "Custom",
+    contactId: "contact-real",
+    message: "Cuenta corregida",
+    status: "pending",
+    conversationProviderId: "provider-real",
+    replyMessageId: "inbound-real",
   });
 });
 

@@ -213,6 +213,53 @@ export async function resolveOrderHelp(orderId: string) {
   };
 }
 
+export async function convertRetailHelpToNewOrder(orderId: string) {
+  if (!/^\d+$/.test(orderId)) return { ok: false as const, message: "Solicitud inválida." };
+
+  const supabase = await sessionClient();
+  const { data: current, error } = await supabase
+    .from("orders")
+    .select("id,status,source_payload,notes")
+    .eq("id", Number(orderId))
+    .eq("customer_type", "retail")
+    .maybeSingle();
+  if (error || !current || !["incident", "needs_review"].includes(current.status) || !isStandaloneHelpRequest(current.source_payload)) {
+    return { ok: false as const, message: "La solicitud ya no está disponible para convertirla." };
+  }
+
+  const payload = current.source_payload && typeof current.source_payload === "object"
+    ? current.source_payload as Record<string, unknown>
+    : {};
+  const reason = String(payload.helpReason ?? current.notes ?? "Pedido pendiente de completar").trim();
+  const productName = /carne\s+(?:en\s+)?trocitos/i.test(reason) ? "Carne en trocitos" : "Pedido pendiente de completar";
+  const { data: item, error: itemError } = await supabase.from("order_items").insert({
+    order_id: current.id,
+    product_id: null,
+    product_name: productName,
+    quantity: 1,
+    actual_quantity: 1,
+    unit: "kg",
+    unit_price: 0,
+    notes: reason.slice(0, 500),
+    sort_order: 0,
+  }).select("id").single();
+  if (itemError || !item) return { ok: false as const, message: "No se pudo preparar la solicitud como pedido." };
+
+  const { helpWithoutOrder: _helpWithoutOrder, helpReason: _helpReason, ...operationalPayload } = payload;
+  const { data: updated, error: updateError } = await supabase.from("orders").update({
+    status: "received",
+    source_payload: { ...operationalPayload, convertedFromHelp: true, rawOrderText: reason },
+    notes: reason,
+  }).eq("id", current.id).eq("status", current.status).select("id,order_number").maybeSingle();
+  if (updateError || !updated) {
+    await supabase.from("order_items").delete().eq("id", item.id).eq("order_id", current.id);
+    return { ok: false as const, message: "No se pudo pasar la solicitud a Nuevos." };
+  }
+
+  revalidatePath("/dashboard");
+  return { ok: true as const, status: "received" as const, message: `${updated.order_number} pasó a Nuevos. Completa el producto y el precio desde Editar.` };
+}
+
 export async function sendRetailPaymentSummary(orderId: string) {
   if (!/^\d+$/.test(orderId)) return { ok: false as const, message: "Pedido inválido." };
 
@@ -242,6 +289,7 @@ export async function sendRetailPaymentSummary(orderId: string) {
     adjustments: Number(data.adjustments),
     items: billItems,
   }), { channel: "SMS", replyViaOriginProvider: true });
+  if (!sent.ok) console.error("[retail-bill] No se pudo enviar la cuenta", { orderNumber: data.order_number, message: sent.message });
   return sent.ok ? { ok: true as const, message: "Cuenta de cobro enviada por la conversación de Orbita." } : sent;
 }
 

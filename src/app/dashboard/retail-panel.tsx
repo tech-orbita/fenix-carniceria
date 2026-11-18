@@ -371,7 +371,7 @@ function FormDetails({ order }: { order: Order }) {
   </div>;
 }
 
-function OrderDetail({ catalog, order, pending, logo, today, onAdvance, onDelete, onMove, onPaymentChange, onResolveHelp, onSave, onSendBill }: { catalog: RetailCatalogProduct[]; order: Order; pending: boolean; logo: boolean; today: string; onAdvance: (order: Order) => void; onDelete: (order: Order) => void; onMove: (order: Order, phase: OperationalPhase) => void; onPaymentChange: (order: Order, status: "paid" | "pending") => void; onResolveHelp: (order: Order) => void; onSave: (order: Order, details: EditableOrderDetails) => Promise<boolean>; onSendBill: (order: Order) => void }) {
+function OrderDetail({ catalog, order, pending, logo, today, onAdvance, onConvertHelpToNew, onDelete, onMove, onPaymentChange, onResolveHelp, onSave, onSendBill }: { catalog: RetailCatalogProduct[]; order: Order; pending: boolean; logo: boolean; today: string; onAdvance: (order: Order) => void; onConvertHelpToNew: (order: Order) => void; onDelete: (order: Order) => void; onMove: (order: Order, phase: OperationalPhase) => void; onPaymentChange: (order: Order, status: "paid" | "pending") => void; onResolveHelp: (order: Order) => void; onSave: (order: Order, details: EditableOrderDetails) => Promise<boolean>; onSendBill: (order: Order) => void }) {
   const [editing, setEditing] = useState(false);
   const [copied, setCopied] = useState(false);
   const phase = phaseForStatus(order.status);
@@ -407,7 +407,7 @@ function OrderDetail({ catalog, order, pending, logo, today, onAdvance, onDelete
         {helpRequest ? <div className="rt-control-panel">
           <div className="rt-control-row">
             <div className="rt-control-section"><span className="rt-control-label">Comunicación</span><div className="rt-control-actions"><a className="rt-button is-chat" href={`/api/conversation/${encodeURIComponent(order.id)}`} rel="noreferrer" target="_blank"><Icon name="chat" /> Abrir conversación</a></div></div>
-            <button className="rt-button is-paid" disabled={pending} onClick={() => onResolveHelp(order)} type="button"><Icon name="check" /> {pending ? "Guardando…" : "Solucionado"}</button>
+            <div className="rt-control-actions"><button className="rt-button is-primary" disabled={pending} onClick={() => onConvertHelpToNew(order)} type="button"><Icon name="undo" /> {pending ? "Guardando…" : "Pasar a Nuevos"}</button><button className="rt-button is-paid" disabled={pending} onClick={() => onResolveHelp(order)} type="button"><Icon name="check" /> {pending ? "Guardando…" : "Solucionado"}</button></div>
           </div>
         </div> : <div className="rt-control-panel">
           <div className="rt-control-row">
@@ -503,7 +503,7 @@ function ManualRetailOrderModal({ onClose, onCreate }: { onClose: () => void; on
   </div>;
 }
 
-export function RetailPanel({ catalog, orders, pendingId, onAdvance, onCreate, onDelete, onMove, onPaymentChange, onResolveHelp, onSave, onSendBill }: { catalog: RetailCatalogProduct[]; orders: Order[]; pendingId?: string; onAdvance: (order: Order) => void; onCreate: (input: ManualRetailOrderInput) => Promise<ManualRetailOrderResult>; onDelete: (order: Order) => void; onMove: (order: Order, phase: OperationalPhase) => void; onPaymentChange: (order: Order, status: "paid" | "pending") => void; onResolveHelp: (order: Order) => void; onSave: (order: Order, details: EditableOrderDetails) => Promise<boolean>; onSendBill: (order: Order) => void }) {
+export function RetailPanel({ catalog, orders, pendingId, onAdvance, onConvertHelpToNew, onCreate, onDelete, onMove, onPaymentChange, onResolveHelp, onSave, onSendBill }: { catalog: RetailCatalogProduct[]; orders: Order[]; pendingId?: string; onAdvance: (order: Order) => void; onConvertHelpToNew: (order: Order) => void; onCreate: (input: ManualRetailOrderInput) => Promise<ManualRetailOrderResult>; onDelete: (order: Order) => void; onMove: (order: Order, phase: OperationalPhase) => void; onPaymentChange: (order: Order, status: "paid" | "pending") => void; onResolveHelp: (order: Order) => void; onSave: (order: Order, details: EditableOrderDetails) => Promise<boolean>; onSendBill: (order: Order) => void }) {
   // "Hoy" se recalcula en cada refresco para que el periodo avance solo al cambiar el día.
   const today = bogotaDay.format(new Date());
   const [preset, setPreset] = useState<RangePreset>("today");
@@ -593,7 +593,7 @@ export function RetailPanel({ catalog, orders, pendingId, onAdvance, onCreate, o
           </div>
         </aside>
         <div className="rt-detail-panel">{selected
-          ? <OrderDetail catalog={catalog} key={selected.id} logo={logo} onAdvance={onAdvance} onDelete={onDelete} onMove={onMove} onPaymentChange={onPaymentChange} onResolveHelp={onResolveHelp} onSave={onSave} onSendBill={onSendBill} order={selected} pending={pendingId === selected.id} today={today} />
+          ? <OrderDetail catalog={catalog} key={selected.id} logo={logo} onAdvance={onAdvance} onConvertHelpToNew={onConvertHelpToNew} onDelete={onDelete} onMove={onMove} onPaymentChange={onPaymentChange} onResolveHelp={onResolveHelp} onSave={onSave} onSendBill={onSendBill} order={selected} pending={pendingId === selected.id} today={today} />
           : <div className="rt-empty is-detail"><strong>Selecciona un pedido</strong><span>Cambia el periodo, la fase o el filtro de pago para ver otros pedidos.</span></div>}</div>
       </div>
       {addingOrder ? <ManualRetailOrderModal onClose={() => setAddingOrder(false)} onCreate={onCreate} /> : null}
