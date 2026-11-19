@@ -10,6 +10,7 @@ import { catalogProductFor, isWholesaleCommunicationText, normalizeProductName, 
 import type { RetailCatalogProduct } from "@/lib/orders/retail-normalization";
 import type { WholesaleProduct } from "@/lib/orders/product-parser";
 import { wholesaleServiceDay } from "@/lib/orders/wholesale-service-day";
+import { changedWholesaleTableRow } from "@/lib/orders/wholesale-table-edit";
 import { unassignedWholesaleRoute, wholesaleRouteLabel, wholesaleRoutes } from "@/lib/orders/wholesale-routes";
 import { highLevelConversationUrl as highLevelAppConversationUrl, safeHighLevelConversationUrl } from "@/lib/orders/highlevel-conversation-url";
 
@@ -728,14 +729,26 @@ function WholesaleOrdersTable({ hasMoreOrders, isAdmin, loadedOrderPages, orders
     }));
   };
   const saveTable = async () => {
+    const changedRows = visibleOrders.flatMap((order) => {
+      const original = {
+        routeName: order.route,
+        notes: order.notes ?? "",
+        quantities: Object.fromEntries(visibleProducts.map((product) => [product.name, productQuantity(order, product)])),
+      };
+      const draft = draftRows[order.id] ?? original;
+      const change = changedWholesaleTableRow(order.id, original, draft, visibleProducts.map((product) => product.name));
+      return change ? [change] : [];
+    });
+
+    if (!changedRows.length) {
+      setEditNotice("No hay cambios para guardar.");
+      stopEditing();
+      return;
+    }
+
     setSaving(true);
     setEditNotice(undefined);
-    const result = await updateWholesaleTable(visibleOrders.map((order) => ({
-      orderId: order.id,
-      routeName: draftRows[order.id]?.routeName ?? order.route,
-      notes: draftRows[order.id]?.notes ?? "",
-      quantities: visibleProducts.map((product) => ({ productName: product.name, value: draftRows[order.id]?.quantities[product.name] ?? "" })),
-    })));
+    const result = await updateWholesaleTable(changedRows);
     setSaving(false);
     setEditNotice(result.message);
     if (result.ok && result.updatedRows) {
