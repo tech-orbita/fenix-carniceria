@@ -559,18 +559,23 @@ function WholesaleOrdersTable({ hasMoreOrders, isAdmin, loadedOrderPages, orders
   const today = bogotaDay.format(new Date());
   // La bandeja de ayuda es exclusiva para solicitudes originadas en el chat y sin
   // pedido. Los pedidos normales nunca se ocultan por su estado operativo.
-  const { selectedDay, chatHelpRequests, dispatchedOrders, openOrders } = useMemo(() => {
-    const day = addDays(today, dayOffset);
-    const dayOrders = allOrders.filter((order) => serviceDay(order) === day);
-    const help = dayOrders.filter(isHelpWithoutOrder);
-    const customerOrders = dayOrders.filter((order) => !isHelpWithoutOrder(order));
-    return {
-      selectedDay: day,
-      chatHelpRequests: help,
-      dispatchedOrders: customerOrders.filter(isClosed),
-      openOrders: customerOrders.filter((order) => !isClosed(order)),
-    };
-  }, [allOrders, dayOffset, today]);
+  const ordersByServiceDay = useMemo(() => {
+    const grouped = new Map<string, { help: Order[]; dispatched: Order[]; open: Order[] }>();
+    allOrders.forEach((order) => {
+      const day = serviceDay(order);
+      const group = grouped.get(day) ?? { help: [], dispatched: [], open: [] };
+      if (isHelpWithoutOrder(order)) group.help.push(order);
+      else if (isClosed(order)) group.dispatched.push(order);
+      else group.open.push(order);
+      grouped.set(day, group);
+    });
+    return grouped;
+  }, [allOrders]);
+  const selectedDay = addDays(today, dayOffset);
+  const selectedDayOrders = ordersByServiceDay.get(selectedDay);
+  const chatHelpRequests = selectedDayOrders?.help ?? [];
+  const dispatchedOrders = selectedDayOrders?.dispatched ?? [];
+  const openOrders = selectedDayOrders?.open ?? [];
   const baseOrders = listMode === "help" ? chatHelpRequests : listMode === "dispatched" ? dispatchedOrders : openOrders;
   // Refleja la ruta elegida en el acto; el refresco del servidor confirma después
   // el dato persistido sin hacer que el operador espere viendo el valor anterior.
@@ -580,7 +585,10 @@ function WholesaleOrdersTable({ hasMoreOrders, isAdmin, loadedOrderPages, orders
   const helpCount = chatHelpRequests.length;
   const dispatchedCount = dispatchedOrders.length;
   const orderCount = openOrders.length;
-  const pendingByDay = (offset: number) => allOrders.filter((order) => !isClosed(order) && serviceDay(order) === addDays(today, offset)).length;
+  const pendingByDay = (offset: number) => {
+    const group = ordersByServiceDay.get(addDays(today, offset));
+    return (group?.open.length ?? 0) + (group?.help.length ?? 0);
+  };
   const products = useMemo(() => productsForOrders(orders), [orders]);
   const orderCuts = useMemo(() => new Map(orders.map((order) => [
     order.id,
@@ -654,7 +662,13 @@ function WholesaleOrdersTable({ hasMoreOrders, isAdmin, loadedOrderPages, orders
     setZones(values);
     updateDashboardQuery(values);
   };
-  const clearFilters = () => { setZones([]); setCuts([]); setQuery(""); updateDashboardQuery([]); };
+  const clearFilters = () => {
+    const mustReloadUnfilteredOrders = zones.length > 0 || serverRouteFilter.length > 0;
+    setZones([]);
+    setCuts([]);
+    setQuery("");
+    if (mustReloadUnfilteredOrders) updateDashboardQuery([]);
+  };
   const scrollMatrix = (left: number, top: number) => matrixScrollRef.current?.scrollBy({ left, top, behavior: "smooth" });
   const addExtraColumn = (name: string) => {
     if (!name) return;

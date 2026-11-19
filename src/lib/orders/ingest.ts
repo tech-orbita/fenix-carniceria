@@ -3,7 +3,8 @@ import { timingSafeEqual } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
-import { syncHighLevelOrderFields, syncWholesalePipeline } from "@/lib/orders/highlevel-pipeline";
+import { sendHighLevelMessage, syncHighLevelOrderFields, syncWholesalePipeline } from "@/lib/orders/highlevel-pipeline";
+import { wholesaleOrderConfirmationMessage } from "@/lib/orders/wholesale-messages";
 import { customerIdentityKey } from "@/lib/orders/wholesale-routes";
 import { existingWholesaleCustomerPayload, isExistingWholesaleCustomerOrder } from "@/lib/orders/wholesale-form-customer";
 
@@ -219,7 +220,7 @@ export async function ingestOrder(body: IngestBody) {
   }
 
   const highLevelContext = { contactId: normalizedBody.form_data?.contact_id, locationId: normalizedBody.form_data?.location_id, conversationId: normalizedBody.form_data?.conversation_id };
-  const [pipeline, orderFields] = normalizedBody.customer_type === "wholesale" && normalizedBody.form_data
+  const [pipeline, orderFields, confirmation] = normalizedBody.customer_type === "wholesale" && normalizedBody.form_data
     ? await Promise.all([
         syncWholesalePipeline(
           highLevelContext,
@@ -228,8 +229,19 @@ export async function ingestOrder(body: IngestBody) {
           subtotal,
         ),
         syncHighLevelOrderFields(highLevelContext, { orderNumber: order.order_number, total: subtotal }),
+        sendHighLevelMessage(
+          highLevelContext,
+          wholesaleOrderConfirmationMessage({
+            customer: normalizedBody.customer.name,
+            orderNumber: order.order_number,
+          }),
+        ),
       ])
-    : [{ ok: false as const, skipped: true as const }, { ok: false as const, skipped: true as const }];
+    : [
+        { ok: false as const, skipped: true as const },
+        { ok: false as const, skipped: true as const },
+        { ok: false as const, skipped: true as const },
+      ];
 
   return NextResponse.json({
     id: order.id,
@@ -237,5 +249,6 @@ export async function ingestOrder(body: IngestBody) {
     status: order.status,
     pipeline_synced: pipeline.ok,
     order_field_synced: orderFields.ok,
+    confirmation_sent: confirmation.ok,
   }, { status: 201 });
 }

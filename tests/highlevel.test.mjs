@@ -47,7 +47,7 @@ test("separa expresiones de comunicación de los productos del pedido", () => {
 test("omite saludos e introducciones habituales aunque lleguen como líneas separadas", () => {
   const order = mapHighLevelForm({
     ...base,
-    "Coloca tu Pedido": "Hola\nMuy buenos días señores\nEste es mi pedido para mañana\n5 lb de chuleta ahumada\nQuedo atenta, gracias",
+    "Coloca tu Pedido": "Hola\nMuy buenos días señores\nBuenas\nMe envías\nEste es mi pedido para mañana\n5 lb de chuleta ahumada\nQuedo atenta, gracias",
   }, "mayorista-cliente");
   assert.deepEqual(order.items, [
     { product_name: "Chuleta ahumada", quantity: 5, unit: "lb" },
@@ -129,6 +129,16 @@ test("clasifica el catálogo mayorista y conserva indicadores de blanda", () => 
     { product_name: "Blanda", quantity: 10, unit: "lb", preparation: "C" },
     { product_name: "Lomo fino", quantity: 4, unit: "kg" },
     { product_name: "Pezuña cerdo", quantity: 2, unit: "kg" },
+  ]);
+});
+
+test("normaliza igado como Hígado", () => {
+  const order = mapHighLevelForm({
+    ...base,
+    "Coloca tu Pedido": "3 lb de igado",
+  }, "mayorista-cliente");
+  assert.deepEqual(order.items, [
+    { product_name: "Hígado", quantity: 3, unit: "lb" },
   ]);
 });
 

@@ -17,7 +17,7 @@ export const wholesaleProductCatalog: readonly WholesaleProduct[] = [
   { category: "Res · cortes", name: "Hueso negro", aliases: ["huesos negros especiales", "hueso negro especial", "huesos negros", "hueso negro"] },
   { category: "Res · cortes", name: "Hueso especial", aliases: ["huesos especiales", "hueso especial"] },
   { category: "Res · cortes", name: "Hueso", aliases: ["hueso de res", "hueso res", "huesos", "hueso"] },
-  { category: "Res · vísceras", name: "Hígado", aliases: ["higado", "hígado"] },
+  { category: "Res · vísceras", name: "Hígado", aliases: ["higado", "hígado", "igado"] },
   { category: "Res · vísceras", name: "Corazón", aliases: ["corazon", "corazón"] },
   { category: "Res · vísceras", name: "Panza", aliases: ["panza"] },
   { category: "Res · vísceras", name: "Bofe", aliases: ["bofe"] },
@@ -104,7 +104,7 @@ export function normalizeProductName(value: string) {
 // pedido. No debe convertirse en producto ni crear una columna en la planilla.
 export function isWholesaleCommunicationText(value: string) {
   const normalized = normalizeProductName(value);
-  const withoutGreeting = normalized.replace(/^(?:hola )?(?:(?:muy )?buenos dias|buen dia|buenas tardes|buena tarde|buenas noches|buena noche)(?: senores| equipo| muchachos)?(?: |$)/, "");
+  const withoutGreeting = normalized.replace(/^(?:hola )?(?:(?:muy )?buenos dias|buen dia|buenas(?: tardes| noches)?|buena tarde|buena noche)(?: senores| equipo| muchachos)?(?: |$)/, "");
   if (normalized && !withoutGreeting) return true;
   return [
     /^(?:hola|buen dia|buena tarde|buena noche)$/,
@@ -112,6 +112,7 @@ export function isWholesaleCommunicationText(value: string) {
     /^(?:este|ese) es (?:mi|el) pedido(?: para (?:hoy|manana))?$/,
     /^(?:mi )?pedido(?: para (?:hoy|manana))?$/,
     /^les envio (?:mi|el) pedido$/,
+    /^(?:me|nos) (?:envias|envia|envian|mandas|manda|mandan)$/,
     /^quedo (?:atento|atenta|pendiente)(?: gracias)?$/,
     /^(?:feliz|bendecido) dia$/,
     /^por favor(?: me| nos)? (?:pueden|podrian|piden) (?:enviar|mandar|despachar)(?: lo siguiente)?$/,
@@ -123,11 +124,18 @@ export function isWholesaleCommunicationText(value: string) {
   ].some((pattern) => pattern.test(withoutGreeting));
 }
 
+// La planilla consulta los mismos nombres cientos de veces al cambiar de día o
+// bandeja. Preparar los alias una sola vez y recordar el resultado evita volver
+// a normalizar todo el catálogo para cada celda renderizada.
+const normalizedCatalogAliases = wholesaleProductCatalog.flatMap((product) =>
+  product.aliases.map((alias) => ({ product, alias: normalizeProductName(alias) })),
+);
+const catalogProductCache = new Map<string, WholesaleProduct | undefined>();
+
 export function catalogProductFor(value: string) {
   const normalized = normalizeProductName(value);
-  const candidates = wholesaleProductCatalog.flatMap((product) =>
-    product.aliases.map((alias) => ({ product, alias: normalizeProductName(alias) })),
-  ).filter(({ product, alias }) => {
+  if (catalogProductCache.has(normalized)) return catalogProductCache.get(normalized);
+  const candidates = normalizedCatalogAliases.filter(({ product, alias }) => {
     if (normalized === alias) return true;
     // "Hueso" solo identifica la columna genérica cuando viene solo. Un
     // descriptor desconocido (p. ej. "hueso rojo") debe conservarse como una
@@ -140,7 +148,9 @@ export function catalogProductFor(value: string) {
     // más específico (por ejemplo, "hueso de paleta" sobre "hueso").
     .sort((left, right) => normalized.indexOf(left.alias) - normalized.indexOf(right.alias) || right.alias.length - left.alias.length);
 
-  return candidates[0]?.product;
+  const result = candidates[0]?.product;
+  catalogProductCache.set(normalized, result);
+  return result;
 }
 
 export function wholesaleUnitFor(value: string) {
