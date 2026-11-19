@@ -38,6 +38,7 @@ export type Order = {
   address: string;
   route: string;
   source: "form" | "agent" | "manual";
+  createdBy?: string;
   paymentMethod?: string;
   paymentStatus: string;
   deliveryFee: number;

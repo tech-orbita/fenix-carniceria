@@ -77,6 +77,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       payload_conversation_id:source_payload->>conversationId,
       payload_conversation_url:source_payload->>conversationUrl,
       help_without_order:source_payload->>helpWithoutOrder,
+      manual_created_by:source_payload->manual_entry->>created_by,
       customers (name, business_name, phone, address, routes (name)),
       ${orderRouteSelection},
       order_items (
@@ -162,6 +163,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           // evita que un pedido antiguo o sin ruta desaparezca del filtro recién asignado.
           route: customerRoute?.name ?? route?.name ?? "Sin clasificar",
           source: row.source,
+          createdBy: row.manual_created_by ?? undefined,
           paymentMethod: canSeeOrderPayments ? row.payment_method ?? undefined : undefined,
           paymentStatus: canSeeOrderPayments ? row.payment_status : "restricted",
           deliveryFee: canSeeOrderPayments ? Number(row.delivery_fee) : 0,

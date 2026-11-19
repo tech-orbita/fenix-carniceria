@@ -77,6 +77,12 @@ function paymentMethodLabel(order: Order) {
   return order.paymentMethod ? paymentMethodLabels[order.paymentMethod] ?? order.paymentMethod : "Por definir";
 }
 
+function orderSourceLabel(order: Order) {
+  if (order.source === "agent") return "Agente IA";
+  if (order.source === "manual") return order.createdBy ? `Manual · ${order.createdBy}` : "Manual";
+  return "Formulario";
+}
+
 function itemQuantity(item: Order["items"][number]) {
   return retailItemQuantity(item);
 }
@@ -222,6 +228,7 @@ function OrderCard({ order, selected, onSelect }: { order: Order; selected: bool
     <button aria-pressed={selected} className={selected ? "rt-card is-selected" : "rt-card"} onClick={onSelect} type="button">
       <span className="rt-card-top"><strong>{order.businessName ?? order.customer}</strong><b>{helpRequest ? "Atención humana" : isQuote(order) ? "Por cotizar" : hasPendingValues(order) ? "Valor pendiente" : money.format(retailTotal(order))}</b></span>
       <span className="rt-card-meta"><span>{helpRequest ? "Solicitud" : order.orderNumber} · {dateTime.format(new Date(order.receivedAt))}</span>{!helpRequest && <span className={paid ? "rt-pill is-paid" : "rt-pill is-pending"}>{paid ? "Pagado" : "Por cobrar"}</span>}</span>
+      <span className="rt-card-meta"><span>Origen: {orderSourceLabel(order)}</span></span>
       <span className="rt-card-address"><Icon name="address" /><span>{order.address}</span></span>
       <span className="rt-card-foot"><span>{helpRequest ? "Revisar comprobante o mensaje" : isQuote(order) ? "Pedido por cotizar" : `${order.items.length} ${order.items.length === 1 ? "producto" : "productos"}`}</span><span>{helpRequest ? "Requiere ayuda" : order.fulfillment === "delivery" ? order.route : "Recoge en tienda"}</span></span>
     </button>
@@ -397,7 +404,7 @@ function OrderDetail({ catalog, order, pending, logo, today, onAdvance, onConver
     <div className="rt-detail">
       <div className="rt-detail-body">
         <header className="rt-detail-head">
-          <div><span className="rt-kicker">{helpRequest ? "Solicitud de ayuda" : "Pedido"}</span><h2>{helpRequest ? "Atención humana" : order.orderNumber}</h2><p>Recibido {dateTime.format(new Date(order.receivedAt))}</p></div>
+          <div><span className="rt-kicker">{helpRequest ? "Solicitud de ayuda" : "Pedido"}</span><h2>{helpRequest ? "Atención humana" : order.orderNumber}</h2><p>Recibido {dateTime.format(new Date(order.receivedAt))} · Origen: {orderSourceLabel(order)}</p></div>
           <span className={`rt-badge phase-${phase}`}>{phaseLabels[phase]}</span>
         </header>
         <section className="rt-customer">

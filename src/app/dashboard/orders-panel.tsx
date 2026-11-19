@@ -867,6 +867,9 @@ export function OrdersPanel({ hasMoreOrders = false, initialOrders, loadedOrderP
   const wholesaleTodayCount = wholesale.filter((order) => (
     serviceDay(order) === today && !isHelpWithoutOrder(order) && !isClosed(order)
   )).length;
+  const retailTodayCount = retail.filter((order) => (
+    serviceDay(order) === today && order.status !== "cancelled" && !isHelpWithoutOrder(order)
+  )).length;
   const { soundEnabled, toggleSound } = useOrdersRealtime(assignedType ? [assignedType] : ["wholesale", "retail"]);
 
   // Los éxitos se ocultan; los errores permanecen hasta la siguiente acción
@@ -978,7 +981,7 @@ export function OrdersPanel({ hasMoreOrders = false, initialOrders, loadedOrderP
   return (
     <div className="orders-app"><main className="dashboard-content">
       <div className="dashboard-topbar">
-        {!assignedType && <section aria-label="Tipo de cliente" className="segment-switch"><button aria-pressed={activeType === "wholesale"} onClick={() => { setActiveType("wholesale"); setNotice(undefined); }} type="button"><Icon name="truck" /><strong>Mayoristas</strong><b>{wholesaleTodayCount}</b></button><button aria-pressed={activeType === "retail"} onClick={() => { setActiveType("retail"); setNotice(undefined); }} type="button"><Icon name="shop" /><strong>Minoristas</strong><b>{retail.length}</b></button></section>}
+        {!assignedType && <section aria-label="Tipo de cliente" className="segment-switch"><button aria-pressed={activeType === "wholesale"} onClick={() => { setActiveType("wholesale"); setNotice(undefined); }} type="button"><Icon name="truck" /><strong>Mayoristas</strong><b>{wholesaleTodayCount}</b></button><button aria-pressed={activeType === "retail"} onClick={() => { setActiveType("retail"); setNotice(undefined); }} type="button"><Icon name="shop" /><strong>Minoristas</strong><b>{retailTodayCount}</b></button></section>}
         {viewer && <div className="session-bar">
           <div className="session-identity" title={viewer.email}>
             <span className="session-avatar" aria-hidden="true">{viewer.email.slice(0, 1).toLocaleUpperCase("es")}</span>

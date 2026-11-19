@@ -408,6 +408,7 @@ async function findManualOrderConversation(phone: string): Promise<HighLevelConv
 }
 
 export async function createManualRetailOrder(input: ManualRetailOrderInput) {
+  const viewer = await requireViewer();
   const customerName = input.customerName?.trim();
   const phone = input.phone?.replace(/[^\d+]/g, "").trim();
   const phoneDigits = phone?.replace(/\D/g, "") ?? "";
@@ -426,7 +427,7 @@ export async function createManualRetailOrder(input: ManualRetailOrderInput) {
     return { ok: false as const, message: "Revisa cliente, teléfono, entrega y contenido del pedido." };
   }
 
-  const supabase = await sessionClient();
+  const supabase = await createClient();
   // El catálogo se lee con el cliente interno, igual que al cargar el panel. Las
   // tablas de catálogo no se exponen a los operadores mediante RLS.
   const [catalog, highLevelLookup] = await Promise.all([
@@ -479,7 +480,12 @@ export async function createManualRetailOrder(input: ManualRetailOrderInput) {
     customer_id: customer.id,
     source: "manual",
     source_payload: {
-      manual_entry: { order_text: orderText },
+      manual_entry: {
+        order_text: orderText,
+        created_by: viewer.email,
+        created_by_role: viewer.role,
+        created_at: new Date().toISOString(),
+      },
       customer: { name: customerName, phone, address },
       ...(highLevelContext ?? {}),
     },
