@@ -6,9 +6,9 @@ import fs from "node:fs";
 
 const source = fs.readFileSync(new URL("../src/lib/orders/wholesale-table-edit.ts", import.meta.url), "utf8");
 const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
-const module = { exports: {} };
-vm.runInNewContext(compiled, { module, exports: module.exports });
-const { changedWholesaleTableRow } = module.exports;
+const compiledModule = { exports: {} };
+vm.runInNewContext(compiled, { module: compiledModule, exports: compiledModule.exports });
+const { changedWholesaleTableRow } = compiledModule.exports;
 const plain = (value) => JSON.parse(JSON.stringify(value));
 
 test("solo envía la celda que cambió y no revalida textos históricos", () => {
