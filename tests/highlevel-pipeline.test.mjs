@@ -1,7 +1,7 @@
 import { afterEach, test } from "node:test";
 import assert from "node:assert/strict";
 
-import { sendHighLevelMessage, syncHighLevelOrderFields, syncRetailPipeline } from "../src/lib/orders/highlevel-pipeline.ts";
+import { classifyHighLevelContact, sendHighLevelMessage, syncHighLevelOrderFields, syncRetailPipeline } from "../src/lib/orders/highlevel-pipeline.ts";
 
 const originalFetch = globalThis.fetch;
 const originalEnv = { ...process.env };
@@ -534,6 +534,23 @@ test("llena Pedido y Valor del pedido en los campos del contacto", async () => {
       { id: "total-field", field_value: 185_000 },
     ],
   });
+});
+
+test("clasifica una conversación minorista y retira la etiqueta mayorista", async () => {
+  configure();
+  const requests = [];
+  globalThis.fetch = async (input, init = {}) => {
+    requests.push({ url: String(input), init });
+    return Response.json({ tags: init.method === "POST" ? ["cliente minorista"] : [] }, { status: init.method === "POST" ? 201 : 200 });
+  };
+
+  const result = await classifyHighLevelContact({ locationId: "location-tags", contactId: "contact-tags" }, "retail");
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(requests.map(({ init }) => [init.method, JSON.parse(String(init.body))]), [
+    ["POST", { tags: ["cliente minorista"] }],
+    ["DELETE", { tags: ["cliente mayorista"] }],
+  ]);
 });
 
 test("resuelve la subcuenta desde el contacto cuando el formulario no trae locationId", async () => {

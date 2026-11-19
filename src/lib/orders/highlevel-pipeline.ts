@@ -515,6 +515,34 @@ export async function ensureHighLevelContactTag(context: HighLevelContext, tag: 
   }
 }
 
+export async function classifyHighLevelContact(context: HighLevelContext, segment: PipelineSegment) {
+  const config = await resolvedConfiguration(context);
+  if (!config) return { ok: false as const, skipped: true as const, message: "Integración de Orbita sin configurar o sin contactId." };
+  const wholesaleTag = process.env.GHL_WHOLESALE_CUSTOMER_TAG?.trim() || "cliente mayorista";
+  const retailTag = process.env.GHL_RETAIL_CUSTOMER_TAG?.trim() || "cliente minorista";
+  const selectedTag = segment === "retail" ? retailTag : wholesaleTag;
+  const oppositeTag = segment === "retail" ? wholesaleTag : retailTag;
+  try {
+    // Las etiquetas son excluyentes para que las bandejas inteligentes de
+    // Mayoristas y Minoristas nunca muestren la misma conversación.
+    await ghlFetch(`/contacts/${encodeURIComponent(config.contactId)}/tags`, config.token, {
+      method: "POST",
+      headers: { Version: "v3" },
+      body: JSON.stringify({ tags: [selectedTag] }),
+    });
+    if (oppositeTag !== selectedTag) {
+      await ghlFetch(`/contacts/${encodeURIComponent(config.contactId)}/tags`, config.token, {
+        method: "DELETE",
+        headers: { Version: "v3" },
+        body: JSON.stringify({ tags: [oppositeTag] }),
+      });
+    }
+    return { ok: true as const, skipped: false as const };
+  } catch (error) {
+    return { ok: false as const, skipped: false as const, message: error instanceof Error ? error.message : "No se pudo clasificar el contacto." };
+  }
+}
+
 export async function sendWholesalePaymentSummary(context: HighLevelContext, customer: string, orderNumber: string, total: number) {
   return sendHighLevelMessage(
     context,

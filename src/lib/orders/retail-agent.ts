@@ -3,7 +3,7 @@ import { timingSafeEqual } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
-import { ensureHighLevelContactTag, syncHighLevelOrderFields, syncRetailPipeline } from "@/lib/orders/highlevel-pipeline";
+import { classifyHighLevelContact, syncHighLevelOrderFields, syncRetailPipeline } from "@/lib/orders/highlevel-pipeline";
 import type { OrderPipelineStage } from "@/lib/orders/highlevel-pipeline";
 import { customerIdentityKey } from "@/lib/orders/wholesale-routes";
 import { isDirectRetailOrderPhrase, isStandaloneRetailHelpPayload, normalizeRetailItems, requiresRetailHelp } from "@/lib/orders/retail-normalization";
@@ -281,7 +281,7 @@ export async function upsertRetailOrder(value: unknown) {
     const [pipeline, orderFields, tag] = await Promise.all([
       syncRetailPipeline(highLevelContext, pipelineStageForRetailStatus(nextStatus), `${name} · ${openOrder.order_number}`, subtotal),
       syncHighLevelOrderFields(highLevelContext, { orderNumber: openOrder.order_number, total: subtotal }),
-      ensureHighLevelContactTag(highLevelContext, "cliente minorista"),
+      classifyHighLevelContact(highLevelContext, "retail"),
     ]);
     return NextResponse.json({
       id: openOrder.id,
@@ -348,7 +348,7 @@ export async function upsertRetailOrder(value: unknown) {
       subtotal,
     ),
     syncHighLevelOrderFields(highLevelContext, { orderNumber: order.order_number, total: subtotal }),
-    ensureHighLevelContactTag(highLevelContext, "cliente minorista"),
+    classifyHighLevelContact(highLevelContext, "retail"),
   ]);
   return NextResponse.json({
     ...order,
@@ -452,7 +452,7 @@ export async function flagRetailHelpRequest(value: unknown) {
   const highLevelContext = { contactId: body.contactId, locationId: body.locationId, conversationId: body.conversationId };
   const [pipeline, tag] = await Promise.all([
     syncRetailPipeline(highLevelContext, "help", `${customer.name} · ${result.data.order_number}`, 0),
-    ensureHighLevelContactTag(highLevelContext, "cliente minorista"),
+    classifyHighLevelContact(highLevelContext, "retail"),
   ]);
   return NextResponse.json({
     ok: true,

@@ -69,17 +69,17 @@ export function WholesaleRouteManager({ customers }: { customers: WholesaleCusto
           <thead><tr><th className="customer-select-cell"><input aria-label="Seleccionar todos los clientes" checked={allSelected} onChange={toggleAll} type="checkbox" /></th><th>Negocio / contacto</th><th>Ruta</th><th>Identificación</th><th>Contacto</th><th>Ubicación</th><th>Factura</th><th>Orbita</th><th>Inscripción</th></tr></thead>
           <tbody>
             {customers.map((customer) => <tr key={customer.id}>
-              <td className="customer-select-cell"><input aria-label={`Seleccionar ${customer.businessName}`} checked={selected.includes(customer.id)} onChange={() => toggleCustomer(customer.id)} type="checkbox" /></td>
-              <td><strong>{customer.businessName}</strong><small>{customer.name}</small></td>
-              <td><select aria-label={`Ruta de ${customer.businessName}`} className={customer.routeName === unassignedWholesaleRoute ? "customer-route-select is-unassigned" : "customer-route-select"} disabled={isPending} onChange={(event) => assign([customer.id], event.target.value)} value={customer.routeName}>{routeOptions.map((route) => <option key={route} value={route}>{routeLabel(route)}</option>)}</select></td>
-              <td>{customer.taxId || "—"}</td>
-              <td>{customer.phone ? <a href={`https://wa.me/${customer.phone.replace(/\D/g, "")}`} rel="noreferrer" target="_blank">{customer.phone}</a> : "—"}<small>{customer.email}</small></td>
-              <td>{customer.location || "—"}</td>
-              <td>{customer.requiresInvoice ? "Sí" : "No"}</td>
-              <td><span className={`sync-badge is-${customer.syncStatus || "pending"}`}>{customer.syncStatus === "synced" ? "Sincronizado" : customer.syncStatus === "error" ? "Pendiente" : "En proceso"}</span></td>
-              <td>{customer.registeredAt}</td>
+              <td className="customer-select-cell" data-label="Seleccionar"><input aria-label={`Seleccionar ${customer.businessName}`} checked={selected.includes(customer.id)} onChange={() => toggleCustomer(customer.id)} type="checkbox" /></td>
+              <td data-label="Negocio / contacto"><strong>{customer.businessName}</strong><small>{customer.name}</small></td>
+              <td data-label="Ruta"><select aria-label={`Ruta de ${customer.businessName}`} className={customer.routeName === unassignedWholesaleRoute ? "customer-route-select is-unassigned" : "customer-route-select"} disabled={isPending} onChange={(event) => assign([customer.id], event.target.value)} value={customer.routeName}>{routeOptions.map((route) => <option key={route} value={route}>{routeLabel(route)}</option>)}</select></td>
+              <td data-label="Identificación">{customer.taxId || "—"}</td>
+              <td data-label="Contacto">{customer.phone ? <a href={`https://wa.me/${customer.phone.replace(/\D/g, "")}`} rel="noreferrer" target="_blank">{customer.phone}</a> : "—"}<small>{customer.email}</small></td>
+              <td data-label="Ubicación">{customer.location || "—"}</td>
+              <td data-label="Factura">{customer.requiresInvoice ? "Sí" : "No"}</td>
+              <td data-label="Orbita"><span className={`sync-badge is-${customer.syncStatus || "pending"}`}>{customer.syncStatus === "synced" ? "Sincronizado" : customer.syncStatus === "error" ? "Pendiente" : "En proceso"}</span></td>
+              <td data-label="Inscripción">{customer.registeredAt}</td>
             </tr>)}
-            {!customers.length && <tr><td className="customers-empty" colSpan={9}>Todavía no hay clientes inscritos desde el formulario.</td></tr>}
+            {!customers.length && <tr className="customers-empty-row"><td className="customers-empty" colSpan={9}>Todavía no hay clientes inscritos desde el formulario.</td></tr>}
           </tbody>
         </table>
       </div>

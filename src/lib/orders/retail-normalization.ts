@@ -183,11 +183,11 @@ function parsedLine(item: RetailInputItem) {
     };
   }
 
-  const byAmount = rawText.match(/^\$?\s*([\d.,]+)\s*(mil|k)?\s*(?:pesos?)?\s+de\s+(.+)$/i);
-  if (byAmount && (byAmount[2] || numericValue(byAmount[1]) >= 1_000 || rawText.startsWith("$"))) {
-    let amount = numericValue(byAmount[1]);
-    if (byAmount[2] && amount < 1_000) amount *= 1_000;
-    return { rawText, productText: byAmount[3].trim(), quantity: null, unit: "COP", amount };
+  const byAmount = rawText.match(/^(por\s+)?\$?\s*([\d.,]+)\s*(mil|k)?\s*(?:pesos?)?\s*(?:(?:de|en)\s+)?(.+)$/i);
+  if (byAmount && (byAmount[3] || numericValue(byAmount[2]) >= 1_000 || /^por\s+\$?/i.test(rawText) || rawText.startsWith("$"))) {
+    let amount = numericValue(byAmount[2]);
+    if (byAmount[3] && amount < 1_000) amount *= 1_000;
+    return { rawText, productText: byAmount[4].trim(), quantity: null, unit: "COP", amount };
   }
 
   // Cantidades por pieza no tienen equivalencia segura a kilos. Se usa 1 kg

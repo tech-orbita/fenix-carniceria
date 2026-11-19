@@ -144,9 +144,16 @@ test("calcula pesos explícitos aunque el cliente agregue expresiones de cortes�
 });
 
 test("calcula kilos cuando el cliente compra por valor", () => {
-  const [item] = normalizeRetailItems([], "$11.000 de pulpa", catalog);
-  assert.equal(item.quantity, 0.5);
-  assert.equal(item.unit_price, 22_000);
+  const items = normalizeRetailItems([], [
+    "$11.000 de pulpa",
+    "por 10.000 carne molida",
+    "9 mil en butifarra",
+  ].join("\n"), catalog);
+  assert.deepEqual(items.map(({ product_name, quantity, unit_price }) => ({ product_name, quantity, unit_price })), [
+    { product_name: "Pulpa", quantity: 0.5, unit_price: 22_000 },
+    { product_name: "Molida súper especial", quantity: 0.435, unit_price: 23_000 },
+    { product_name: "Butifarra", quantity: 1, unit_price: 9_000 },
+  ]);
 });
 
 test("conserva un producto desconocido en kilos y sin inventar precio", () => {

@@ -63,6 +63,7 @@ PEDIDOS
 - Cada pedido conserva su propia dirección. Nunca reemplaces la dirección de un pedido anterior ni juntes dos direcciones en una sola orden.
 - Antes de las 2:00 p. m. de Bogotá, una petición de “agrega”, “añade”, “quita”, “cambia” o “corrige” puede modificar el pedido actual únicamente después de que el cliente confirme que desea anexarla. Desde las 2:00 p. m. comienza una nueva ventana operativa: si no existe un pedido en esa ventana, crea uno nuevo aunque el cliente diga “agrega”.
 - Cuando crees un pedido nuevo, el resumen y la acción enviada a n8n deben contener únicamente los productos de ese nuevo pedido. Cuando modifiques el pedido actual, deben contener el pedido completo actualizado.
+- Acepta pedidos por valor. Expresiones como “$10.000 de carne”, “por 10.000 carne” o “9 mil en butifarra” son pedidos válidos; conserva el valor literal y no obligues al cliente a convertirlo a libras o kilos.
 
 ENTREGAS Y PAGOS
 - Se reciben pedidos todos los días. Para entrega el mismo día aplican los horarios y políticas vigentes configurados por Fénix.
@@ -92,13 +93,21 @@ Barrio: [valor dinámico del campo]
 
 En **Conversation AI > agente minorista > Goals/Intent > Setup your Actions**:
 
-1. Agrega una acción **Contact Info** llamada `Guardar registro minorista`.
-2. Mapea dirección y barrio a sus campos reales del contacto. No incluyas cédula ni zona entre los campos que el agente debe recopilar.
+1. Agrega una acción **Contact Info** llamada `Guardar dirección de entrega` y mapéala exclusivamente al campo personalizado `Agrega Dirección de Entrega`. Describe el valor como: “La dirección completa de entrega indicada por el contacto. Guarda únicamente la dirección; nunca incluyas nombre, apellido, teléfono, barrio, modalidad ni comentarios adicionales”. Incluye por lo menos dos ejemplos reales de dirección.
+2. Mapea el barrio a su campo real del contacto. No incluyas cédula ni zona entre los campos que el agente debe recopilar. Nunca guardes una dirección en nombre, apellido ni en el motivo de ayuda.
 3. Conserva nombre y teléfono en el flujo de recopilación estándar del agente. En WhatsApp, el teléfono normalmente ya pertenece al contacto; solo debe pedirse si está vacío o si se necesita otro número de recepción.
 4. Para cambios de dirección ya registrada, agrega una acción separada **Trigger Workflow** llamada `Actualizar dirección minorista`. Ese workflow debe vaciar dirección, barrio y zona, colocar `Registro Minorista Completo = No` y permitir que Contact Info capture los valores nuevos. No lo ejecutes para un cliente nuevo. Para otros tipos de cambio crea una acción específica o transfiere al equipo, evitando borrar datos que el cliente no pidió modificar.
-5. Mantén una sola acción para registrar el pedido y una sola fuente de mensajes de confirmación. Con `SEND_CONFIRMATION=true`, la confirmación la envía n8n con el número real; el agente no debe enviar otro mensaje de registro. Configura la acción para activarse también cuando el cliente envíe una lista directa o responda/cite una lista con frases como “me falta este”, “este también” o “aparte”.
+5. Mantén una sola acción para registrar el pedido y una sola fuente de mensajes de confirmación. Con `SEND_CONFIRMATION=true`, la confirmación la envía n8n con el número real; el agente no debe enviar otro mensaje de registro. Usa esta condición en `Enviar Pedido a n8n`: **“Activa solo si hay una lista de productos pendiente y no existe pedido abierto, o el cliente ya eligió anexar o crear uno nuevo. No actives por dirección, barrio, nombre, teléfono, modalidad, método de pago, saludo, agradecimiento o consulta aislados. Una dirección solo completa datos y nunca es un pedido. Ejecuta una sola vez por evento válido.”**
 6. En la acción que dispara `Fénix · Minoristas · Pedido IA → Panel`, incluye también esta condición explícita: **“Activa este flujo cuando el cliente envíe una imagen, documento, comprobante, soporte o recibo de pago, aunque no esté haciendo un pedido.”** El workflow ya clasifica el archivo y crea el caso en `Requiere ayuda`; si el agente solo responde en el chat pero no ejecuta la acción, el panel nunca recibirá el caso.
-7. Configura **Human Handover/Stop Bot** para que la intervención manual pause las respuestas automáticas.
+7. Configura **Human Handover/Stop Bot** para que solo una respuesta humana real o una transferencia explícita pause las respuestas automáticas. No uses la recepción de un pedido, un comprobante, una etiqueta minorista ni un fallo temporal del workflow como condición para apagar el agente.
+8. Configura la reanudación del agente ante un nuevo mensaje entrante del cliente después de cerrar la intervención humana. Verifica que no quede un estado permanente de `Stop Bot` en chats minoristas.
+
+## Separación de conversaciones por área
+
+1. Crea una bandeja o filtro inteligente **Minoristas** con la condición `tag = cliente minorista` y excluye `cliente mayorista`.
+2. Crea una bandeja o filtro inteligente **Mayoristas** con la condición `tag = cliente mayorista` y excluye `cliente minorista`.
+3. Asigna cada vista solo al equipo correspondiente. El panel ya restringe los pedidos por segmento y la integración mantiene las dos etiquetas como excluyentes.
+4. Conserva pipelines separados llamados `Minoristas` y `Mayoristas`; una oportunidad minorista nunca debe crearse en el pipeline mayorista ni al contrario.
 
 ## Workflow para marcar el registro completo
 
