@@ -40,3 +40,25 @@ test("n8n confirma únicamente después del registro e incluye el número real",
   assert.match(confirmationBody, /orderNumber/);
   assert.match(confirmationBody, /quedó registrado/);
 });
+
+test("el extractor exige confirmar si se anexa o se crea un pedido nuevo", () => {
+  const workflow = JSON.parse(readFileSync(new URL("../n8n/fenix-minoristas-pedido.json", import.meta.url), "utf8"));
+  const nodes = new Map(workflow.nodes.map((node) => [node.name, node]));
+  const extractorPrompt = nodes.get("Basic LLM Chain").parameters.messages.messageValues[0].message;
+
+  assert.match(extractorPrompt, /No decidas por tu cuenta/);
+  assert.match(extractorPrompt, /pregunta explícita/);
+  assert.match(extractorPrompt, /respuesta clara del CLIENTE/);
+  assert.match(extractorPrompt, /Falta confirmar si corresponde al pedido actual o a un pedido nuevo/);
+});
+
+test("el registro minorista se completa solo con nombre, teléfono, dirección y barrio", () => {
+  const workflow = JSON.parse(readFileSync(new URL("../n8n/fenix-minoristas-pedido.json", import.meta.url), "utf8"));
+  const nodes = new Map(workflow.nodes.map((node) => [node.name, node]));
+  const contactUpdateBody = nodes.get("Guardar datos en el contacto GHL").parameters.jsonBody;
+
+  assert.match(contactUpdateBody, /Boolean\(name && phone\)/);
+  assert.match(contactUpdateBody, /Boolean\(address && neighborhood\)/);
+  assert.doesNotMatch(contactUpdateBody, /Boolean\(name && phone && document\)/);
+  assert.doesNotMatch(contactUpdateBody, /Boolean\(address && neighborhood && zone\)/);
+});
