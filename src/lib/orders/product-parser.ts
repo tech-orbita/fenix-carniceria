@@ -9,7 +9,7 @@ export const wholesaleProductCatalog: readonly WholesaleProduct[] = [
   { category: "Res · cortes", name: "Blanda", aliases: ["carne blanda", "blanda", "capon", "capón", "lomo ancho", "lomo", "tetafulla", "tetafula", "calavera", "carabela", "caravela", "relajado", "relajada", "relado", "relada", "abierto", "abierta"] },
   { category: "Res · cortes", name: "Molida especial", aliases: ["molida especial", "carne molida especial", "carne molida", "molida"] },
   { category: "Res · cortes", name: "Espaldilla", aliases: ["espaldilla", "espaldi"] },
-  { category: "Res · cortes", name: "Atravesado", aliases: ["pollo atravesado", "atravesado"] },
+  { category: "Res · cortes", name: "Atravesado", aliases: ["pollo atravesado", "atravesado", "atrabesado", "atravezado", "atravessado", "atrabessado"] },
   { category: "Res · cortes", name: "Bollo", aliases: ["bollito pequeño", "bollito pequeno", "bollito", "bollo pequeño", "bollo pequeno", "bollo"] },
   { category: "Res · cortes", name: "Costilla", aliases: ["costilla de res", "costilla res", "costilla", "costillo"] },
   { category: "Res · cortes", name: "Costillita", aliases: ["costillitas", "costillita"] },
@@ -41,7 +41,7 @@ export const wholesaleProductCatalog: readonly WholesaleProduct[] = [
   { category: "Res · cortes", name: "Molida corriente", aliases: ["molida corriente", "carne molida corriente"] },
   { category: "Res · cortes", name: "Sobrebarriga", aliases: ["sobrebarriga", "sobre barriga"] },
   { category: "Res · vísceras", name: "Pata", aliases: ["patas de res", "pata de res", "para de res", "pata res", "patas", "pata"], defaultUnit: "und" },
-  { category: "Cerdo", name: "Pezuña cerdo", aliases: ["pezuña de cerdo", "pezuna de cerdo", "pezuña cerdo", "pezuna cerdo"] },
+  { category: "Cerdo", name: "Pezuña cerdo", aliases: ["pezuñas de cerdo", "pezunas de cerdo", "pezuña de cerdo", "pezuna de cerdo", "pezuñas cerdo", "pezunas cerdo", "pezuña cerdo", "pezuna cerdo", "pezuñas", "pezunas"] },
   { category: "Pollo", name: "Contramuslo", aliases: ["pernil mixto", "contramuslo"] },
   { category: "Res · vísceras", name: "Lenguas", aliases: ["lengua de res", "lenguas", "lengua"] },
   { category: "Res · cortes", name: "Chocosuela", aliases: ["chocosuela", "choco"] },
@@ -135,8 +135,20 @@ const catalogProductCache = new Map<string, WholesaleProduct | undefined>();
 export function catalogProductFor(value: string) {
   const normalized = normalizeProductName(value);
   if (catalogProductCache.has(normalized)) return catalogProductCache.get(normalized);
+  // El adjetivo de preparación suele intercalarse entre el corte y la especie
+  // ("lomo relajado de cerdo"). La presencia explícita de cerdo debe ganar a
+  // la abreviatura "lomo" de Blanda. A la vez, nunca basta la palabra "cerdo"
+  // por sí sola: eso convertía "piel cerdo" en un lomo inexistente.
+  if (/\blomo\b/.test(normalized) && /\bcerdo\b/.test(normalized)) {
+    const porkLoin = wholesaleProductCatalog.find((product) => product.name === "Lomo cerdo");
+    catalogProductCache.set(normalized, porkLoin);
+    return porkLoin;
+  }
   const candidates = normalizedCatalogAliases.filter(({ product, alias }) => {
     if (normalized === alias) return true;
+    // \"cerdo\" solo es la abreviatura operativa de lomo cuando viene solo.
+    // Dentro de \"piel cerdo\" es la especie, no el nombre del corte.
+    if (product.name === "Lomo cerdo" && alias === "cerdo") return false;
     // "Hueso" solo identifica la columna genérica cuando viene solo. Un
     // descriptor desconocido (p. ej. "hueso rojo") debe conservarse como una
     // columna independiente, no sumarse silenciosamente como hueso de res.
@@ -263,12 +275,23 @@ export function parseOrderTextDetailed(text: string): ParsedWholesaleOrder {
     // número describe la misma línea ("3 porciones ... 350 gr"), no abre otro
     // producto.
     if (new RegExp(`^(?:\\d+(?:[.,]\\d+)?|${quantityWord})\\s+porciones?\\b`, "i").test(line)) return [line];
+    if (/^\d+(?:[.,]\d+)?\s+.+?\s+(?:por\s*fa(?:vor)?\s+)?\d+\s+bolsas?\s+(?:d|de)\s+\d+(?:[.,]\d+)?\s+(?:libras?|lbs?|lb)\s+cada\s+una$/i.test(line)) return [line];
     // No partir expresiones válidas con el producto primero, como
     // "molida especial 4 lib" o "Molida 3 bolsas".
     const productFirst = line.match(new RegExp(`^(.+?)\\s+(?:\\d+(?:[.,]\\d+)?|${quantityWord})\\s*(${unit})\\b$`, "i"));
     const productFirstWithoutUnit = line.match(new RegExp(`^(.+?)\\s+(?:\\d+(?:[.,]\\d+)?|${quantityWord})$`, "i"));
     if (productFirst || (productFirstWithoutUnit && catalogProductFor(productFirstWithoutUnit[1]))) return [line];
-    return line.split(new RegExp(`\\s+(?=(?:\\d+(?:[.,]\\d+)?|${quantityWord})\\s)`, "i"));
+    const packageSpace = "\uE000";
+    const protectedLine = line.replace(
+      /\d+(?:[.,]\d+)?\s+[^\d;,\n]+?\s+(?:por\s*fa(?:vor)?\s+)?\d+\s+bolsas?\s+(?:d|de)\s+\d+(?:[.,]\d+)?\s+(?:libras?|lbs?|lb)\s+cada\s+una/gi,
+      (packaging) => packaging.replace(
+        /^(\d+(?:[.,]\d+)?)(\s+)(.*)$/,
+        (_match, total, space, detail) => `${total}${space}${detail.replace(/\s/g, packageSpace)}`,
+      ),
+    );
+    return protectedLine
+      .split(new RegExp(`\\s+(?=(?:\\d+(?:[.,]\\d+)?|${quantityWord})\\s)`, "i"))
+      .map((part) => part.replaceAll(packageSpace, " "));
   };
   const chunks = normalized
     .split(/[;\n]+|[.!?](?:\s+|$)/)
@@ -281,6 +304,17 @@ export function parseOrderTextDetailed(text: string): ParsedWholesaleOrder {
     .filter(Boolean);
 
   for (const chunk of chunks) {
+    // Una indicación de empaque no son tres productos. En textos como
+    // "30 hueso negro porfa 3 bolsas de 10 libras cada una", 30 es el total y
+    // lo demás explica cómo repartirlo. Conservamos la frase para producción.
+    const packagedTotal = chunk.match(/^(\d+(?:[.,]\d+)?)\s+(.+?)\s+(?:por\s*fa(?:vor)?\s+)?(\d+)\s+bolsas?\s+(?:d|de)\s+(\d+(?:[.,]\d+)?)\s+(?:libras?|lbs?|lb)\s+cada\s+una$/i);
+    if (packagedTotal && catalogProductFor(packagedTotal[2])) {
+      addItem(packagedTotal[1], "lb", packagedTotal[2], chunk, false);
+      const last = items.at(-1);
+      if (last) last.notes = chunk.trim();
+      continue;
+    }
+
     const portionFirst = chunk.match(new RegExp(`^(\\d+(?:[.,]\\d+)?|${quantityWord})\\s+porciones?\\s+(?:de\\s+)?(.+)$`, "i"));
     if (portionFirst) {
       addItem(portionFirst[1], "porciones", portionFirst[2], chunk);

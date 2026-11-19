@@ -747,15 +747,33 @@ export async function deleteWholesaleOrder(orderId: string) {
   const supabase = await sessionClient();
   const { data, error } = await supabase
     .from("orders")
-    .delete()
+    .update({ deleted_at: new Date().toISOString() })
     .eq("id", Number(orderId))
     .eq("customer_type", "wholesale")
+    .is("deleted_at", null)
     .select("order_number")
     .maybeSingle();
-  if (error || !data) return { ok: false as const, message: "No se pudo eliminar el pedido." };
+  if (error || !data) return { ok: false as const, message: "No se pudo mover el pedido a Eliminados." };
   revalidatePath("/");
   revalidatePath("/dashboard");
-  return { ok: true as const, message: `${data.order_number} fue eliminado.` };
+  return { ok: true as const, message: `${data.order_number} fue movido a Eliminados.` };
+}
+
+export async function restoreWholesaleOrder(orderId: string) {
+  if (!/^\d+$/.test(orderId)) return { ok: false as const, message: "Pedido inválido." };
+  const supabase = await sessionClient();
+  const { data, error } = await supabase
+    .from("orders")
+    .update({ deleted_at: null })
+    .eq("id", Number(orderId))
+    .eq("customer_type", "wholesale")
+    .not("deleted_at", "is", null)
+    .select("order_number")
+    .maybeSingle();
+  if (error || !data) return { ok: false as const, message: "No se pudo restaurar el pedido." };
+  revalidatePath("/");
+  revalidatePath("/dashboard");
+  return { ok: true as const, message: `${data.order_number} volvió a Pedidos.` };
 }
 
 export async function deleteRetailOrder(orderId: string) {
@@ -1105,7 +1123,34 @@ export async function updateWholesaleTable(rows: WholesaleTableRowInput[]) {
     }
   }
 
+  const orderIds = rows.map((row) => Number(row.orderId));
+  const { data: refreshedRows, error: refreshError } = await supabase
+    .from("orders")
+    .select("id,notes,routes(name),order_items(id,product_name,quantity,actual_quantity,unit,preparation,notes,unit_price,is_prepared)")
+    .in("id", orderIds);
+  if (refreshError) return { ok: false, message: "Los cambios se guardaron, pero no se pudo refrescar la tabla." };
+
+  const updatedRows = (refreshedRows ?? []).map((row) => {
+    const routeRelation = Array.isArray(row.routes) ? row.routes[0] : row.routes;
+    return {
+      orderId: String(row.id),
+      routeName: routeRelation?.name ?? "Sin clasificar",
+      notes: row.notes ?? undefined,
+      items: (row.order_items ?? []).map((item) => ({
+        id: String(item.id),
+        productName: item.product_name,
+        quantity: Number(item.quantity),
+        actualQuantity: item.actual_quantity == null ? undefined : Number(item.actual_quantity),
+        unit: item.unit,
+        preparation: item.preparation ?? undefined,
+        notes: item.notes ?? undefined,
+        unitPrice: Number(item.unit_price),
+        prepared: item.is_prepared === true,
+      })),
+    };
+  });
+
   revalidatePath("/");
   revalidatePath("/dashboard");
-  return { ok: true, message: "La tabla, las rutas y los comentarios fueron actualizados." };
+  return { ok: true, message: "La tabla, las rutas y los comentarios fueron actualizados.", updatedRows };
 }

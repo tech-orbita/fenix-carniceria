@@ -3008,6 +3008,7 @@ a {
 .orders-app .orders-filter,
 .orders-app .help-filter,
 .orders-app .dispatched-filter,
+.orders-app .deleted-filter,
 .orders-app .conversation-link {
   border: 1px solid #d3dce9;
   border-radius: 8px;
@@ -3055,6 +3056,12 @@ a {
   border-color: #9fd5b4;
   background: #edf9f1;
   color: #1d7442;
+}
+
+.orders-app .deleted-filter.is-active {
+  border-color: #d6a9a9;
+  background: #fff2f2;
+  color: #9b2c2c;
 }
 
 .orders-app .help-badge {
@@ -5421,6 +5428,7 @@ a {
 .orders-app .dashboard-content:has(.wholesale-workspace) .orders-filter,
 .orders-app .dashboard-content:has(.wholesale-workspace) .help-filter,
 .orders-app .dashboard-content:has(.wholesale-workspace) .dispatched-filter,
+.orders-app .dashboard-content:has(.wholesale-workspace) .deleted-filter,
 .orders-app .dashboard-content:has(.wholesale-workspace) .outline-action,
 .orders-app .dashboard-content:has(.wholesale-workspace) .primary-action {
   font-size: 10px;

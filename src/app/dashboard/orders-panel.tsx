@@ -13,7 +13,7 @@ import { wholesaleServiceDay } from "@/lib/orders/wholesale-service-day";
 import { unassignedWholesaleRoute, wholesaleRouteLabel, wholesaleRoutes } from "@/lib/orders/wholesale-routes";
 import { highLevelConversationUrl as highLevelAppConversationUrl, safeHighLevelConversationUrl } from "@/lib/orders/highlevel-conversation-url";
 
-import { convertRetailHelpToNewOrder, createManualRetailOrder, createManualWholesaleOrder, deleteRetailOrder, deleteWholesaleOrder, findWholesaleCustomer, resolveOrderHelp, scheduleRetailOrder, scheduleWholesaleOrder, sendRetailPaymentSummary, setWholesaleProductPrepared, updateOrderDetails, updateOrderPaymentStatus, updateOrderStatus, updateWholesalePayment, updateWholesaleRoute, updateWholesaleTable } from "./actions";
+import { convertRetailHelpToNewOrder, createManualRetailOrder, createManualWholesaleOrder, deleteRetailOrder, deleteWholesaleOrder, findWholesaleCustomer, resolveOrderHelp, restoreWholesaleOrder, scheduleRetailOrder, scheduleWholesaleOrder, sendRetailPaymentSummary, setWholesaleProductPrepared, updateOrderDetails, updateOrderPaymentStatus, updateOrderStatus, updateWholesalePayment, updateWholesaleRoute, updateWholesaleTable } from "./actions";
 import { addDays, bogotaDay, dateTime, dayLabel, Icon, phaseLabels, phaseStatus } from "./panel-shared";
 import type { OperationalPhase } from "./panel-shared";
 import { RetailPanel } from "./retail-panel";
@@ -71,6 +71,17 @@ function formatAmounts(amounts: Map<string, number>) {
 
 function productQuantity(order: Order, product: WholesaleProduct) {
   return formatAmounts(productAmounts(order, product));
+}
+
+// El número P representa los renglones que escribió el cliente, no las
+// columnas únicas de la planilla. Dos presentaciones de pechuga siguen siendo
+// dos productos aunque operativamente compartan la misma columna.
+function orderProductCount(order: Order) {
+  return order.items.filter((item) => {
+    const storedCatalog = catalogProductFor(item.productName);
+    const label = storedCatalog?.name === "Comodín" && item.preparation ? item.preparation : item.productName;
+    return !isWholesaleCommunicationText(label);
+  }).length;
 }
 
 // El pie de la planilla es un resumen operativo, no una repetición del texto
@@ -530,13 +541,20 @@ function WholesaleWallet({ orders }: { orders: Order[] }) {
   </section>;
 }
 
-function WholesaleOrdersTable({ hasMoreOrders, isAdmin, loadedOrderPages, orders: allOrders, pendingId, serverRouteFilter, onStatusChange }: { hasMoreOrders: boolean; isAdmin: boolean; loadedOrderPages: number; orders: Order[]; pendingId?: string; serverRouteFilter: string[]; onStatusChange: (order: Order, phase: OperationalPhase) => void }) {
+type SavedWholesaleRow = {
+  orderId: string;
+  routeName: string;
+  notes?: string;
+  items: Order["items"];
+};
+
+function WholesaleOrdersTable({ hasMoreOrders, isAdmin, loadedOrderPages, orders: allOrders, pendingId, serverRouteFilter, onRowsSaved, onStatusChange }: { hasMoreOrders: boolean; isAdmin: boolean; loadedOrderPages: number; orders: Order[]; pendingId?: string; serverRouteFilter: string[]; onRowsSaved: (rows: SavedWholesaleRow[]) => void; onStatusChange: (order: Order, phase: OperationalPhase) => void }) {
   const router = useRouter();
   const matrixScrollRef = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState("");
   const [view, setView] = useState<"orders" | "wallet">("orders");
   const [dayOffset, setDayOffset] = useState(0);
-  const [listMode, setListMode] = useState<"orders" | "help" | "dispatched">("orders");
+  const [listMode, setListMode] = useState<"orders" | "help" | "dispatched" | "deleted">("orders");
   // La operación diaria empieza con la vista compacta para dedicar la pantalla
   // de la tablet a los cortes. Ruta, teléfono y comentario siguen disponibles
   // bajo “Mostrar datos” cuando se necesiten.
@@ -562,6 +580,7 @@ function WholesaleOrdersTable({ hasMoreOrders, isAdmin, loadedOrderPages, orders
   const ordersByServiceDay = useMemo(() => {
     const grouped = new Map<string, { help: Order[]; dispatched: Order[]; open: Order[] }>();
     allOrders.forEach((order) => {
+      if (order.deletedAt) return;
       const day = serviceDay(order);
       const group = grouped.get(day) ?? { help: [], dispatched: [], open: [] };
       if (isHelpWithoutOrder(order)) group.help.push(order);
@@ -576,7 +595,8 @@ function WholesaleOrdersTable({ hasMoreOrders, isAdmin, loadedOrderPages, orders
   const chatHelpRequests = selectedDayOrders?.help ?? [];
   const dispatchedOrders = selectedDayOrders?.dispatched ?? [];
   const openOrders = selectedDayOrders?.open ?? [];
-  const baseOrders = listMode === "help" ? chatHelpRequests : listMode === "dispatched" ? dispatchedOrders : openOrders;
+  const deletedOrders = allOrders.filter((order) => Boolean(order.deletedAt));
+  const baseOrders = listMode === "help" ? chatHelpRequests : listMode === "dispatched" ? dispatchedOrders : listMode === "deleted" ? deletedOrders : openOrders;
   // Refleja la ruta elegida en el acto; el refresco del servidor confirma después
   // el dato persistido sin hacer que el operador espere viendo el valor anterior.
   const orders = useMemo(() => baseOrders.map((order) => routeOverrides[order.id]
@@ -584,6 +604,7 @@ function WholesaleOrdersTable({ hasMoreOrders, isAdmin, loadedOrderPages, orders
     : order), [baseOrders, routeOverrides]);
   const helpCount = chatHelpRequests.length;
   const dispatchedCount = dispatchedOrders.length;
+  const deletedCount = deletedOrders.length;
   const orderCount = openOrders.length;
   const pendingByDay = (offset: number) => {
     const group = ordersByServiceDay.get(addDays(today, offset));
@@ -717,7 +738,8 @@ function WholesaleOrdersTable({ hasMoreOrders, isAdmin, loadedOrderPages, orders
     })));
     setSaving(false);
     setEditNotice(result.message);
-    if (result.ok) {
+    if (result.ok && result.updatedRows) {
+      onRowsSaved(result.updatedRows);
       stopEditing();
       router.refresh();
     }
@@ -732,10 +754,18 @@ function WholesaleOrdersTable({ hasMoreOrders, isAdmin, loadedOrderPages, orders
   };
   const removeOrder = async (order: Order) => {
     const customer = wholesaleCustomerName(order);
-    if (!window.confirm(`¿Eliminar definitivamente el pedido ${order.orderNumber} de ${customer}? Esta acción no se puede deshacer.`)) return;
+    if (!window.confirm(`¿Mover el pedido ${order.orderNumber} de ${customer} a Eliminados? Podrás restaurarlo después.`)) return;
     setDeletingId(order.id);
     setEditNotice(undefined);
     const result = await deleteWholesaleOrder(order.id);
+    setDeletingId(undefined);
+    setEditNotice(result.message);
+    if (result.ok) router.refresh();
+  };
+  const restoreOrder = async (order: Order) => {
+    setDeletingId(order.id);
+    setEditNotice(undefined);
+    const result = await restoreWholesaleOrder(order.id);
     setDeletingId(undefined);
     setEditNotice(result.message);
     if (result.ok) router.refresh();
@@ -752,7 +782,7 @@ function WholesaleOrdersTable({ hasMoreOrders, isAdmin, loadedOrderPages, orders
     if (!result.ok) setPreparedOverrides((values) => ({ ...values, [key]: current }));
     else router.refresh();
   };
-  if (view === "wallet" && isAdmin) return <><div className="wholesale-tabs"><button onClick={() => setView("orders")} type="button">Pedidos</button><button aria-current="page" type="button">Cartera</button></div><WholesaleWallet orders={allOrders} /></>;
+  if (view === "wallet" && isAdmin) return <><div className="wholesale-tabs"><button onClick={() => setView("orders")} type="button">Pedidos</button><button aria-current="page" type="button">Cartera</button></div><WholesaleWallet orders={allOrders.filter((order) => !order.deletedAt)} /></>;
   return (
     <>
     {isAdmin && <div className="wholesale-tabs"><button aria-current="page" type="button">Pedidos</button><button onClick={() => setView("wallet")} type="button">Cartera</button></div>}
@@ -777,6 +807,7 @@ function WholesaleOrdersTable({ hasMoreOrders, isAdmin, loadedOrderPages, orders
             <button aria-pressed={listMode === "orders"} className={listMode === "orders" ? "orders-filter is-active" : "orders-filter"} onClick={() => setListMode("orders")} type="button">Pedidos ({orderCount})</button>
             <button aria-pressed={listMode === "help"} className={listMode === "help" ? "help-filter is-active" : "help-filter"} onClick={() => { clearFilters(); setListMode("help"); }} type="button">Requiere ayuda ({helpCount})</button>
             <button aria-pressed={listMode === "dispatched"} className={listMode === "dispatched" ? "dispatched-filter is-active" : "dispatched-filter"} onClick={() => { clearFilters(); setListMode("dispatched"); }} type="button">Despachados ({dispatchedCount})</button>
+            <button aria-pressed={listMode === "deleted"} className={listMode === "deleted" ? "deleted-filter is-active" : "deleted-filter"} onClick={() => { clearFilters(); setListMode("deleted"); }} type="button">Eliminados ({deletedCount})</button>
           </div>
           {hasFilters && <button className="clear-filters" onClick={clearFilters} type="button">Limpiar filtros</button>}
         </div>
@@ -813,12 +844,14 @@ function WholesaleOrdersTable({ hasMoreOrders, isAdmin, loadedOrderPages, orders
               <th scope="row"><div className="matrix-client"><span><span className="client-heading-line" title={order.businessName && order.businessName !== order.customer ? order.businessName : order.customer}><strong>{order.businessName && order.businessName !== order.customer ? order.businessName : order.customer}</strong></span><small className="client-order-number">Pedido {order.orderNumber}</small></span><div className="matrix-row-actions"><ConversationLink order={order} /><FormSubmissionAction order={order} />{isAdmin && safeExternalUrl(order.formData?.payment_proof) && <a aria-label={`Abrir comprobante de ${order.orderNumber}`} className="payment-proof-link row-icon-action tooltip-icon-action" data-tooltip="Comprobante adjunto" href={safeExternalUrl(order.formData?.payment_proof)} rel="noreferrer" target="_blank"><Icon name="receipt" /><span className="sr-only">Ver comprobante adjunto</span></a>}{isHelpWithoutOrder(order)
                 ? <span className="no-order-badge">Sin pedido</span>
                 : isClosed(order)
-                  ? <button aria-label="Volver a pedidos pendientes" className="dispatch-action is-done row-icon-action tooltip-icon-action" data-tooltip="Volver a pedidos" disabled={pendingId === order.id || editing} onClick={() => onStatusChange(order, "new")} type="button">{pendingId === order.id ? "…" : <Icon name="undo" />}<span className="sr-only">Volver a pedidos pendientes</span></button>
+                  ? <button aria-label="Volver a pedidos pendientes" className="dispatch-action is-done row-icon-action tooltip-icon-action" data-tooltip="Volver a pedidos" disabled={pendingId === order.id || editing || Boolean(order.deletedAt)} onClick={() => onStatusChange(order, "new")} type="button">{pendingId === order.id ? "…" : <Icon name="undo" />}<span className="sr-only">Volver a pedidos pendientes</span></button>
                   : <>
-                    <button aria-label="Marcar como despachado" className="dispatch-action row-icon-action tooltip-icon-action" data-tooltip="Despachado" disabled={pendingId === order.id || editing} onClick={() => onStatusChange(order, "dispatched")} type="button">{pendingId === order.id ? "…" : <Icon name="truck" />}<span className="sr-only">Marcar como despachado</span></button>
-                    {dayOffset === 1 && <button aria-label="Adelantar pedido a hoy" className="advance-action row-icon-action tooltip-icon-action" data-tooltip="Adelantar a hoy" disabled={saving || editing} onClick={() => void advanceOrder(order)} type="button"><Icon name="calendar" /><span className="sr-only">Adelantar pedido a hoy</span></button>}
-                  </>}<button aria-label={`Eliminar ${order.orderNumber}`} className="delete-order-action row-icon-action tooltip-icon-action" data-tooltip="Eliminar pedido" disabled={deletingId === order.id || editing} onClick={() => void removeOrder(order)} type="button">{deletingId === order.id ? "…" : <Icon name="trash" />}<span className="sr-only">Eliminar pedido</span></button></div></div></th>
-              <td className="product-count-column"><strong>{orderCuts.get(order.id)?.size ?? 0}</strong></td>
+                    <button aria-label="Marcar como despachado" className="dispatch-action row-icon-action tooltip-icon-action" data-tooltip="Despachado" disabled={pendingId === order.id || editing || Boolean(order.deletedAt)} onClick={() => onStatusChange(order, "dispatched")} type="button">{pendingId === order.id ? "…" : <Icon name="truck" />}<span className="sr-only">Marcar como despachado</span></button>
+                    {dayOffset === 1 && <button aria-label="Adelantar pedido a hoy" className="advance-action row-icon-action tooltip-icon-action" data-tooltip="Adelantar a hoy" disabled={saving || editing || Boolean(order.deletedAt)} onClick={() => void advanceOrder(order)} type="button"><Icon name="calendar" /><span className="sr-only">Adelantar pedido a hoy</span></button>}
+                  </>}{listMode === "deleted"
+                    ? <button aria-label={`Restaurar ${order.orderNumber}`} className="dispatch-action is-done row-icon-action tooltip-icon-action" data-tooltip="Restaurar pedido" disabled={deletingId === order.id || editing} onClick={() => void restoreOrder(order)} type="button">{deletingId === order.id ? "…" : <Icon name="undo" />}<span className="sr-only">Restaurar pedido</span></button>
+                    : <button aria-label={`Eliminar ${order.orderNumber}`} className="delete-order-action row-icon-action tooltip-icon-action" data-tooltip="Mover a Eliminados" disabled={deletingId === order.id || editing} onClick={() => void removeOrder(order)} type="button">{deletingId === order.id ? "…" : <Icon name="trash" />}<span className="sr-only">Eliminar pedido</span></button>}</div></div></th>
+              <td className="product-count-column"><strong>{orderProductCount(order)}</strong></td>
               {showInfoColumns && <>
                 <td>{order.phone}</td>
                 <td className={editing ? "matrix-route-cell is-editing" : "matrix-route-cell"}><select aria-label={`Ruta de ${order.businessName ?? order.customer}`} disabled={routePendingId === order.id} onChange={(event) => editing ? setDraftRows((current) => ({ ...current, [order.id]: { ...current[order.id], routeName: event.target.value } })) : void saveRoute(order, event.target.value)} value={editing ? draftRows[order.id]?.routeName ?? order.route : order.route}>{![...wholesaleRoutes, unassignedWholesaleRoute].includes(order.route as (typeof wholesaleRoutes)[number] | typeof unassignedWholesaleRoute) && <option value={order.route}>{order.route}</option>}<option value={unassignedWholesaleRoute}>Sin clasificar</option>{wholesaleRoutes.map((route) => <option key={route} value={route}>{wholesaleRouteLabel(route)}</option>)}</select></td>
@@ -835,9 +868,9 @@ function WholesaleOrdersTable({ hasMoreOrders, isAdmin, loadedOrderPages, orders
                 return <td aria-label={value && !editing ? `${product.name} de ${order.orderNumber}: ${value}. ${prepared ? "Listo" : "Pendiente"}` : undefined} className={`${editing ? "matrix-quantity-cell is-editing" : value ? "matrix-quantity-cell has-value" : "matrix-quantity-cell"}${prepared ? " is-prepared" : ""}${preparedPendingKey === preparedKey ? " is-prepared-pending" : ""}${product.name === "Blanda" ? " is-blanda-column" : ""}`} key={product.name} onDoubleClick={value && !editing ? () => void togglePrepared(order, product, prepared) : undefined} onKeyDown={value && !editing ? (event) => { if (event.key === "Enter") void togglePrepared(order, product, prepared); } : undefined} tabIndex={value && !editing ? 0 : undefined} title={cellTitle}>{editing ? <input aria-label={`${product.name} de ${order.orderNumber}`} onChange={(event) => updateDraft(order.id, product.name, event.target.value)} placeholder={placeholder} title={title} value={draftRows[order.id]?.quantities[product.name] ?? ""} /> : value || ""}</td>;
               })}
             </tr>)}
-            {!visibleOrders.length && <tr><td className="matrix-empty" colSpan={visibleProducts.length + (showInfoColumns ? 4 : 2)}>{hasFilters ? "Ningún pedido coincide con los filtros." : listMode === "dispatched" ? "No hay pedidos despachados para este día." : listMode === "help" ? "No hay solicitudes de ayuda para este día." : "No hay pedidos pendientes para este día."}</td></tr>}
+            {!visibleOrders.length && <tr><td className="matrix-empty" colSpan={visibleProducts.length + (showInfoColumns ? 4 : 2)}>{hasFilters ? "Ningún pedido coincide con los filtros." : listMode === "deleted" ? "No hay pedidos eliminados." : listMode === "dispatched" ? "No hay pedidos despachados para este día." : listMode === "help" ? "No hay solicitudes de ayuda para este día." : "No hay pedidos pendientes para este día."}</td></tr>}
           </tbody>
-          {visibleOrders.length > 0 && visibleProducts.length > 0 && <tfoot><tr><th scope="row">{showInfoColumns ? "Total" : `Total · ${visibleSummary}`}</th><td className="product-count-column">{visibleOrders.reduce((sum, order) => sum + (orderCuts.get(order.id)?.size ?? 0), 0)}</td>{showInfoColumns && <td colSpan={2}>{visibleSummary}</td>}{totals.map((total, index) => <td key={visibleProducts[index].name}>{total || "—"}</td>)}</tr></tfoot>}
+          {visibleOrders.length > 0 && visibleProducts.length > 0 && <tfoot><tr><th scope="row">{showInfoColumns ? "Total" : `Total · ${visibleSummary}`}</th><td className="product-count-column">{visibleOrders.reduce((sum, order) => sum + orderProductCount(order), 0)}</td>{showInfoColumns && <td colSpan={2}>{visibleSummary}</td>}{totals.map((total, index) => <td key={visibleProducts[index].name}>{total || "—"}</td>)}</tr></tfoot>}
         </table>
       </div>
       </div>
@@ -997,7 +1030,13 @@ export function OrdersPanel({ hasMoreOrders = false, initialOrders, loadedOrderP
         </div>}
       </div>
       {notice && <div className="operation-notice" role="status">{notice}</div>}
-      {activeType === "wholesale" ? <WholesaleOrdersTable hasMoreOrders={hasMoreOrders} isAdmin={viewer?.role === "admin"} loadedOrderPages={loadedOrderPages} onStatusChange={(order, phase) => void moveOrder(order, phase)} orders={wholesale} pendingId={pendingId} serverRouteFilter={serverRouteFilter} /> : <RetailPanel catalog={retailCatalog} onAdvance={(order) => void advanceRetailOrder(order)} onConvertHelpToNew={(order) => void convertHelpToNew(order)} onCreate={addRetailOrder} onDelete={(order) => void removeRetailOrder(order)} onMove={(order, phase) => void moveOrder(order, phase)} onPaymentChange={(order, status) => void changePaymentStatus(order, status)} onResolveHelp={(order) => void resolveHelp(order)} onSave={saveOrder} onSendBill={(order) => void sendBill(order)} orders={retail} pendingId={pendingId} />}
+      {activeType === "wholesale" ? <WholesaleOrdersTable hasMoreOrders={hasMoreOrders} isAdmin={viewer?.role === "admin"} loadedOrderPages={loadedOrderPages} onRowsSaved={(savedRows) => setOrders((current) => {
+        const updates = new Map(savedRows.map((row) => [row.orderId, row]));
+        return current.map((order) => {
+          const saved = updates.get(order.id);
+          return saved ? { ...order, route: saved.routeName, notes: saved.notes, items: saved.items } : order;
+        });
+      })} onStatusChange={(order, phase) => void moveOrder(order, phase)} orders={wholesale} pendingId={pendingId} serverRouteFilter={serverRouteFilter} /> : <RetailPanel catalog={retailCatalog} onAdvance={(order) => void advanceRetailOrder(order)} onConvertHelpToNew={(order) => void convertHelpToNew(order)} onCreate={addRetailOrder} onDelete={(order) => void removeRetailOrder(order)} onMove={(order, phase) => void moveOrder(order, phase)} onPaymentChange={(order, status) => void changePaymentStatus(order, status)} onResolveHelp={(order) => void resolveHelp(order)} onSave={saveOrder} onSendBill={(order) => void sendBill(order)} orders={retail} pendingId={pendingId} />}
     </main></div>
   );
 }

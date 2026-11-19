@@ -50,4 +50,5 @@ export type Order = {
   highLevel?: { contactId?: string; locationId?: string; conversationId?: string; conversationUrl?: string };
   helpRequest?: boolean;
   notes?: string;
+  deletedAt?: string;
 };

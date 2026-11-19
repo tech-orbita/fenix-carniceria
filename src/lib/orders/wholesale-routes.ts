@@ -18,6 +18,14 @@ function normalizedIdentityPart(value: string) {
   return value.trim().replace(/\s+/g, " ").toLocaleLowerCase("es");
 }
 
+export function normalizedTaxId(value?: string | null) {
+  return (value ?? "").replace(/[^a-z0-9]/gi, "").toLocaleLowerCase("es");
+}
+
+export function normalizedCustomerPhone(value?: string | null) {
+  return (value ?? "").replace(/\D/g, "");
+}
+
 export function customerIdentityKey(
   customerType: "retail" | "wholesale",
   values: { businessName?: string; name: string; phone?: string },

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { customerIdentityKey } from "@/lib/orders/wholesale-routes";
+import { customerIdentityKey, normalizedCustomerPhone, normalizedTaxId } from "@/lib/orders/wholesale-routes";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   RegistrationValidationError,
@@ -56,17 +56,29 @@ export async function POST(request: Request) {
     // Un mayorista se identifica por establecimiento: varios negocios pueden compartir
     // teléfono, así que el teléfono no sirve para decidir qué ficha actualizar.
     const identityKey = customerIdentityKey("wholesale", { businessName: registration.businessName, name: registration.name });
-    const selectFields = "id,email";
-    const [{ data: byIdentity, error: identityError }, { data: byEmail, error: emailError }] = await Promise.all([
+    const selectFields = "id,email,tax_id,phone,wholesale_registered_at";
+    const [{ data: byIdentity, error: identityError }, { data: byEmail, error: emailError }, { data: stableIdentityCandidates, error: stableIdentityError }] = await Promise.all([
       supabase.from("customers").select(selectFields).eq("customer_type", "wholesale").eq("identity_key", identityKey).maybeSingle(),
       supabase.from("customers").select(selectFields).eq("customer_type", "wholesale").ilike("email", registration.email).limit(2),
+      supabase.from("customers").select(selectFields).eq("customer_type", "wholesale").eq("is_active", true),
     ]);
-    if (identityError || emailError) throw new Error("No se pudo consultar el registro de clientes");
+    if (identityError || emailError || stableIdentityError) throw new Error("No se pudo consultar el registro de clientes");
     if (!byIdentity && (byEmail?.length ?? 0) > 1) {
       return NextResponse.json({ error: "El correo ya aparece en más de un registro. Comunícate con Fénix para actualizar tus datos." }, { status: 409 });
     }
 
-    const existing = byIdentity ?? byEmail?.[0];
+    const submittedTaxId = normalizedTaxId(registration.taxId);
+    const matchingTaxCustomers = (stableIdentityCandidates ?? []).filter((customer) => normalizedTaxId(customer.tax_id) === submittedTaxId);
+    if (matchingTaxCustomers.length > 1) {
+      return NextResponse.json({ error: "La identificación aparece en más de un registro. Comunícate con Fénix para actualizar tus datos." }, { status: 409 });
+    }
+    const submittedPhone = normalizedCustomerPhone(registration.phone);
+    const matchingPhoneCustomers = (stableIdentityCandidates ?? []).filter((customer) => normalizedCustomerPhone(customer.phone) === submittedPhone);
+    const registeredPhoneCustomers = matchingPhoneCustomers.filter((customer) => customer.wholesale_registered_at);
+    const customerByPhone = matchingPhoneCustomers.length === 1
+      ? matchingPhoneCustomers[0]
+      : registeredPhoneCustomers.length === 1 ? registeredPhoneCustomers[0] : undefined;
+    const existing = matchingTaxCustomers[0] ?? customerByPhone ?? byIdentity ?? byEmail?.[0];
     const registeredAt = new Date().toISOString();
     const customerValues = {
       customer_type: "wholesale",

@@ -23,8 +23,10 @@ export default async function WholesaleCustomersPage() {
     .from("customers")
     .select("id,name,business_name,tax_id,phone,email,address,neighborhood,city,requires_e_invoice,wholesale_registered_at,ghl_sync_status,routes(name)")
     .eq("customer_type", "wholesale")
-    .not("wholesale_registered_at", "is", null)
-    .order("wholesale_registered_at", { ascending: false });
+    .eq("is_active", true)
+    .order("updated_at", { ascending: false });
+  const registeredCustomers = customers?.filter((customer) => customer.wholesale_registered_at).length ?? 0;
+  const orderCustomers = (customers?.length ?? 0) - registeredCustomers;
 
   return (
     <main className="users-page wholesale-customers-page">
@@ -38,7 +40,11 @@ export default async function WholesaleCustomersPage() {
         </div>
       </header>
       <section className="users-panel">
-        <div className="customers-summary"><strong>{customers?.length ?? 0}</strong><span>mayoristas inscritos</span></div>
+        <div className="customers-summary">
+          <strong>{customers?.length ?? 0}</strong>
+          <span>clientes mayoristas</span>
+          <small>{registeredCustomers} inscritos por formulario · {orderCustomers} creados desde pedidos</small>
+        </div>
         {error ? <p className="users-notice is-error">No se pudieron cargar las inscripciones.</p> : (
           <WholesaleRouteManager customers={(customers ?? []).map((customer) => {
             const route = Array.isArray(customer.routes) ? customer.routes[0] : customer.routes;

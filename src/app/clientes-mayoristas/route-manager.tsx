@@ -79,7 +79,7 @@ export function WholesaleRouteManager({ customers }: { customers: WholesaleCusto
               <td data-label="Orbita"><span className={`sync-badge is-${customer.syncStatus || "pending"}`}>{customer.syncStatus === "synced" ? "Sincronizado" : customer.syncStatus === "error" ? "Pendiente" : "En proceso"}</span></td>
               <td data-label="Inscripción">{customer.registeredAt}</td>
             </tr>)}
-            {!customers.length && <tr className="customers-empty-row"><td className="customers-empty" colSpan={9}>Todavía no hay clientes inscritos desde el formulario.</td></tr>}
+            {!customers.length && <tr className="customers-empty-row"><td className="customers-empty" colSpan={9}>Todavía no hay clientes mayoristas activos.</td></tr>}
           </tbody>
         </table>
       </div>

@@ -41,7 +41,16 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const viewer = await requireViewer();
   const supabase = await createClient();
   const canSeeWholesaleWallet = viewer.role === "admin";
-  const orderRouteSelection = requestedRoutes.length ? "order_route:routes!inner(name)" : "order_route:routes(name)";
+  // La ruta vigente pertenece al cliente. Resolver primero sus identificadores
+  // evita que la copia histórica del pedido oculte una sede ya clasificada.
+  const routedCustomers = requestedRoutes.length
+    ? await supabase
+      .from("customers")
+      .select("id,routes!inner(name)")
+      .eq("customer_type", "wholesale")
+      .in("routes.name", requestedRoutes)
+    : { data: undefined, error: null };
+  const routedCustomerIds = routedCustomers.data?.map((customer) => customer.id) ?? [];
 
   // RLS limita las filas al segmento del usuario; el filtro explícito lo deja claro.
   let query = supabase
@@ -61,6 +70,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       adjustments,
       total,
       notes,
+      deleted_at,
       received_at,
       form_name:source_payload->form_data->>form,
       form_tax_id:source_payload->form_data->>tax_id,
@@ -79,7 +89,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       help_without_order:source_payload->>helpWithoutOrder,
       manual_created_by:source_payload->manual_entry->>created_by,
       customers (name, business_name, phone, address, routes (name)),
-      ${orderRouteSelection},
+      order_route:routes(name),
       order_items (
         id,
         product_name,
@@ -96,9 +106,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     // Pide una fila extra para saber si existe otro lote sin ejecutar COUNT(*).
     .range(0, requestedRows);
   if (viewer.customerType) query = query.eq("customer_type", viewer.customerType);
-  // La relación está expuesta con el alias `order_route`; usar el nombre
-  // original (`routes.name`) dejaba el filtro sin apuntar al join seleccionado.
-  if (requestedRoutes.length) query = query.in("order_route.name", requestedRoutes);
+  if (requestedRoutes.length) {
+    query = routedCustomerIds.length ? query.in("customer_id", routedCustomerIds) : query.eq("customer_id", -1);
+  }
   // Los operadores mayoristas no necesitan descargar ni procesar el catálogo
   // minorista antes de poder abrir su planilla.
   const retailCatalogPromise = viewer.customerType === "wholesale" ? Promise.resolve([]) : loadRetailCatalog();
@@ -106,7 +116,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const hasMoreOrders = (queriedRows?.length ?? 0) > requestedRows;
   const rows = queriedRows?.slice(0, requestedRows);
 
-  const orders: Order[] = ordersError
+  const loadOrdersError = ordersError ?? routedCustomers.error;
+  const orders: Order[] = loadOrdersError
     ? []
     : (rows ?? []).map((row) => {
         const customer = Array.isArray(row.customers) ? row.customers[0] : row.customers;
@@ -180,8 +191,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           },
           helpRequest: row.help_without_order === "true",
           notes: row.notes ?? undefined,
+          deletedAt: row.deleted_at ?? undefined,
         };
       });
 
-  return <OrdersPanel hasMoreOrders={hasMoreOrders} initialOrders={orders} loadedOrderPages={page} retailCatalog={retailCatalog} serverRouteFilter={requestedRoutes} viewer={viewer} loadError={ordersError ? "No se pudieron cargar los pedidos. Intenta nuevamente." : undefined} />;
+  return <OrdersPanel hasMoreOrders={hasMoreOrders} initialOrders={orders} loadedOrderPages={page} retailCatalog={retailCatalog} serverRouteFilter={requestedRoutes} viewer={viewer} loadError={loadOrdersError ? "No se pudieron cargar los pedidos. Intenta nuevamente." : undefined} />;
 }

@@ -392,6 +392,40 @@ test("conserva lomo ancho y expresiones exactas no numéricas del formulario", (
   ]);
 });
 
+test("clasifica el lomo relajado de cerdo como cerdo y no confunde piel de cerdo", () => {
+  const order = mapHighLevelForm({ ...base, "Coloca tu Pedido": "10 lb de lomo relajada de cerdo\n6 piel cerdo" }, "mayorista-cliente");
+  assert.deepEqual(order.items, [
+    { product_name: "Lomo cerdo", quantity: 10, unit: "lb", preparation: "R" },
+    { product_name: "Comodín", quantity: 6, unit: "cantidad", preparation: "Piel cerdo" },
+  ]);
+});
+
+test("normaliza errores frecuentes de atravesado", () => {
+  const order = mapHighLevelForm({ ...base, "Coloca tu Pedido": "10 atrabesado\n5 atravessado" }, "mayorista-cliente");
+  assert.deepEqual(order.items, [
+    { product_name: "Atravesado", quantity: 10, unit: "cantidad" },
+    { product_name: "Atravesado", quantity: 5, unit: "cantidad" },
+  ]);
+});
+
+test("conserva una instrucción de bolsas como detalle de un solo producto", () => {
+  const order = mapHighLevelForm({ ...base, "Coloca tu Pedido": "30 hueso negro porfa 3 bolsas d 10 libras cada una" }, "mayorista-cliente");
+  assert.deepEqual(order.items, [
+    { product_name: "Hueso negro", quantity: 30, unit: "lb", notes: "30 hueso negro porfa 3 bolsas d 10 libras cada una" },
+  ]);
+});
+
+test("separa el pedido corrido sin duplicar la instrucción de empaque", () => {
+  const order = mapHighLevelForm({ ...base, "Coloca tu Pedido": "buenas 60 hueso 30 hueso negro porfa 3 bolsas d 10 libras cada una 15 lb costillitas 6 piel cerdo 5 lb pezuñas" }, "mayorista-cliente");
+  assert.deepEqual(order.items, [
+    { product_name: "Hueso", quantity: 60, unit: "cantidad" },
+    { product_name: "Hueso negro", quantity: 30, unit: "lb", notes: "30 hueso negro porfa 3 bolsas d 10 libras cada una" },
+    { product_name: "Costillita", quantity: 15, unit: "lb" },
+    { product_name: "Comodín", quantity: 6, unit: "cantidad", preparation: "Piel cerdo" },
+    { product_name: "Pezuña cerdo", quantity: 5, unit: "lb" },
+  ]);
+});
+
 test("mantiene costilla, costillita y costillita de cerdo en columnas distintas", () => {
   const order = mapHighLevelForm({ ...base, "Coloca tu Pedido": "6 libras de costilla\n5 libras de costillita\n4 libras de costillita de cerdo" }, "mayorista-cliente");
   assert.deepEqual(order.items, [
