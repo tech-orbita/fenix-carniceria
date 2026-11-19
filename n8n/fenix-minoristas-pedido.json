@@ -542,7 +542,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ type: 'WhatsApp', contactId: $('Validar extracción').item.json.payload.contactId, message: $('Resultado').item.json.adjusted ? `Listo, actualicé el pedido ${$('Resultado').item.json.orderNumber}.` : `Listo, tu pedido ${$('Resultado').item.json.orderNumber} quedó registrado. Te avisaremos cuando esté listo para despacho.` }) }}",
+        "jsonBody": "={{ (() => { const conversation = $('Buscar conversación GHL').item.json.body?.conversations?.[0] || {}; const providerId = conversation.lastMessageConversationProviderId || conversation.lastChannelAccount?.[0]?.value || null; const lastMessageType = String(conversation.lastMessageType || ''); const type = providerId || /SMS/i.test(lastMessageType) ? 'SMS' : 'WhatsApp'; const body = { type, contactId: $('Validar extracción').item.json.payload.contactId, message: $('Resultado').item.json.adjusted ? `Listo, actualicé el pedido ${$('Resultado').item.json.orderNumber}.` : `Listo, tu pedido ${$('Resultado').item.json.orderNumber} quedó registrado. Te avisaremos cuando esté listo para despacho.` }; if (providerId) body.conversationProviderId = providerId; return JSON.stringify(body); })() }}",
         "options": {
           "response": {
             "response": {
@@ -1046,7 +1046,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ type: 'WhatsApp', contactId: $('Validar extracción').item.json.payload.contactId, message: `Pedido ${$('Resultado').item.json.orderNumber} registrado para el ${$('Resultado').item.json.scheduledForLabel}. Te confirmaremos el total.` }) }}",
+        "jsonBody": "={{ (() => { const conversation = $('Buscar conversación GHL').item.json.body?.conversations?.[0] || {}; const providerId = conversation.lastMessageConversationProviderId || conversation.lastChannelAccount?.[0]?.value || null; const lastMessageType = String(conversation.lastMessageType || ''); const type = providerId || /SMS/i.test(lastMessageType) ? 'SMS' : 'WhatsApp'; const body = { type, contactId: $('Validar extracción').item.json.payload.contactId, message: `Pedido ${$('Resultado').item.json.orderNumber} registrado para el ${$('Resultado').item.json.scheduledForLabel}. Te confirmaremos el total.` }; if (providerId) body.conversationProviderId = providerId; return JSON.stringify(body); })() }}",
         "options": {
           "response": {
             "response": {

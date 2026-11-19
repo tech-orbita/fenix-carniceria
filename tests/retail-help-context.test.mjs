@@ -33,12 +33,19 @@ test("n8n confirma únicamente después del registro e incluye el número real",
   const config = nodes.get("Config").parameters.assignments.assignments;
   const confirmationEnabled = config.find((entry) => entry.name === "SEND_CONFIRMATION");
   const confirmationBody = nodes.get("Confirmar al cliente").parameters.jsonBody;
+  const scheduledConfirmationBody = nodes.get("Avisar día de entrega").parameters.jsonBody;
   const resultCode = nodes.get("Resultado").parameters.jsCode;
 
   assert.equal(confirmationEnabled.value, "true");
   assert.match(resultCode, /Boolean\(body\.order_number\)/);
   assert.match(confirmationBody, /orderNumber/);
   assert.match(confirmationBody, /quedó registrado/);
+  for (const messageBody of [confirmationBody, scheduledConfirmationBody]) {
+    assert.match(messageBody, /lastMessageConversationProviderId/);
+    assert.match(messageBody, /lastChannelAccount/);
+    assert.match(messageBody, /conversationProviderId/);
+    assert.match(messageBody, /type = providerId \|\| \/SMS\/i\.test\(lastMessageType\) \? 'SMS' : 'WhatsApp'/);
+  }
 });
 
 test("el extractor exige confirmar si se anexa o se crea un pedido nuevo", () => {
