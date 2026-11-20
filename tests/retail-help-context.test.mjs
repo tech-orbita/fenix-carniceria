@@ -2,12 +2,25 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-import { isStandaloneRetailHelpPayload } from "../src/lib/orders/retail-normalization.ts";
+import { isStandaloneRetailHelpPayload, normalizeRetailItems, retailHelpOrderText } from "../src/lib/orders/retail-normalization.ts";
 
 test("una alerta de ayuda sin productos no se considera pedido operativo", () => {
   assert.equal(isStandaloneRetailHelpPayload({ helpWithoutOrder: true }), true);
   assert.equal(isStandaloneRetailHelpPayload({ helpWithoutOrder: false }), false);
   assert.equal(isStandaloneRetailHelpPayload({ rawOrderText: "1 libra de pulpa" }), false);
+});
+
+test("recupera únicamente los productos que el cliente envió antes de pasar la ayuda a Nuevos", () => {
+  const transcript = `FÉNIX J.A.: ¿Qué productos necesitas?\nCLIENTE: 20 libras de carne (para 40 porciones)\n10 libras de lomo de cerdo para (20 porciones)\n10- pechuga relajada para (20 porciones)\nFÉNIX J.A.: ¿La pechuga la prefieres relajada o entera?\nCLIENTE: Entregarle el pedido a Aliro`;
+  const orderText = retailHelpOrderText(transcript);
+
+  assert.equal(orderText, "20 libras de carne\n10 libras de lomo de cerdo\n10 pechuga relajada");
+  const items = normalizeRetailItems([], orderText, []);
+  assert.deepEqual(items.map((item) => [item.product_name, item.quantity, item.unit]), [
+    ["Carne", 10, "kg"],
+    ["Lomo de cerdo", 5, "kg"],
+    ["Pechuga relajada", 10, "und"],
+  ]);
 });
 
 test("el workflow conserva el cursor de una alerta y clasifica solo texto del cliente", () => {

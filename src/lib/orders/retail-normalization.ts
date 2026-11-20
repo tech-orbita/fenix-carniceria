@@ -276,6 +276,33 @@ export function normalizeRetailItems(
   }).filter((item): item is NormalizedRetailItem => Boolean(item));
 }
 
+export function retailHelpOrderText(value: string) {
+  const text = String(value ?? "").replace(/\r/g, "").trim();
+  if (!text) return "";
+
+  // Las solicitudes de ayuda guardan la transcripción completa. Al convertir
+  // una alerta en pedido solo deben recuperarse las líneas de productos que
+  // escribió el cliente, nunca las preguntas o respuestas del agente.
+  const hasSpeakers = /(?:^|\n)\s*(?:CLIENTE|FÉNIX J\.A\.):/i.test(text);
+  const customerText = hasSpeakers
+    ? text
+      .split(/(?=(?:^|\n)\s*(?:CLIENTE|FÉNIX J\.A\.):)/i)
+      .filter((part) => /^\s*CLIENTE:/i.test(part))
+      .map((part) => part.replace(/^\s*CLIENTE:\s*/i, ""))
+      .join("\n")
+    : text;
+
+  return customerText
+    .split("\n")
+    .map((line) => line.replace(/^\s*(?:[-*•]\s*)?/, "").trim())
+    .map((line) => line
+      .replace(/^(\d+(?:[.,]\d+)?)\s*[-–—]\s*/, "$1 ")
+      .replace(/\s*\(?\s*para\s*\(?\s*\d+\s+porciones?\s*\)?\s*\)?\s*$/i, "")
+      .trim())
+    .filter((line) => /^(?:pedido\s*)?#?\s*\d+(?:[.,]\d+)?\s+(?:[a-záéíóúñ]|(?:kg|kgs|lb|lbs)\b)/i.test(line))
+    .join("\n");
+}
+
 export function requiresRetailHelp(reason: string) {
   const normalized = normalizeProductName(reason);
   // Es una descripción de producto, no una solicitud de aclaración. Aunque el

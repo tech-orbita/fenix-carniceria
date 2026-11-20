@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { catalogProductFor, normalizeProductName, normalizeWholesaleUnit, parseOrderText, toKilograms, UNSPECIFIED_WHOLESALE_UNIT } from "@/lib/orders/product-parser";
 import { retailBillMessage, retailDispatchMessage } from "@/lib/orders/retail-bill";
 import { loadRetailCatalog } from "@/lib/orders/retail-agent";
-import { normalizeRetailItems } from "@/lib/orders/retail-normalization";
+import { normalizeRetailItems, retailHelpOrderText } from "@/lib/orders/retail-normalization";
 import { wholesaleDispatchMessage } from "@/lib/orders/wholesale-messages";
 import { findHighLevelConversationByPhone, sendHighLevelMessage, sendWholesalePaymentSummary, syncHighLevelOrderFields, syncOrderPipeline, syncWholesalePipeline } from "@/lib/orders/highlevel-pipeline";
 import { customerIdentityKey, wholesaleRoutes } from "@/lib/orders/wholesale-routes";
@@ -231,33 +231,60 @@ export async function convertRetailHelpToNewOrder(orderId: string) {
     ? current.source_payload as Record<string, unknown>
     : {};
   const reason = String(payload.helpReason ?? current.notes ?? "Pedido pendiente de completar").trim();
-  const productName = /carne\s+(?:en\s+)?trocitos/i.test(reason) ? "Carne en trocitos" : "Pedido pendiente de completar";
-  const { data: item, error: itemError } = await supabase.from("order_items").insert({
-    order_id: current.id,
+  const recoveredOrderText = retailHelpOrderText(String(payload.attemptedOrderText ?? ""));
+  const recoveredItems = recoveredOrderText
+    ? normalizeRetailItems([], recoveredOrderText, await loadRetailCatalog())
+    : [];
+  const items = recoveredItems.length ? recoveredItems : [{
     product_id: null,
-    product_name: productName,
+    product_name: /carne\s+(?:en\s+)?trocitos/i.test(reason) ? "Carne en trocitos" : "Pedido pendiente de completar",
     quantity: 1,
     actual_quantity: 1,
-    unit: "kg",
+    unit: "kg" as const,
     unit_price: 0,
+    preparation: null,
     notes: reason.slice(0, 500),
-    sort_order: 0,
-  }).select("id").single();
-  if (itemError || !item) return { ok: false as const, message: "No se pudo preparar la solicitud como pedido." };
+  }];
+  const { data: savedItems, error: itemError } = await supabase.from("order_items").insert(items.map((item, sortOrder) => ({
+    ...item,
+    order_id: current.id,
+    sort_order: sortOrder,
+  }))).select("id,product_name,quantity,actual_quantity,unit,unit_price,preparation,notes");
+  if (itemError || !savedItems?.length) return { ok: false as const, message: "No se pudo preparar la solicitud como pedido." };
 
-  const { helpWithoutOrder: _helpWithoutOrder, helpReason: _helpReason, ...operationalPayload } = payload;
+  const operationalPayload = { ...payload };
+  delete operationalPayload.helpWithoutOrder;
+  delete operationalPayload.helpReason;
+  const subtotal = items.reduce((total, item) => total + Math.round((item.actual_quantity ?? 0) * item.unit_price), 0);
   const { data: updated, error: updateError } = await supabase.from("orders").update({
     status: "received",
-    source_payload: { ...operationalPayload, convertedFromHelp: true, rawOrderText: reason },
+    source_payload: { ...operationalPayload, convertedFromHelp: true, rawOrderText: recoveredOrderText || reason },
     notes: reason,
+    subtotal,
   }).eq("id", current.id).eq("status", current.status).select("id,order_number").maybeSingle();
   if (updateError || !updated) {
-    await supabase.from("order_items").delete().eq("id", item.id).eq("order_id", current.id);
+    await supabase.from("order_items").delete().in("id", savedItems.map((item) => item.id)).eq("order_id", current.id);
     return { ok: false as const, message: "No se pudo pasar la solicitud a Nuevos." };
   }
 
   revalidatePath("/dashboard");
-  return { ok: true as const, status: "received" as const, message: `${updated.order_number} pasó a Nuevos. Completa el producto y el precio desde Editar.` };
+  return {
+    ok: true as const,
+    status: "received" as const,
+    items: savedItems.map((item) => ({
+      id: String(item.id),
+      productName: item.product_name,
+      quantity: Number(item.quantity),
+      actualQuantity: item.actual_quantity == null ? undefined : Number(item.actual_quantity),
+      unit: item.unit,
+      unitPrice: Number(item.unit_price),
+      preparation: item.preparation ?? undefined,
+      notes: item.notes ?? undefined,
+    })),
+    message: recoveredItems.length
+      ? `${updated.order_number} pasó a Nuevos con ${recoveredItems.length} productos recuperados.`
+      : `${updated.order_number} pasó a Nuevos. Completa el producto y el precio desde Editar.`,
+  };
 }
 
 export async function sendRetailPaymentSummary(orderId: string) {

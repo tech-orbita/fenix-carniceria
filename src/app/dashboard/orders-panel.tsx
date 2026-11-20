@@ -982,7 +982,7 @@ export function OrdersPanel({ hasMoreOrders = false, initialOrders, loadedOrderP
       ...item,
       status: "received",
       helpRequest: false,
-      items: [{ id: `converted-${order.id}`, productName: "Pedido pendiente de completar", quantity: 1, actualQuantity: 1, unit: "kg", unitPrice: 0, notes: order.notes }],
+      items: result.items,
     } : item));
     setNotice(result.message); setPendingId(undefined); router.refresh();
   };
