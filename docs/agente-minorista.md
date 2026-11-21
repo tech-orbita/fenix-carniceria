@@ -4,8 +4,8 @@ Esta guía separa las responsabilidades del agente conversacional, HighLevel y n
 
 ## Configuración que ya existe
 
-- n8n lee únicamente los mensajes nuevos del cliente y anexa productos al pedido abierto del día.
-- El pedido completo se conserva en el panel, aunque el cliente agregue productos en mensajes separados.
+- n8n lee únicamente los mensajes nuevos del cliente y crea un pedido nuevo por cada lista independiente de productos.
+- Los productos enviados en varios mensajes consecutivos se agrupan en una sola lista; solo se modifica un pedido abierto cuando el cliente lo pide de forma explícita.
 - Los datos existentes de nombre, teléfono, cédula y dirección se reutilizan como respaldo.
 - La confirmación automática de n8n está activada con `SEND_CONFIRMATION=true`. n8n es la única fuente de confirmación porque incluye el número real devuelto por el panel.
 - El panel sincroniza el pedido con el pipeline `Minoristas` y permite gestionar preparación, despacho, ayuda y pago.
@@ -46,9 +46,12 @@ PEDIDOS
 - No inventes productos, precios, descuentos, unidades ni disponibilidad. No mezcles precios mayoristas.
 - Mantén separados los nombres parecidos. “Pulpa de cerdo” o “pulpa cerdo” significa **Pulpa**; nunca lo cambies por “pata de cerdo”. “Pata de cerdo” solo aplica cuando el cliente escribe o dicta claramente “pata”. Conserva literalmente la palabra original en el pedido.
 - Respeta la unidad de venta del catálogo; la pata de res se cotiza por unidad.
-- Cuando exista un pedido abierto y el cliente envíe productos, cambios o una segunda lista, no decidas si se anexan o forman otro pedido. Pregunta exactamente: “Ya tienes un pedido abierto. ¿Deseas agregar esto al pedido actual o crear un pedido nuevo?”
-- No ejecutes la acción hacia n8n hasta recibir una respuesta clara. Si responde “al actual”, “agrégalo”, “anexa”, “corrige” o equivalente, actualiza el pedido abierto. Si responde “nuevo”, “aparte”, “separado” o equivalente, crea otro pedido.
-- Después de la respuesta, ejecuta la acción una sola vez. No envíes una confirmación adicional: n8n confirmará el resultado con el número real devuelto por el panel.
+- Cada lista nueva de productos crea un pedido nuevo automáticamente, aunque exista un pedido abierto. No preguntes si debe anexarse al pedido anterior.
+- Agrupa como una sola lista los productos enviados en mensajes consecutivos dentro de una misma secuencia de compra. Espera aproximadamente de 60 a 90 segundos de silencio antes de considerar terminada la lista, cuando la plataforma permita aplicar esa espera.
+- Expresiones como “otro pedido”, “pedido aparte”, “para la abuela”, “para otra persona”, “para otra dirección” o “este es para mi casa” separan las listas y generan pedidos distintos sin pedir confirmación.
+- Solo modifica el pedido anterior cuando el cliente lo indique claramente con expresiones como “quiero agregar”, “anexa esto”, “quita”, “cambia”, “corrige mi pedido” o equivalentes.
+- Si el cliente envía los productos uno por uno dentro de la misma secuencia, registra un solo pedido y no un pedido por mensaje.
+- Después de identificar la lista o la modificación explícita, ejecuta la acción una sola vez. No envíes una confirmación adicional: n8n confirmará el resultado con el número real devuelto por el panel.
 - Solo muestra el resumen completo una vez: cuando el cliente indique de forma clara que terminó, que la lista está completa o que desea registrar el pedido.
 - No pidas una confirmación adicional si el cliente ya dijo “exacto”, “listo”, “ese es todo” o una expresión equivalente.
 - Después de ejecutar la acción de registro, no afirmes que el pedido quedó registrado ni repitas una confirmación. El workflow enviará el mensaje con el número real únicamente si el panel respondió correctamente.
@@ -58,10 +61,10 @@ PEDIDOS
 - Si el total todavía depende del peso real, indica de forma breve que el equipo confirmará el valor. No inventes el total.
 - Para recogida en tienda, registra esa modalidad. Para domicilio, usa la dirección guardada o la nueva dirección indicada.
 - Interpreta “domi” y variantes o errores ortográficos reconocibles de “domicilio” (por ejemplo “domicilo”, “domilio” o “domisilio”) como entrega a domicilio. No obligues al cliente a escribir la palabra exacta.
-- Aunque el cliente diga “otro pedido”, “pedido aparte”, “por separado”, “para otra persona” o “para otra dirección”, confirma con la pregunta obligatoria antes de ejecutar la acción. Tras confirmar “nuevo”, no copies productos del pedido anterior.
-- La regla anterior también aplica cuando ambos pedidos van a la misma dirección. Dos listas que el cliente identifica como pedidos distintos deben generar dos números de pedido distintos.
+- Cuando el cliente diga “otro pedido”, “pedido aparte”, “por separado”, “para otra persona” o “para otra dirección”, crea un pedido nuevo de inmediato y no copies productos del pedido anterior.
+- La regla anterior también aplica cuando ambos pedidos van a la misma dirección. Dos listas que el cliente identifica como pedidos distintos deben generar dos números de pedido distintos sin preguntas adicionales.
 - Cada pedido conserva su propia dirección. Nunca reemplaces la dirección de un pedido anterior ni juntes dos direcciones en una sola orden.
-- Antes de las 2:00 p. m. de Bogotá, una petición de “agrega”, “añade”, “quita”, “cambia” o “corrige” puede modificar el pedido actual únicamente después de que el cliente confirme que desea anexarla. Desde las 2:00 p. m. comienza una nueva ventana operativa: si no existe un pedido en esa ventana, crea uno nuevo aunque el cliente diga “agrega”.
+- Antes de las 2:00 p. m. de Bogotá, una petición explícita de “agrega”, “añade”, “quita”, “cambia” o “corrige” puede modificar el pedido actual sin una pregunta adicional. Desde las 2:00 p. m. comienza una nueva ventana operativa: si no existe un pedido en esa ventana, crea uno nuevo aunque el cliente diga “agrega”.
 - Cuando crees un pedido nuevo, el resumen y la acción enviada a n8n deben contener únicamente los productos de ese nuevo pedido. Cuando modifiques el pedido actual, deben contener el pedido completo actualizado.
 - Acepta pedidos por valor. Expresiones como “$10.000 de carne”, “por 10.000 carne” o “9 mil en butifarra” son pedidos válidos; conserva el valor literal y no obligues al cliente a convertirlo a libras o kilos.
 
@@ -97,7 +100,7 @@ En **Conversation AI > agente minorista > Goals/Intent > Setup your Actions**:
 2. Mapea el barrio a su campo real del contacto. No incluyas cédula ni zona entre los campos que el agente debe recopilar. Nunca guardes una dirección en nombre, apellido ni en el motivo de ayuda.
 3. Conserva nombre y teléfono en el flujo de recopilación estándar del agente. En WhatsApp, el teléfono normalmente ya pertenece al contacto; solo debe pedirse si está vacío o si se necesita otro número de recepción.
 4. Para cambios de dirección ya registrada, agrega una acción separada **Trigger Workflow** llamada `Actualizar dirección minorista`. Ese workflow debe vaciar dirección, barrio y zona, colocar `Registro Minorista Completo = No` y permitir que Contact Info capture los valores nuevos. No lo ejecutes para un cliente nuevo. Para otros tipos de cambio crea una acción específica o transfiere al equipo, evitando borrar datos que el cliente no pidió modificar.
-5. Mantén una sola acción para registrar el pedido y una sola fuente de mensajes de confirmación. Con `SEND_CONFIRMATION=true`, la confirmación la envía n8n con el número real; el agente no debe enviar otro mensaje de registro. Usa esta condición en `Enviar Pedido a n8n`: **“Activa solo si hay una lista de productos pendiente y no existe pedido abierto, o el cliente ya eligió anexar o crear uno nuevo. No actives por dirección, barrio, nombre, teléfono, modalidad, método de pago, saludo, agradecimiento o consulta aislados. Una dirección solo completa datos y nunca es un pedido. Ejecuta una sola vez por evento válido.”**
+5. Mantén una sola acción para registrar el pedido y una sola fuente de mensajes de confirmación. Con `SEND_CONFIRMATION=true`, la confirmación la envía n8n con el número real; el agente no debe enviar otro mensaje de registro. Usa esta condición en `Enviar Pedido a n8n`: **“Activa por cada lista completa de productos. Una lista nueva crea un pedido nuevo aunque exista uno abierto. Solo actualiza el pedido anterior cuando el cliente diga claramente que desea agregar, anexar, quitar, cambiar o corregir. Agrupa los productos enviados en mensajes consecutivos dentro de la misma secuencia; si el cliente separa destinos o dice otro pedido, ejecuta una vez por cada lista independiente. No actives por dirección, barrio, nombre, teléfono, modalidad, método de pago, saludo, agradecimiento o consulta aislados. Una dirección solo completa datos y nunca es un pedido.”**
 6. En la acción que dispara `Fénix · Minoristas · Pedido IA → Panel`, incluye también esta condición explícita: **“Activa este flujo cuando el cliente envíe una imagen, documento, comprobante, soporte o recibo de pago, aunque no esté haciendo un pedido.”** El workflow ya clasifica el archivo y crea el caso en `Requiere ayuda`; si el agente solo responde en el chat pero no ejecuta la acción, el panel nunca recibirá el caso.
 7. Configura **Human Handover/Stop Bot** para que solo una respuesta humana real o una transferencia explícita pause las respuestas automáticas. No uses la recepción de un pedido, un comprobante, una etiqueta minorista ni un fallo temporal del workflow como condición para apagar el agente.
 8. Configura la reanudación del agente ante un nuevo mensaje entrante del cliente después de cerrar la intervención humana. Verifica que no quede un estado permanente de `Stop Bot` en chats minoristas.
@@ -129,7 +132,7 @@ La acción Contact Info guarda los datos; este workflow verifica que estén comp
 1. Contacto nuevo sin datos: pide únicamente nombre, teléfono, dirección y barrio; nunca cédula ni zona. El workflow marca `Registro Minorista Completo = Sí` al terminar.
 2. Contacto recurrente completo: “Quiero 2 libras de churrasco para la dirección de siempre” no provoca preguntas de registro.
 3. Contacto parcial: si ya existen nombre y teléfono, solicita solo dirección y barrio.
-4. Anexo: ante “Agrega una pechuga tajada” y un pedido abierto, pregunta si debe anexarse o crear uno nuevo; solo ejecuta la acción después de una respuesta clara.
+4. Anexo: ante “Agrega una pechuga tajada” y un pedido abierto, actualiza ese pedido sin preguntar. Ante una lista nueva sin una instrucción explícita de modificación, crea un pedido nuevo.
 5. Cierre: después de “exacto” registra el pedido sin pedir otra confirmación.
 6. Agradecimiento: responde “Con gusto.” sin reabrir la conversación.
 7. Pago: al enviar un comprobante por el chat, el caso aparece en **Requiere ayuda**, queda pendiente de validación y nunca se confirma automáticamente.
