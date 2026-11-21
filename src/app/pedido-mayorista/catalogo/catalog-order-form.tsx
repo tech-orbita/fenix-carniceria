@@ -34,9 +34,26 @@ export function CatalogOrderForm({ demo = false, products }: { demo?: boolean; p
     event.preventDefault();
     setNotice({ kind: "loading", message: "Comprobando la prueba…" });
     if (demo) {
-      await new Promise((resolve) => setTimeout(resolve, 450));
-      setReceipt("FEN-PRUEBA-LISTA");
-      setNotice({ kind: "success", message: "Prueba completada. Ningún dato fue guardado ni enviado." });
+      try {
+        const response = await fetch("/api/wholesale-order/test", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            businessName,
+            phone,
+            notes,
+            paymentProofName: proof?.name,
+            variant: "catalog",
+            items: rows.map((row) => ({ productName: row.productName, quantity: Number(row.quantity), unit: row.unit, preparation: row.preparation })),
+          }),
+        });
+        const result = await response.json() as { error?: string; orderNumber?: string };
+        if (!response.ok || !result.orderNumber) throw new Error(result.error || "No pudimos guardar la prueba.");
+        setReceipt(result.orderNumber);
+        setNotice({ kind: "success", message: "Prueba guardada en el panel con la marca PRUEBA." });
+      } catch (error) {
+        setNotice({ kind: "error", message: error instanceof Error ? error.message : "No pudimos guardar la prueba." });
+      }
       return;
     }
     setNotice({ kind: "error", message: "Esta versión está disponible únicamente para revisión." });
@@ -48,7 +65,7 @@ export function CatalogOrderForm({ demo = false, products }: { demo?: boolean; p
 
   if (receipt) return (
     <section className="wholesale-order-card portal-receipt" role="status">
-      <span className="portal-receipt-check">✓</span><p>Prueba completada</p><h2>{receipt}</h2><strong>{businessName}</strong>
+      <span className="portal-receipt-check">✓</span><p>Prueba visible en el panel</p><h2>{receipt}</h2><strong>{businessName}</strong>
       <ul><li>Se conservaron {rows.length} renglones de productos.</li>{proof ? <li>El comprobante quedó incluido en la simulación.</li> : null}</ul>
       <button className="portal-primary-button" onClick={reset} type="button">Hacer otra prueba</button>
     </section>

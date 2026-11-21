@@ -22,7 +22,7 @@ export default async function CatalogOrderPage({ searchParams }: { searchParams:
           <Image alt="Fénix Carnes" height={120} priority src="/logo-fenix-bn.svg" width={230} />
           <div><span>Portal mayorista · opción catálogo</span><h1>Escoge cada producto</h1><p>Agrega tantos renglones como necesites. Puedes repetir el mismo producto y cada renglón se conservará por separado.</p></div>
         </header>
-        {demo ? <div className="portal-demo-banner" role="status">Vista de prueba · Ningún dato será guardado ni enviado</div> : null}
+        {demo ? <div className="portal-demo-banner" role="status">Vista de prueba · El pedido aparecerá en el panel con la marca PRUEBA y no activará automatizaciones</div> : null}
         <CatalogOrderForm demo={demo} products={products} />
         <footer>Fénix Carnes · Prueba comparativa del formulario mayorista</footer>
       </div>

@@ -5,7 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { classifyHighLevelContact, sendHighLevelMessage, syncHighLevelOrderFields, syncWholesalePipeline } from "@/lib/orders/highlevel-pipeline";
 import { wholesaleOrderConfirmationMessage } from "@/lib/orders/wholesale-messages";
-import { customerIdentityKey, normalizedCustomerPhone, normalizedTaxId } from "@/lib/orders/wholesale-routes";
+import { customerIdentityKey, normalizedCustomerPhone, normalizedTaxId, wholesaleCustomerRouteId } from "@/lib/orders/wholesale-routes";
 import { existingWholesaleCustomerPayload, isExistingWholesaleCustomerOrder } from "@/lib/orders/wholesale-form-customer";
 
 type IngestItem = {
@@ -163,7 +163,9 @@ export async function ingestOrder(body: IngestBody) {
     : body;
   // Si el cliente ya tiene una ruta asignada desde el directorio, sus pedidos
   // siguientes la heredan. Los clientes nuevos permanecen "Sin clasificar".
-  const customerRouteId = submittedRouteName ? routeId : existingCustomer?.route_id ?? routeId;
+  // La ruta asignada previamente en el panel siempre manda. Una ruta incluida
+  // en el payload solo clasifica clientes realmente nuevos.
+  const customerRouteId = wholesaleCustomerRouteId(existingCustomer, routeId);
   const orderRouteId = customerRouteId;
 
   let customer: { id: number } | null = usesExistingWholesaleCustomer ? { id: existingCustomer!.id } : null;

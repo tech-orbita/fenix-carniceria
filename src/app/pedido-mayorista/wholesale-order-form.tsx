@@ -26,9 +26,19 @@ export function WholesaleOrderForm({ demo = false }: { demo?: boolean }) {
     }
     setNotice({ kind: "loading", message: demo ? "Comprobando la prueba…" : "Guardando tu pedido…" });
     if (demo) {
-      await new Promise((resolve) => setTimeout(resolve, 450));
-      setReceipt("FEN-PRUEBA");
-      setNotice({ kind: "success", message: "Prueba completada. Ningún dato fue guardado ni enviado." });
+      try {
+        const response = await fetch("/api/wholesale-order/test", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ businessName, phone, orderText, notes, items: parsed.items, paymentProofName: proof?.name, variant: "free_text" }),
+        });
+        const result = await response.json() as { error?: string; orderNumber?: string };
+        if (!response.ok || !result.orderNumber) throw new Error(result.error || "No pudimos guardar la prueba.");
+        setReceipt(result.orderNumber);
+        setNotice({ kind: "success", message: "Prueba guardada en el panel con la marca PRUEBA." });
+      } catch (error) {
+        setNotice({ kind: "error", message: error instanceof Error ? error.message : "No pudimos guardar la prueba." });
+      }
       return;
     }
     const data = new FormData();
@@ -51,7 +61,7 @@ export function WholesaleOrderForm({ demo = false }: { demo?: boolean }) {
 
   if (receipt) return (
     <section className="wholesale-order-card portal-receipt" role="status">
-      <span className="portal-receipt-check">✓</span><p>Pedido recibido</p><h2>{receipt}</h2><strong>{businessName}</strong>
+        <span className="portal-receipt-check">✓</span><p>{demo ? "Prueba visible en el panel" : "Pedido recibido"}</p><h2>{receipt}</h2><strong>{businessName}</strong>
       <ul><li>Los renglones repetidos se conservaron por separado.</li>{proof && <li>El comprobante quedó adjunto para revisión.</li>}</ul>
       <button className="portal-primary-button" onClick={reset} type="button">Hacer otro pedido</button>
     </section>

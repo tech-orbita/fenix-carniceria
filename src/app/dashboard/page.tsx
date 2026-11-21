@@ -42,14 +42,14 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   // La ruta vigente pertenece al cliente. Resolver primero sus identificadores
   // evita que la copia histórica del pedido oculte una sede ya clasificada.
   const { assigned: assignedRouteFilters, includeUnassigned } = splitWholesaleRouteFilters(requestedRoutes);
-  const assignedCustomersPromise = assignedRouteFilters.length
+  const assignedCustomers = assignedRouteFilters.length
     ? await supabase
       .from("customers")
       .select("id,routes!inner(name)")
       .eq("customer_type", "wholesale")
       .in("routes.name", assignedRouteFilters)
     : { data: undefined, error: null };
-  const unassignedCustomersPromise = includeUnassigned
+  const unassignedCustomers = includeUnassigned
     ? await supabase
       .from("customers")
       .select("id")
@@ -57,8 +57,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       .is("route_id", null)
     : { data: undefined, error: null };
   const routedCustomerIds = [...new Set([
-    ...(assignedCustomersPromise.data?.map((customer) => customer.id) ?? []),
-    ...(unassignedCustomersPromise.data?.map((customer) => customer.id) ?? []),
+    ...(assignedCustomers.data?.map((customer) => customer.id) ?? []),
+    ...(unassignedCustomers.data?.map((customer) => customer.id) ?? []),
   ])];
 
   // RLS limita las filas al segmento del usuario; el filtro explícito lo deja claro.
@@ -97,6 +97,10 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       payload_conversation_url:source_payload->>conversationUrl,
       help_without_order:source_payload->>helpWithoutOrder,
       help_attachment_url:source_payload->>attachmentUrl,
+      test_submission:source_payload->>test_submission,
+      test_customer_name:source_payload->test_customer->>name,
+      test_business_name:source_payload->test_customer->>business_name,
+      test_customer_phone:source_payload->test_customer->>phone,
       manual_created_by:source_payload->manual_entry->>created_by,
       customers (name, business_name, phone, address, routes (name)),
       order_route:routes(name),
@@ -127,7 +131,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const hasMoreOrders = (queriedRows?.length ?? 0) > requestedRows;
   const rows = queriedRows?.slice(0, requestedRows);
 
-  const loadOrdersError = ordersError ?? assignedCustomersPromise.error ?? unassignedCustomersPromise.error;
+  const loadOrdersError = ordersError ?? assignedCustomers.error ?? unassignedCustomers.error;
   const orders: Order[] = loadOrdersError
     ? []
     : (rows ?? []).map((row) => {
@@ -162,6 +166,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         const paymentAttachmentUrl = paymentAttachment
           ? `${resolveSiteUrl({ configured: process.env.NEXT_PUBLIC_SITE_URL, vercelProductionHost: process.env.VERCEL_PROJECT_PRODUCTION_URL })}/api/order-attachments/${paymentAttachment.id}`
           : undefined;
+        const isTest = row.test_submission === "true";
         const safeFormData = row.source === "form" ? {
           form: row.form_name ?? "Pedido mayorista",
           tax_id: row.form_tax_id ?? undefined,
@@ -178,9 +183,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           id: String(row.id),
           orderNumber: row.order_number,
           customerType: row.customer_type,
-          customer: customer?.name ?? "Cliente sin nombre",
-          businessName: customer?.business_name ?? undefined,
-          phone: customer?.phone ?? "Sin teléfono",
+          customer: isTest ? row.test_customer_name ?? "Cliente de prueba" : customer?.name ?? "Cliente sin nombre",
+          businessName: isTest ? row.test_business_name ?? "Prueba de formulario" : customer?.business_name ?? undefined,
+          phone: isTest ? row.test_customer_phone ?? "Sin teléfono" : customer?.phone ?? "Sin teléfono",
           receivedAt: row.received_at,
           deliveryDate: row.requested_delivery_at?.slice(0, 10) ?? "Sin fecha",
           fulfillment: row.fulfillment_type,
@@ -206,6 +211,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           },
           helpRequest: row.help_without_order === "true",
           helpAttachmentUrl: canSeeOrderPayments ? row.help_attachment_url ?? undefined : undefined,
+          isTest,
           notes: row.notes ?? undefined,
           deletedAt: row.deleted_at ?? undefined,
         };
