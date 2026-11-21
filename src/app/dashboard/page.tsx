@@ -95,6 +95,10 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       payload_conversation_id:source_payload->>conversationId,
       payload_conversation_url:source_payload->>conversationUrl,
       help_without_order:source_payload->>helpWithoutOrder,
+      test_submission:source_payload->>test_submission,
+      test_customer_name:source_payload->test_customer->>name,
+      test_business_name:source_payload->test_customer->>business_name,
+      test_customer_phone:source_payload->test_customer->>phone,
       manual_created_by:source_payload->manual_entry->>created_by,
       customers (name, business_name, phone, address, routes (name)),
       order_route:routes(name),
@@ -155,6 +159,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         const items = storedItems;
         const storedAddress = cleanAddress(row.delivery_address) ?? cleanAddress(customer?.address);
         const canSeeOrderPayments = row.customer_type === "retail" || canSeeWholesaleWallet;
+        const isTest = row.test_submission === "true";
         const safeFormData = row.source === "form" ? {
           form: row.form_name ?? "Pedido mayorista",
           tax_id: row.form_tax_id ?? undefined,
@@ -171,9 +176,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           id: String(row.id),
           orderNumber: row.order_number,
           customerType: row.customer_type,
-          customer: customer?.name ?? "Cliente sin nombre",
-          businessName: customer?.business_name ?? undefined,
-          phone: customer?.phone ?? "Sin teléfono",
+          customer: isTest ? row.test_customer_name ?? "Cliente de prueba" : customer?.name ?? "Cliente sin nombre",
+          businessName: isTest ? row.test_business_name ?? "Prueba de formulario" : customer?.business_name ?? undefined,
+          phone: isTest ? row.test_customer_phone ?? "Sin teléfono" : customer?.phone ?? "Sin teléfono",
           receivedAt: row.received_at,
           deliveryDate: row.requested_delivery_at?.slice(0, 10) ?? "Sin fecha",
           fulfillment: row.fulfillment_type,
@@ -198,6 +203,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             conversationUrl: row.form_conversation_url ?? row.payload_conversation_url ?? undefined,
           },
           helpRequest: row.help_without_order === "true",
+          isTest,
           notes: row.notes ?? undefined,
           deletedAt: row.deleted_at ?? undefined,
         };
