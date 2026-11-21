@@ -61,15 +61,25 @@ test("n8n confirma únicamente después del registro e incluye el número real",
   }
 });
 
-test("el extractor exige confirmar si se anexa o se crea un pedido nuevo", () => {
+test("el extractor crea una lista nueva y solo anexa por instrucción explícita", () => {
   const workflow = JSON.parse(readFileSync(new URL("../n8n/fenix-minoristas-pedido.json", import.meta.url), "utf8"));
   const nodes = new Map(workflow.nodes.map((node) => [node.name, node]));
   const extractorPrompt = nodes.get("Basic LLM Chain").parameters.messages.messageValues[0].message;
 
-  assert.match(extractorPrompt, /No decidas por tu cuenta/);
-  assert.match(extractorPrompt, /pregunta explícita/);
-  assert.match(extractorPrompt, /respuesta clara del CLIENTE/);
-  assert.match(extractorPrompt, /Falta confirmar si corresponde al pedido actual o a un pedido nuevo/);
+  assert.match(extractorPrompt, /No le pidas al cliente que confirme/);
+  assert.match(extractorPrompt, /Una lista nueva de productos crea action=nuevo/);
+  assert.match(extractorPrompt, /Solo devuelve action=anexo cuando el CLIENTE diga claramente/);
+  assert.match(extractorPrompt, /Varios mensajes consecutivos con productos.*forman una sola lista/);
+  assert.match(extractorPrompt, /para la abuela/);
+  assert.doesNotMatch(extractorPrompt, /Falta confirmar si corresponde al pedido actual o a un pedido nuevo/);
+});
+
+test("el workflow evita repetir la confirmación de un lote duplicado", () => {
+  const workflow = JSON.parse(readFileSync(new URL("../n8n/fenix-minoristas-pedido.json", import.meta.url), "utf8"));
+  const nodes = new Map(workflow.nodes.map((node) => [node.name, node]));
+  const confirmationConditions = nodes.get("¿Enviar confirmación?").parameters.conditions.conditions;
+
+  assert.ok(confirmationConditions.some((condition) => /duplicate !== true/.test(condition.leftValue)));
 });
 
 test("el registro minorista se completa solo con nombre, teléfono, dirección y barrio", () => {

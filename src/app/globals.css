@@ -4144,6 +4144,20 @@ a {
   color: #a0610b;
 }
 
+.orders-app .rt-stat-action {
+  width: 100%;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.orders-app .rt-stat-action:hover,
+.orders-app .rt-stat-action:focus-visible {
+  border-color: #d9a548;
+  box-shadow: inset 0 0 0 1px #d9a548;
+}
+
 .orders-app .rt-alert {
   display: flex;
   align-items: center;
@@ -4182,7 +4196,7 @@ a {
 /* Fases del pedido */
 .orders-app .rt-phases {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 10px;
 }
 

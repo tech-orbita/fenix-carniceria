@@ -25,13 +25,13 @@
           }
         }
       },
-      "id": "fa5e7dce-871f-466b-9082-f7e5edb4a0e0",
+      "id": "025ec528-62bc-47d3-b81a-8026bc2371f5",
       "name": "Contexto del pedido",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -18736,
-        4864
+        16,
+        320
       ],
       "notesInFlow": true,
       "notes": "Pedido abierto de hoy y desde qué mensaje leer"
@@ -61,13 +61,13 @@
           }
         }
       },
-      "id": "877aab00-1029-4b6a-8620-35b4fb7d46bd",
+      "id": "5cf35358-65c0-406e-ad79-6361a915aecf",
       "name": "Pedir ayuda (extracción falló)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -15392,
-        5040
+        3360,
+        496
       ],
       "onError": "continueRegularOutput"
     },
@@ -75,13 +75,13 @@
       "parameters": {
         "jsCode": "// Reemplaza cada [AUDIO n] por su texto, en el mismo lugar de la conversación.\nconst transcript = $('Armar transcripción').first().json;\nif (!transcript.audios.length) {\n  return [{ json: { ...transcript, audioProblem: null, audioFailures: 0 }, pairedItem: { item: 0 } }];\n}\nconst sources = $('Separar audios').all();\nconst results = $input.all();\nlet text = transcript.transcript;\nlet failures = 0;\nsources.forEach((source, index) => {\n  const response = results[index]?.json || {};\n  const spoken = response.statusCode === 200 ? String(response.body?.text || '').trim() : '';\n  const key = source.json.key;\n  if (spoken) {\n    text = text.replace(`[${key}]`, `[${key} - nota de voz transcrita]: ${spoken}`);\n  } else {\n    failures += 1;\n    text = text.replace(`[${key}]`, `[${key} - nota de voz que no se pudo transcribir]`);\n  }\n});\nreturn [{ json: {\n  ...transcript,\n  transcript: text,\n  audioFailures: failures,\n  audioProblem: failures ? `${failures} de ${sources.length} notas de voz no se pudieron transcribir; escúchalas en la conversación` : null,\n}, pairedItem: { item: 0 } }];"
       },
-      "id": "73732c0c-ac90-4c0f-b18c-03c725a72e20",
+      "id": "c034b698-f3c9-43ab-a75b-f822c3a89d6b",
       "name": "Contexto de audio",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -17088,
-        4864
+        1664,
+        320
       ]
     },
     {
@@ -126,13 +126,13 @@
           }
         }
       },
-      "id": "d9558015-bc9f-4671-974f-b1f9163ea1ae",
+      "id": "176cc0e2-f0e4-4d47-9460-76c4d7ef4e51",
       "name": "Transcribir audio",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -17216,
-        4592
+        1536,
+        48
       ],
       "onError": "continueRegularOutput"
     },
@@ -140,13 +140,13 @@
       "parameters": {
         "jsCode": "// OpenAI reconoce el formato por la extensión del nombre: WhatsApp manda .opus/.oga o URLs sin extensión.\nconst SUPPORTED = /\\.(?:flac|mp3|mp4|mpeg|mpga|m4a|ogg|wav|webm)$/i;\nconst byMime = { 'audio/ogg': 'ogg', 'audio/opus': 'ogg', 'audio/mpeg': 'mp3', 'audio/mp3': 'mp3', 'audio/mp4': 'm4a', 'audio/x-m4a': 'm4a', 'audio/aac': 'm4a', 'audio/wav': 'wav', 'audio/x-wav': 'wav', 'audio/webm': 'webm', 'video/mp4': 'mp4' };\nreturn $input.all().map((item, index) => {\n  const file = item.binary?.audio;\n  if (file && !SUPPORTED.test(file.fileName || '')) {\n    const mime = String(file.mimeType || '').split(';')[0].trim().toLowerCase();\n    file.fileName = `nota-de-voz-${index + 1}.${byMime[mime] || 'ogg'}`;\n    if (!byMime[mime]) file.mimeType = 'audio/ogg';\n  }\n  return { json: item.json, binary: item.binary, pairedItem: { item: index } };\n});"
       },
-      "id": "704cc4df-0bc9-4e4a-86df-2bceb8d7741c",
+      "id": "6f811304-85c6-4e20-9cf7-ed32616b8016",
       "name": "Nombrar archivo de audio",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -17392,
-        4592
+        1360,
+        48
       ]
     },
     {
@@ -161,13 +161,13 @@
           }
         }
       },
-      "id": "6f06caad-a510-4d3b-9eaa-d327f0c2c46a",
+      "id": "2b6dadfd-bd3f-4d20-b003-193e10937356",
       "name": "Descargar audio",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -17568,
-        4592
+        1184,
+        48
       ],
       "onError": "continueRegularOutput"
     },
@@ -175,13 +175,13 @@
       "parameters": {
         "jsCode": "// Un ítem por nota de voz para descargarla y transcribirla.\nreturn $('Armar transcripción').first().json.audios.map((audio) => ({ json: audio, pairedItem: { item: 0 } }));"
       },
-      "id": "947dfb39-0063-4b62-8be4-bde047260087",
+      "id": "3c01b241-e828-4224-a803-326c8760fd47",
       "name": "Separar audios",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -17744,
-        4592
+        1008,
+        48
       ]
     },
     {
@@ -208,13 +208,13 @@
         },
         "options": {}
       },
-      "id": "14aeeb78-2ceb-4a1e-b107-bb2336113705",
+      "id": "3a526820-5326-4361-a287-eb86621db02b",
       "name": "¿Hay audios?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        -17792,
-        4848
+        960,
+        304
       ]
     },
     {
@@ -242,13 +242,13 @@
         },
         "options": {}
       },
-      "id": "9eb92abe-9042-4f35-9335-ba96df8c1b2d",
+      "id": "a3c41b83-b1d3-417a-9a2f-a27c61ba1683",
       "name": "¿Hay mensajes nuevos?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        -18000,
-        4864
+        752,
+        320
       ],
       "notesInFlow": true,
       "notes": "Sin mensajes nuevos del cliente no se llama a OpenAI (ayuda y barrido repiten llamados)"
@@ -261,13 +261,13 @@
           "responseCode": 200
         }
       },
-      "id": "1ae76916-68d8-4c78-b8f6-d003d7c7904a",
+      "id": "d58d3fa7-e355-406a-a313-186a421916d5",
       "name": "200 Sin mensajes nuevos",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [
-        -17744,
-        5120
+        1008,
+        576
       ]
     },
     {
@@ -278,13 +278,13 @@
           "responseCode": 200
         }
       },
-      "id": "84489af4-1e90-4400-86df-70ed55a37555",
+      "id": "10b5ccee-6803-499d-8522-3c8ea2fa7aba",
       "name": "200 Sin pedido para registrar",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [
-        -15392,
-        4816
+        3360,
+        272
       ]
     },
     {
@@ -293,7 +293,7 @@
           "options": {
             "caseSensitive": true,
             "leftValue": "",
-            "typeValidation": "loose",
+            "typeValidation": "strict",
             "version": 2
           },
           "conditions": [
@@ -312,26 +312,26 @@
         },
         "options": {}
       },
-      "id": "0219fc7e-3d1c-436e-814e-ed0ee3e433fb",
+      "id": "493ef0ed-3c6b-4218-b852-d239cd61843e",
       "name": "¿Mensaje sin pedido?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        -15632,
-        4896
+        3120,
+        352
       ]
     },
     {
       "parameters": {
         "jsCode": "const transcript = $('Armar transcripción').first().json;\nconst response = $input.first().json;\nif (!transcript.imageUrls.length) {\n  return [{ json: { imageText: '', paymentProof: false, visualStatus: 'not_needed', visualProblem: null } }];\n}\n\nlet imageText = '';\nlet paymentProof = false;\nlet visualProblem = null;\nif (response.statusCode !== 200) {\n  visualProblem = `OpenAI visual respondió ${response.statusCode || \"sin estado\"}`;\n} else {\n  try {\n    const rawContent = response.body?.choices?.[0]?.message?.content;\n    const parsed = typeof rawContent === 'string' ? JSON.parse(rawContent) : rawContent;\n    imageText = String(parsed?.imageText || '').trim();\n    paymentProof = parsed?.paymentProof === true;\n    if (!imageText && !paymentProof) visualProblem = 'La lectura visual no devolvió texto ni una clasificación válida';\n  } catch (error) {\n    visualProblem = 'La lectura visual no devolvió JSON válido';\n  }\n}\nreturn [{ json: { imageText, paymentProof, visualStatus: visualProblem ? 'failed' : paymentProof ? 'payment_proof' : 'extracted', visualProblem } }];"
       },
-      "id": "dda498c5-e251-41e0-9b0c-f14490825b33",
+      "id": "84495cf1-6be4-4540-8049-e90d79324833",
       "name": "Contexto visual",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -16448,
-        4880
+        2304,
+        336
       ]
     },
     {
@@ -352,13 +352,13 @@
           }
         }
       },
-      "id": "c00d92e3-427f-47ba-b074-7cdfc62dcbf8",
+      "id": "440c85b8-d2c4-44b5-b16c-e59610912f8c",
       "name": "Extraer texto de imágenes",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -16656,
-        4848
+        2096,
+        304
       ]
     },
     {
@@ -385,27 +385,27 @@
         },
         "options": {}
       },
-      "id": "88b0cbaf-133c-4391-9761-bc84df46ddab",
+      "id": "c8e2ae4d-241a-4820-aced-3e50c37ec893",
       "name": "¿Hay imágenes?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        -16864,
-        4864
+        1888,
+        320
       ]
     },
     {
       "parameters": {
         "schemaType": "manual",
-        "inputSchema": "{\n  \"type\": \"object\",\n  \"additionalProperties\": false,\n  \"required\": [\n    \"ok\",\n    \"error\",\n    \"action\",\n    \"customer\",\n    \"delivery\",\n    \"paymentMethod\",\n    \"rawOrderText\",\n    \"notes\"\n  ],\n  \"properties\": {\n    \"ok\": { \"type\": \"boolean\" },\n    \"error\": { \"type\": [\"string\", \"null\"] },\n    \"action\": { \"type\": [\"string\", \"null\"] },\n    \"customer\": {\n      \"type\": \"object\",\n      \"additionalProperties\": false,\n      \"required\": [\"name\", \"phone\", \"document\"],\n      \"properties\": {\n        \"name\": { \"type\": [\"string\", \"null\"] },\n        \"phone\": { \"type\": [\"string\", \"null\"] },\n        \"document\": { \"type\": [\"string\", \"null\"] }\n      }\n    },\n    \"delivery\": {\n      \"type\": \"object\",\n      \"additionalProperties\": false,\n      \"required\": [\"type\", \"address\", \"neighborhood\", \"zone\"],\n      \"properties\": {\n        \"type\": { \"type\": \"string\", \"enum\": [\"domicilio\", \"recogida\"] },\n        \"address\": { \"type\": [\"string\", \"null\"] },\n        \"neighborhood\": { \"type\": [\"string\", \"null\"] },\n        \"zone\": { \"type\": [\"string\", \"null\"] }\n      }\n    },\n    \"paymentMethod\": { \"type\": [\"string\", \"null\"] },\n    \"rawOrderText\": { \"type\": \"string\" },\n    \"notes\": { \"type\": [\"string\", \"null\"] }\n  }\n}"
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"additionalProperties\": false,\n  \"required\": [\n    \"orders\"\n  ],\n  \"properties\": {\n    \"orders\": {\n      \"type\": \"array\",\n      \"minItems\": 1,\n      \"maxItems\": 10,\n      \"items\": {\n        \"type\": \"object\",\n        \"additionalProperties\": false,\n        \"required\": [\n          \"ok\",\n          \"error\",\n          \"action\",\n          \"customer\",\n          \"delivery\",\n          \"paymentMethod\",\n          \"rawOrderText\",\n          \"notes\"\n        ],\n        \"properties\": {\n          \"ok\": {\n            \"type\": \"boolean\"\n          },\n          \"error\": {\n            \"type\": [\n              \"string\",\n              \"null\"\n            ]\n          },\n          \"action\": {\n            \"type\": [\n              \"string\",\n              \"null\"\n            ]\n          },\n          \"customer\": {\n            \"type\": \"object\",\n            \"additionalProperties\": false,\n            \"required\": [\n              \"name\",\n              \"phone\",\n              \"document\"\n            ],\n            \"properties\": {\n              \"name\": {\n                \"type\": [\n                  \"string\",\n                  \"null\"\n                ]\n              },\n              \"phone\": {\n                \"type\": [\n                  \"string\",\n                  \"null\"\n                ]\n              },\n              \"document\": {\n                \"type\": [\n                  \"string\",\n                  \"null\"\n                ]\n              }\n            }\n          },\n          \"delivery\": {\n            \"type\": \"object\",\n            \"additionalProperties\": false,\n            \"required\": [\n              \"type\",\n              \"address\",\n              \"neighborhood\",\n              \"zone\"\n            ],\n            \"properties\": {\n              \"type\": {\n                \"type\": \"string\",\n                \"enum\": [\n                  \"domicilio\",\n                  \"recogida\"\n                ]\n              },\n              \"address\": {\n                \"type\": [\n                  \"string\",\n                  \"null\"\n                ]\n              },\n              \"neighborhood\": {\n                \"type\": [\n                  \"string\",\n                  \"null\"\n                ]\n              },\n              \"zone\": {\n                \"type\": [\n                  \"string\",\n                  \"null\"\n                ]\n              }\n            }\n          },\n          \"paymentMethod\": {\n            \"type\": [\n              \"string\",\n              \"null\"\n            ]\n          },\n          \"rawOrderText\": {\n            \"type\": \"string\"\n          },\n          \"notes\": {\n            \"type\": [\n              \"string\",\n              \"null\"\n            ]\n          }\n        }\n      }\n    }\n  }\n}"
       },
       "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
       "typeVersion": 1.3,
       "position": [
-        -16080,
-        5296
+        2672,
+        752
       ],
-      "id": "e9b18e6b-aff0-479b-91b4-9d99f0d9a334",
+      "id": "5c345b04-fcef-4100-94ff-c0cffcc43c6b",
       "name": "Structured Output Parser"
     },
     {
@@ -413,8 +413,7 @@
         "model": {
           "__rl": true,
           "value": "gpt-4.1-mini",
-          "mode": "id",
-          "cachedResultName": "gpt-4.1-mini"
+          "mode": "id"
         },
         "builtInTools": {},
         "options": {}
@@ -422,21 +421,21 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
       "typeVersion": 1.3,
       "position": [
-        -16416,
-        5232
+        2336,
+        688
       ],
-      "id": "e0902c54-60e7-4c68-95c9-843483b32bb4",
+      "id": "cea82aa1-2ea7-4fa5-8c78-dd8dfbdb9e39",
       "name": "OpenAI Chat Model"
     },
     {
       "parameters": {
         "promptType": "define",
-        "text": "=Día válido en America/Bogota: {{ $('Armar transcripción').item.json.bogotaDay }}\n\n{{ $('Armar transcripción').item.json.openOrder ? 'PEDIDO ACTUAL ' + $('Armar transcripción').item.json.openOrder.number + ($('Armar transcripción').item.json.openOrder.inPreparation ? ' (ya en preparación)' : '') + ':\\n' + $('Armar transcripción').item.json.openOrder.text : 'PEDIDO ACTUAL: ninguno, los mensajes nuevos forman un pedido nuevo' }}\n\nMENSAJES NUEVOS (de más antiguo a más reciente; las notas de voz ya vienen transcritas en su lugar):\n{{ $('Contexto de audio').item.json.transcript || '(sin mensajes nuevos)' }}\n\nTEXTO EXTRAÍDO DE IMÁGENES:\n{{ $('Contexto visual').item.json.imageText || '(no se recibieron imágenes)' }}\n\nDATOS DEL CRM (solo completan campos faltantes):\nNombre: {{ $('Normalizar entrada').item.json.contactName || 'sin registrar' }}\nTeléfono: {{ $('Normalizar entrada').item.json.contactPhone || 'sin registrar' }}\nCédula: {{ $('Normalizar entrada').item.json.contactDocument || 'sin registrar' }}\nDirección: {{ $('Normalizar entrada').item.json.contactAddress || 'sin registrar' }}",
+        "text": "=Día válido en America/Bogota: {{ $('Armar transcripción').item.json.bogotaDay }}\n\n{{ $('Armar transcripción').item.json.openOrder ? 'PEDIDO ACTUAL ' + $('Armar transcripción').item.json.openOrder.number + ($('Armar transcripción').item.json.openOrder.inPreparation ? ' (ya en preparación)' : '') + ':\\n' + $('Armar transcripción').item.json.openOrder.text : 'PEDIDO ACTUAL: ninguno, los mensajes nuevos forman un pedido nuevo' }}\n\nMENSAJES NUEVOS (de más antiguo a más reciente; las notas de voz ya vienen transcritas en su lugar):\n{{ $('Contexto de audio').item.json.transcript || '(sin mensajes nuevos)' }}\n\nCLASIFICACIÓN VISUAL:\n{{ $('Contexto visual').item.json.paymentProof ? 'COMPROBANTE DE PAGO: no crear, actualizar ni repetir ningún pedido' : 'No es comprobante de pago' }}\n\nTEXTO EXTRAÍDO DE IMÁGENES:\n{{ $('Contexto visual').item.json.imageText || '(no se recibió una lista de productos en imagen)' }}\n\nDATOS DEL CRM (solo completan campos faltantes):\nNombre: {{ $('Normalizar entrada').item.json.contactName || 'sin registrar' }}\nTeléfono: {{ $('Normalizar entrada').item.json.contactPhone || 'sin registrar' }}\nCédula: {{ $('Normalizar entrada').item.json.contactDocument || 'sin registrar' }}\nDirección: {{ $('Normalizar entrada').item.json.contactAddress || 'sin registrar' }}",
         "hasOutputParser": true,
         "messages": {
           "messageValues": [
             {
-              "message": "=Eres el extractor de pedidos de Fénix J.A. Recibes el PEDIDO ACTUAL del cliente (si existe) y únicamente los MENSAJES NUEVOS; las notas de voz ya pueden venir transcritas y las imágenes pueden venir como texto extraído.\n\nSI HAY PEDIDO ACTUAL:\n- No decidas por tu cuenta si los productos nuevos modifican ese pedido o forman otro.\n- Solo procesa los productos cuando la conversación muestre primero una pregunta explícita de FÉNIX J.A. que ofrezca las dos opciones y luego una respuesta clara del CLIENTE.\n- Si el cliente confirma que desea agregar, anexar, corregir o actualizar el pedido actual, devuelve action=anexo. rawOrderText debe contener el pedido COMPLETO actualizado: conserva literalmente las líneas vigentes, añade lo nuevo y aplica únicamente los cambios confirmados.\n- Si el cliente confirma que desea un pedido nuevo o separado, devuelve action=nuevo. rawOrderText debe contener únicamente los productos del nuevo pedido y su dirección debe mantenerse independiente.\n- Si el cliente todavía no contestó claramente si es anexo o pedido nuevo, devuelve ok=false y error=\"Falta confirmar si corresponde al pedido actual o a un pedido nuevo\". No supongas la acción por la dirección, por los productos ni por frases aisladas anteriores a la pregunta.\n\nSI NO HAY PEDIDO ACTUAL:\nDevuelve action=nuevo y usa únicamente los productos de los mensajes nuevos. Nunca copies productos de pedidos anteriores.\n\nSi el cliente no pide, agrega, quita ni cambia productos (solo saluda, agradece o consulta precios), devuelve ok=false.\n\nEXCEPCIÓN DE REGISTRO: si existe PEDIDO ACTUAL y los mensajes nuevos solo aportan o corrigen nombre, teléfono, modalidad de entrega, dirección, barrio o método de pago, devuelve ok=true y action=anexo aunque no cambien productos. Conserva rawOrderText exactamente igual al pedido actual. No solicites ni requieras cédula o zona.\n\nrawOrderText es la fuente canónica: una línea por producto, sin inventar encabezados, totales ni viñetas. Conserva literalmente productos, cantidades, valores, marcas, presentaciones, cortes, preparación y empaque. Una pregunta de precio no agrega producto; \"5 mil de papa\", \"$10.000 de carne\" y \"por 10.000 carne\" sí son compras.\n\nExtrae customer.name y customer.phone cuando estén disponibles. Extrae delivery.type, delivery.address y delivery.neighborhood. Usa null cuando falte un dato; nunca inventes. delivery.type es recogida solo si el cliente lo indicó; de lo contrario es domicilio. Extrae paymentMethod si aparece.\n\nUna lista, productos enviados por partes, una nota de voz o una imagen cuentan como pedido aunque falten datos de contacto, envío o pago. Una nota de voz no transcrita no debe inventarse: indícalo en notes. Incorpora el texto extraído de imágenes y conserva avisos de lectura dudosa en notes.\n\nEl nombre y el teléfono pueden ser null cuando no estén disponibles. Esto no invalida un pedido.\n\nFORMATO OBLIGATORIO:\n- Si ok=false, usa action=null y rawOrderText=\"\". Nunca uses una cadena vacía para action.\n- Si ok=true, action debe ser exactamente \"anexo\" o \"nuevo\"."
+              "message": "=Eres el extractor de pedidos de Fénix J.A. Recibes el PEDIDO ACTUAL del cliente (si existe) y únicamente los MENSAJES NUEVOS; las notas de voz ya pueden venir transcritas y las imágenes pueden venir como texto extraído.\n\nREGLA MÁXIMA PARA COMPROBANTES DE PAGO:\n- Si CLASIFICACIÓN VISUAL dice COMPROBANTE DE PAGO, no crees, actualices, anexes, reconstruyas ni repitas ningún pedido, aunque exista PEDIDO ACTUAL.\n- Devuelve un solo elemento en orders con ok=false, error=\"El cliente envió un comprobante de pago para validar\", action=null, rawOrderText=\"\", los datos disponibles y notes=\"Requiere validación humana del comprobante\".\n- Nunca copies productos del PEDIDO ACTUAL cuando el mensaje nuevo sea un comprobante.\n\n\n\n\nREGLA PARA DECIDIR PEDIDO NUEVO O ANEXO:\n- No le pidas al cliente que confirme si es un pedido nuevo o un anexo.\n- Una lista nueva de productos crea action=nuevo aunque exista PEDIDO ACTUAL.\n- Solo devuelve action=anexo cuando el CLIENTE diga claramente que quiere agregar, anexar, quitar, cambiar, corregir o actualizar el PEDIDO ACTUAL. En ese caso rawOrderText contiene el pedido completo actualizado.\n- Que exista un pedido abierto, que los productos se parezcan o que se conserve la misma dirección no autoriza a anexar.\n- Varios mensajes consecutivos con productos, sin un marcador de separación, forman una sola lista y un solo pedido; no crees un pedido por cada mensaje.\n- Frases como \"otro pedido\", \"pedido aparte\", \"para mi casa\", \"para la abuela\", \"para otra persona\", \"para otra dirección\", \"Pedido 1\" o \"Pedido 2\" marcan pedidos independientes. Devuelve un elemento distinto en orders por cada lista o destino.\n- Si después de una lista aparece otra lista separada por uno de esos marcadores, ambas usan action=nuevo y conservan por separado sus productos, destinatario, dirección y observaciones.\n- Si no hay PEDIDO ACTUAL, cada lista identificada también usa action=nuevo. Nunca copies productos de pedidos anteriores.\n- Los datos nuevos de nombre, teléfono, entrega, dirección, barrio o método de pago pueden completar el pedido correspondiente sin mezclar pedidos.\n\nEjemplos: \"2 libras de pulpa de cerdo\" permanece \"2 libras de pulpa de cerdo\"; \"2 libras de pata de cerdo\" permanece \"2 libras de pata de cerdo\".\nREGLA OBLIGATORIA DE PRODUCTOS: \"pulpa de cerdo\" y \"pata de cerdo\" son productos distintos. Si el cliente escribe o dicta \"pulpa de cerdo\" o \"pulpa cerdo\", conserva la palabra \"pulpa\" y nunca la conviertas en \"pata\". Usa \"pata de cerdo\" solo si la palabra original es claramente \"pata\". Si no puedes distinguirlas, solicita aclaración antes de registrar.\n\nREGLA OBLIGATORIA PARA VARIOS PEDIDOS:\n- Devuelve siempre un objeto con la propiedad orders.\n- Si la conversación contiene dos o más pedidos independientes (por ejemplo, dos destinatarios, dos direcciones, o el cliente los enumera como Pedido 1 y Pedido 2), devuelve un elemento separado en orders por cada pedido.\n- Nunca mezcles productos, clientes ni direcciones de pedidos distintos.\n- Cada elemento debe contener solamente sus propios productos en rawOrderText y sus propios datos de customer y delivery.\n- Usa los datos del CRM solamente para completar campos faltantes del pedido correspondiente.\n- La falta de nombre, teléfono, dirección, barrio, cédula, zona o método de pago no invalida una lista de productos: conserva esos campos como null y mantén ok=true. Solo la ausencia de productos identificables permite ok=false.\n- Si no hay ningún pedido procesable, devuelve un único elemento con ok=false y explica el motivo en error."
             }
           ]
         },
@@ -445,11 +444,12 @@
       "type": "@n8n/n8n-nodes-langchain.chainLlm",
       "typeVersion": 1.9,
       "position": [
-        -16272,
-        4880
+        2480,
+        336
       ],
-      "id": "a164c1f3-9217-4d5f-b392-24a99836f0e6",
-      "name": "Basic LLM Chain"
+      "id": "d2259fce-164a-4445-a842-793d4f31dd75",
+      "name": "Basic LLM Chain",
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -459,13 +459,13 @@
           "responseCode": 502
         }
       },
-      "id": "2acf05af-9c71-4c44-9db2-e1a41d0d956e",
+      "id": "4985fb69-7abe-417e-819e-e1b535704976",
       "name": "502 No registrado",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [
-        -14576,
-        4720
+        4176,
+        176
       ]
     },
     {
@@ -493,13 +493,13 @@
           }
         }
       },
-      "id": "71b16916-eb37-4389-8619-18539db1532f",
+      "id": "dc69fc3e-93be-48e4-9e46-ca9d08f050cd",
       "name": "Pedir ayuda (app rechazó)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -14752,
-        4720
+        4000,
+        176
       ]
     },
     {
@@ -510,14 +510,15 @@
           "responseCode": 200
         }
       },
-      "id": "526c7445-1693-4d78-9fab-6283f5ff354c",
+      "id": "28191d75-0311-4df4-85f4-cb4529653e98",
       "name": "200 Registrado",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [
-        -13744,
-        4560
-      ]
+        5008,
+        16
+      ],
+      "executeOnce": true
     },
     {
       "parameters": {
@@ -552,13 +553,13 @@
           }
         }
       },
-      "id": "081fdf80-e908-4651-af30-405b322ff359",
+      "id": "81208aa8-a57a-4087-aee0-4e4725767861",
       "name": "Confirmar al cliente",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -13952,
-        4464
+        4800,
+        -96
       ],
       "onError": "continueRegularOutput"
     },
@@ -580,19 +581,29 @@
                 "type": "string",
                 "operation": "equals"
               }
+            },
+            {
+              "id": "no-duplicate-confirmation",
+              "leftValue": "={{ $('Resultado').item.json.duplicate !== true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
             }
           ],
           "combinator": "and"
         },
         "options": {}
       },
-      "id": "32653ba3-8e50-44e4-bc9f-fc37ee7fbbee",
+      "id": "dbe77f6c-258f-4833-b9d0-b8719d3e7cb3",
       "name": "¿Enviar confirmación?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        -14256,
-        4544
+        4496,
+        -16
       ]
     },
     {
@@ -628,13 +639,13 @@
           }
         }
       },
-      "id": "00ec4177-b8a9-40e6-927c-58323d1c49c0",
+      "id": "d13cc24c-20fc-4b1b-a869-d94c2095938a",
       "name": "Guardar datos en el contacto GHL",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -14752,
-        4528
+        4000,
+        -32
       ],
       "onError": "continueRegularOutput"
     },
@@ -663,26 +674,26 @@
         },
         "options": {}
       },
-      "id": "8126ed87-e0c2-4baa-81e7-f19569261be2",
+      "id": "777405b1-c1fe-4eaa-8627-f1198472f91b",
       "name": "¿Registrado?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        -14944,
-        4576
+        3808,
+        32
       ]
     },
     {
       "parameters": {
-        "jsCode": "const response = $input.first().json;\nconst status = response.statusCode;\nconst body = response.body || {};\nconst ok = status >= 200 && status < 300 && Boolean(body.order_number);\nreturn [{ json: {\n  ok,\n  status,\n  adjusted: ok && body.adjusted === true,\n  mode: body.adjusted ? 'updated' : 'created',\n  orderNumber: body.order_number || null,\n  duplicate: body.duplicate === true,\n  afterCutoff: false,\n  scheduledFor: null,\n  scheduledForLabel: null,\n  error: ok ? null : (body.error || `La app respondió ${status || 'sin estado'}`),\n} }];"
+        "jsCode": "return $input.all().map((item, index) => {\n  const response = item.json;\n  const status = response.statusCode;\n  const body = response.body || {};\n  const ok = status >= 200 && status < 300 && Boolean(body.order_number);\n  return { json: { ok, status, adjusted: ok && body.adjusted === true, mode: body.adjusted ? 'updated' : 'created',\n    orderNumber: body.order_number || null, duplicate: body.duplicate === true, afterCutoff: false,\n    scheduledFor: null, scheduledForLabel: null,\n    error: ok ? null : (body.error || `La app respondió ${status || 'sin estado'}`) }, pairedItem: { item: index } };\n});"
       },
-      "id": "b58000d2-1604-461e-aeeb-63f7e610ae2f",
+      "id": "1841282a-9090-45d2-a51e-49b25e4e02ad",
       "name": "Resultado",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -15120,
-        4576
+        3632,
+        32
       ]
     },
     {
@@ -710,13 +721,13 @@
           }
         }
       },
-      "id": "0bd17dc6-6320-4708-818e-64a856683593",
+      "id": "2fe4b0ef-77e7-42de-8639-16d9bb52d9a4",
       "name": "Crear pedido",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -15312,
-        4576
+        3440,
+        32
       ]
     },
     {
@@ -725,13 +736,13 @@
         "value": "={{ $json.idempotencySeed }}",
         "dataPropertyName": "sourceEventId"
       },
-      "id": "a0ac8d75-b77a-4869-9c08-51960ea70771",
+      "id": "0549a711-56a4-4dba-90bc-278a27565c66",
       "name": "Llave de idempotencia",
       "type": "n8n-nodes-base.crypto",
       "typeVersion": 1,
       "position": [
-        -15536,
-        4576
+        3216,
+        32
       ]
     },
     {
@@ -742,14 +753,15 @@
           "responseCode": 502
         }
       },
-      "id": "e2f22bde-71dc-49d5-948f-b6b3100660e6",
+      "id": "c58284b7-4ec8-40e1-b177-19b095208829",
       "name": "502 Extracción falló",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [
-        -15184,
-        5040
-      ]
+        3568,
+        496
+      ],
+      "executeOnce": true
     },
     {
       "parameters": {
@@ -776,39 +788,39 @@
         },
         "options": {}
       },
-      "id": "3135c0f8-97f2-4103-bbca-be7d5eda6ce7",
+      "id": "bf397070-1fa2-4517-8c05-088976cb35e3",
       "name": "¿Pedido válido?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        -15792,
-        4880
+        2960,
+        336
       ]
     },
     {
       "parameters": {
-        "jsCode": "const input = $('Normalizar entrada').first().json;\nconst transcript = $('Contexto de audio').first().json;\nconst visual = $('Contexto visual').first().json;\nconst conversation = $('Buscar conversación GHL').first().json;\nconst conversationId = conversation?.body?.conversations?.[0]?.id || null;\n\nlet extracted = $input.first().json.output ?? null;\nlet problem = null;\nlet ignored = false;\nif (typeof extracted === 'string') {\n  try { extracted = JSON.parse(extracted); }\n  catch (error) { problem = 'El modelo principal no devolvió JSON válido'; }\n}\nif (!transcript.contextOk) problem = `El endpoint de contexto no devolvió una ventana operativa válida (estado ${transcript.contextStatus || 'desconocido'})`;\nelse if (transcript.readStatus !== 200) problem = `GHL respondió ${transcript.readStatus} al leer la conversación`;\nelse if (!transcript.inboundMessages) { problem = 'El cliente no ha escrito nada nuevo'; ignored = true; }\nconst stickerOnlyImage = /\\bsticker\\b/i.test(transcript.transcript || '');\nif (!problem && transcript.imageUrls.length && visual.visualProblem && !stickerOnlyImage) problem = visual.visualProblem;\nif (!problem && !extracted) problem = 'El modelo principal no devolvió un pedido válido';\nif (!problem && extracted && !extracted.ok) {\n  problem = extracted.error || 'La ventana operativa no contiene un pedido';\n  if (transcript.audioProblem) problem = `${transcript.audioProblem}. ${problem}`;\n  else ignored = true;\n}\nif (!problem && extracted?.ok && !['anexo', 'nuevo'].includes(extracted.action)) {\n  problem = 'El modelo no indicó si el pedido es nuevo o un anexo';\n}\nconst rawOrderText = String(extracted?.rawOrderText || '').trim();\nconst numericValue = (value) => {\n  const compact = String(value).replace(/\\s/g, '');\n  if (/^\\d{1,3}(?:\\.\\d{3})+$/.test(compact)) return Number(compact.replace(/\\./g, ''));\n  if (/^\\d{1,3}(?:,\\d{3})+$/.test(compact)) return Number(compact.replace(/,/g, ''));\n  return Number(compact.replace(',', '.'));\n};\nconst items = rawOrderText.split(/\\r?\\n|;+/).map((line) => line.replace(/^\\s*(?:[-*•]|\\d+[.)])\\s*/, '').trim()).filter(Boolean).slice(0, 100).map((rawLine) => {\n  const rawText = rawLine.slice(0, 500);\n  const byAmount = rawLine.match(/^(por\\s+)?\\$?\\s*([\\d.,]+)\\s*(mil|k)?\\s*(?:pesos?)?\\s*(?:(?:de|en)\\s+)?(.+)$/i);\n  if (byAmount) {\n    let amount = numericValue(byAmount[2]);\n    if (byAmount[3] && amount < 1000) amount *= 1000;\n    const monetary = Boolean(byAmount[3]) || amount >= 1000 || /^por\\s+\\$?/i.test(rawLine) || rawLine.startsWith('$');\n    if (monetary) return { name: byAmount[4].trim().slice(0, 160), quantity: amount, unit: 'COP', quantityKind: 'amount', rawText };\n  }\n  return { name: rawLine.slice(0, 160), quantity: 1, rawText };\n});\nif (!problem && !rawOrderText) problem = 'La extracción no produjo el texto completo del pedido';\nif (!problem && !items.length) problem = 'El texto del pedido no contiene líneas utilizables';\n\nconst orderAction = transcript.openOrder && extracted?.action === 'anexo' ? 'update' : 'new';\nconst notes = [extracted?.notes, transcript.audioProblem ? `⚠️ ${transcript.audioProblem}` : null]\n  .map((value) => String(value || '').trim()).filter(Boolean).join(' · ');\nconst name = String(extracted?.customer?.name || input.contactName || '').trim();\nconst phone = String(extracted?.customer?.phone || input.contactPhone || '').trim();\nconst document = String(extracted?.customer?.document || input.contactDocument || '').trim();\nconst address = String(extracted?.delivery?.address || input.contactAddress || '').trim();\nconst neighborhood = String(extracted?.delivery?.neighborhood || input.contactNeighborhood || '').trim();\nconst zone = String(extracted?.delivery?.zone || input.contactZone || '').trim();\nconst deliverySource = String(extracted?.delivery?.type || input.deliveryType || '').toLowerCase();\nconst pickup = /recog|tienda|pickup/.test(deliverySource);\nconst delivery = pickup ? { type: 'recogida' } : { type: 'domicilio', ...(address ? { address } : {}) };\nreturn [{ json: {\n  valid: !problem,\n  ignored,\n  problem,\n  conversationId,\n  idempotencySeed: transcript.idempotencySeed,\n  summaryText: rawOrderText,\n  payload: {\n    locationId: input.locationId,\n    contactId: input.contactId,\n    conversationId: conversationId || undefined,\n    customer: { name: name || undefined, phone: phone || undefined, document: document || undefined, address: address || undefined, neighborhood: neighborhood || undefined, zone: zone || undefined },\n    delivery,\n    paymentMethod: extracted?.paymentMethod || undefined,\n    items,\n    rawOrderText,\n    notes: notes || undefined,\n    orderAction,\n    contextUntil: transcript.contextUntil || undefined,\n  },\n} }];"
+        "jsCode": "const input = $('Normalizar entrada').first().json;\nconst transcript = $('Contexto de audio').first().json;\nconst visual = $('Contexto visual').first().json;\nconst conversation = $('Buscar conversación GHL').first().json;\nconst conversationId = conversation?.body?.conversations?.[0]?.id || null;\nreturn $input.all().map((inputItem, itemIndex) => {\n  let extracted = inputItem.json.output ?? null;\n  let problem = inputItem.json.error?.message || inputItem.json.message || null;\n  let ignored = false;\n  if (typeof extracted === 'string') {\n    try { extracted = JSON.parse(extracted); }\n    catch (error) { problem = 'El modelo principal no devolvió JSON válido'; }\n  }\n  if (!transcript.contextOk) problem = `El endpoint de contexto no devolvió una ventana operativa válida (estado ${transcript.contextStatus || 'desconocido'})`;\n  else if (transcript.readStatus !== 200) problem = `GHL respondió ${transcript.readStatus} al leer la conversación`;\n  else if (!transcript.inboundMessages) { problem = 'El cliente no ha escrito nada nuevo'; ignored = true; }\n  const stickerOnlyImage = /\\bsticker\\b/i.test(transcript.transcript || '');\n  if (!problem && transcript.imageUrls.length && visual.visualProblem && !stickerOnlyImage) problem = visual.visualProblem;\n  // Un comprobante de pago jamás crea, actualiza ni vuelve a cargar un pedido.\n  // Se envía a Requiere ayuda para validación humana y se conserva el pedido existente sin cambios.\n  if (!problem && visual.paymentProof === true) problem = 'El cliente envió un comprobante de pago para validar';\n  if (!problem && !extracted) problem = 'El modelo principal no devolvió un pedido válido';\n  if (!problem && extracted && !extracted.ok) {\n    problem = extracted.error || 'La ventana operativa no contiene un pedido';\n    if (transcript.audioProblem) problem = `${transcript.audioProblem}. ${problem}`;\n    else ignored = true;\n  }\n  if (!problem && extracted?.ok && !['anexo', 'nuevo'].includes(extracted.action)) problem = 'El modelo no indicó si el pedido es nuevo o un anexo';\n  const rawOrderText = String(extracted?.rawOrderText || '').trim();\n  const numericValue = (value) => {\n    const compact = String(value).replace(/\\s/g, '');\n    if (/^\\d{1,3}(?:\\.\\d{3})+$/.test(compact)) return Number(compact.replace(/\\./g, ''));\n    if (/^\\d{1,3}(?:,\\d{3})+$/.test(compact)) return Number(compact.replace(/,/g, ''));\n    return Number(compact.replace(',', '.'));\n  };\n  const items = rawOrderText.split(/\\r?\\n|;+/).map((line) => line.replace(/^\\s*(?:[-*•]|\\d+[.)])\\s*/, '').trim()).filter(Boolean).slice(0, 100).map((rawLine) => {\n    const rawText = rawLine.slice(0, 500);\n    const byAmount = rawLine.match(/^(por\\s+)?\\$?\\s*([\\d.,]+)\\s*(mil|k)?\\s*(?:pesos?)?\\s*(?:(?:de|en)\\s+)?(.+)$/i);\n    if (byAmount) {\n      let amount = numericValue(byAmount[2]);\n      if (byAmount[3] && amount < 1000) amount *= 1000;\n      const monetary = Boolean(byAmount[3]) || amount >= 1000 || /^por\\s+\\$?/i.test(rawLine) || rawLine.startsWith('$');\n      if (monetary) return { name: byAmount[4].trim().slice(0, 160), quantity: amount, unit: 'COP', quantityKind: 'amount', rawText };\n    }\n    return { name: rawLine.slice(0, 160), quantity: 1, rawText };\n  });\n  if (!problem && !rawOrderText) problem = 'La extracción no produjo el texto completo del pedido';\n  if (!problem && !items.length) problem = 'El texto del pedido no contiene líneas utilizables';\n  const orderAction = transcript.openOrder && extracted?.action === 'anexo' ? 'update' : 'new';\n  const name = String(extracted?.customer?.name || input.contactName || '').trim();\n  const phone = String(extracted?.customer?.phone || input.contactPhone || '').trim();\n  const document = String(extracted?.customer?.document || input.contactDocument || '').trim();\n  const address = String(extracted?.delivery?.address || input.contactAddress || '').trim();\n  const neighborhood = String(extracted?.delivery?.neighborhood || input.contactNeighborhood || '').trim();\n  const zone = String(extracted?.delivery?.zone || input.contactZone || '').trim();\n  const pickup = /recog|tienda|pickup/.test(String(extracted?.delivery?.type || input.deliveryType || '').toLowerCase());\n  const missing = [!name && 'nombre', !phone && 'teléfono', !address && !pickup && 'dirección', !neighborhood && !pickup && 'barrio'].filter(Boolean);\n  const notes = [extracted?.notes, transcript.audioProblem ? `⚠️ ${transcript.audioProblem}` : null, missing.length ? `Datos pendientes: ${missing.join(', ')}` : null].map((value) => String(value || '').trim()).filter(Boolean).join(' · ');\n  const delivery = pickup ? { type: 'recogida' } : { type: 'domicilio', ...(address ? { address } : {}) };\n  const uniqueSeed = [transcript.idempotencySeed, rawOrderText, name, address, itemIndex].join('|');\n  return { json: {\n    valid: !problem, ignored, problem, conversationId, idempotencySeed: uniqueSeed, summaryText: visual.paymentProof === true ? transcript.transcript : rawOrderText,\n    payload: { locationId: input.locationId, contactId: input.contactId, conversationId: conversationId || undefined,\n      customer: { name: name || undefined, phone: phone || undefined, document: document || undefined, address: address || undefined, neighborhood: neighborhood || undefined, zone: zone || undefined },\n      delivery, paymentMethod: extracted?.paymentMethod || undefined, items, rawOrderText, notes: notes || undefined,\n      orderAction, contextUntil: transcript.contextUntil || undefined },\n  }, pairedItem: { item: itemIndex } };\n});"
       },
-      "id": "690544d4-b5c9-4e4f-ae81-aae3fafc1b3d",
+      "id": "feb12b0d-bec4-43d9-b028-ea5998355339",
       "name": "Validar extracción",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -15984,
-        4880
+        2768,
+        336
       ]
     },
     {
       "parameters": {
         "jsCode": "// Lee únicamente la ventana operativa vigente (2 p. m. a 1:59:59 p. m. de Bogotá) y lo posterior al cursor `since`.\nconst input = $('Normalizar entrada').first().json;\nconst response = $input.first().json;\nconst context = $('Contexto del pedido').first().json;\nconst contextStatus = Number(context.statusCode || 0);\nconst cutoffValue = context.body?.cutoff;\nconst windowStart = cutoffValue ? new Date(cutoffValue) : null;\nconst contextOk = contextStatus >= 200 && contextStatus < 300 && windowStart && !Number.isNaN(windowStart.getTime());\nconst openOrder = contextOk ? context.body?.openOrder || null : null;\nconst since = contextOk && context.body?.since ? new Date(context.body.since) : null;\nconst raw = response.body?.messages;\nconst messages = Array.isArray(raw) ? raw : Array.isArray(raw?.messages) ? raw.messages : [];\nconst timeZone = 'America/Bogota';\nconst dayKey = (date) => {\n  const parts = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(date);\n  const values = Object.fromEntries(parts.filter((part) => part.type !== 'literal').map((part) => [part.type, part.value]));\n  return `${values.year}-${values.month}-${values.day}`;\n};\nconst parseDate = (value) => {\n  if (value === undefined || value === null || value === '') return null;\n  const numeric = Number(value);\n  const date = Number.isFinite(numeric) ? new Date(numeric < 1e12 ? numeric * 1000 : numeric) : new Date(value);\n  return Number.isNaN(date.getTime()) ? null : date;\n};\nconst AUDIO_EXT = /\\.(?:ogg|oga|opus|mp3|mpga|mpeg|m4a|wav|webm|aac|amr)(?:$|[?#])/i;\nconst IMAGE_EXT = /\\.(?:jpe?g|png|gif|webp|heic)(?:$|[?#])/i;\nconst classify = (message) => {\n  const urls = Array.isArray(message.attachments) ? message.attachments.filter((value) => typeof value === 'string') : [];\n  const contentType = String(message.contentType || '').toLowerCase();\n  const kind = String(message.messageType || message.type || '').toLowerCase();\n  const audioMessage = contentType.startsWith('audio/') || /audio|voice|ptt/.test(kind);\n  const imageMessage = contentType.startsWith('image/') || /image|photo/.test(kind);\n  return urls.map((url) => ({ url, kind: audioMessage || AUDIO_EXT.test(url) ? 'audio' : imageMessage || IMAGE_EXT.test(url) ? 'image' : 'other' }));\n};\n\nconst today = dayKey(new Date());\nlet current = messages\n  .map((message) => ({ ...message, parsedDate: parseDate(message.dateAdded || message.createdAt || message.dateUpdated) }))\n  .filter((message) => message.parsedDate && (!windowStart || message.parsedDate >= windowStart))\n  .filter((message) => !since || message.parsedDate > since)\n  .sort((a, b) => a.parsedDate - b.parsedDate);\n\n// Defensa adicional: si no hay cursor ni pedido abierto, un marcador explícito de pedido nuevo\n// descarta productos anteriores de la misma ventana antes de pedir la extracción al modelo.\nif (!since && !openOrder) {\n  const boundary = /\\b(?:otro pedido|pedido aparte|nuevo pedido|pedido nuevo|por separado|para otra persona|para otra direcci[oó]n)\\b/i;\n  let boundaryIndex = -1;\n  current.forEach((message, index) => {\n    if (message.direction === 'inbound' && boundary.test(String(message.body || ''))) boundaryIndex = index;\n  });\n  if (boundaryIndex >= 0) current = current.slice(boundaryIndex);\n}\n\nconst turns = [];\nconst images = [];\nconst audios = [];\nfor (const message of current) {\n  const role = message.direction === 'inbound' ? 'CLIENTE' : 'FÉNIX J.A.';\n  const inbound = message.direction === 'inbound';\n  const body = typeof message.body === 'string' ? message.body.trim() : '';\n  if (body) turns.push(`${role}: ${body}`);\n  for (const attachment of classify(message)) {\n    if (attachment.kind === 'image') {\n      turns.push(`${role}: [IMAGEN ADJUNTA]`);\n      if (inbound) images.push(attachment.url);\n    } else if (attachment.kind === 'audio' && inbound) {\n      const key = `AUDIO ${audios.length + 1}`;\n      audios.push({ key, url: attachment.url, messageId: message.id || null });\n      turns.push(`${role}: [${key}]`);\n    } else if (attachment.kind === 'audio') {\n      turns.push(`${role}: [NOTA DE VOZ DEL EQUIPO]`);\n    } else {\n      turns.push(`${role}: [ARCHIVO ADJUNTO]`);\n    }\n  }\n}\nconst inboundMessages = current.filter((message) => message.direction === 'inbound');\nconst lastInbound = inboundMessages.at(-1);\nconst orderWindowStart = windowStart?.toISOString() || null;\nreturn [{ json: {\n  transcript: turns.join('\\n'),\n  turns: turns.length,\n  messagesToday: current.length,\n  imageUrls: [...new Set(images)].slice(-10),\n  audios: audios.slice(-10),\n  readStatus: response.statusCode,\n  bogotaDay: today,\n  inboundMessages: inboundMessages.length,\n  contextOk: Boolean(contextOk),\n  contextStatus,\n  openOrder,\n  orderWindowStart,\n  contextUntil: current.at(-1)?.parsedDate?.toISOString() || null,\n  idempotencySeed: `${input.contactId}|${orderWindowStart || today}|${lastInbound?.id || lastInbound?.parsedDate?.toISOString() || \"sin-mensaje\"}`,\n} }];"
       },
-      "id": "13b871bb-8d9b-419c-910c-74c1a0447149",
+      "id": "981aec27-a3b4-447d-80f6-72ff5f62daab",
       "name": "Armar transcripción",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -18144,
-        4864
+        608,
+        320
       ]
     },
     {
@@ -849,13 +861,13 @@
           }
         }
       },
-      "id": "97160ac1-81e7-4a18-a62b-0f499f27ac56",
+      "id": "889247d9-9eed-4979-a5d9-de3eb848b72a",
       "name": "Leer últimos mensajes",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -18336,
-        4864
+        416,
+        320
       ]
     },
     {
@@ -900,26 +912,26 @@
           }
         }
       },
-      "id": "e8e8677c-fe65-4935-9eb5-011cbbdb8fc4",
+      "id": "597d7af9-c413-47ee-a1cd-bdce40c9a1cb",
       "name": "Buscar conversación GHL",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -18560,
-        4864
+        192,
+        320
       ]
     },
     {
       "parameters": {
         "jsCode": "// La tool de GHL solo ordena procesar; crear o actualizar lo decide la app.\nconst webhook = $('Webhook').first().json;\nconst body = webhook.body || {};\nconst rawCustom = body.customData || body.custom_data || {};\nlet custom = rawCustom;\nif (typeof rawCustom === 'string') {\n  try { custom = JSON.parse(rawCustom); } catch (error) { custom = {}; }\n}\nconst clean = (value) => value === undefined || value === null ? '' : String(value).trim();\nconst pick = (...values) => values.map(clean).find(Boolean) || '';\nconst normalized = {};\nfor (const source of [body, custom]) {\n  if (!source || typeof source !== 'object') continue;\n  for (const [key, value] of Object.entries(source)) normalized[key.toLowerCase().replace(/[\\s_]+/g, ' ').trim()] = value;\n}\nconst field = (...names) => pick(...names.map((name) => normalized[name]));\nreturn [{ json: {\n  locationId: pick(body.locationId, custom.locationId, body.location?.id, body.location_id, custom.location_id),\n  contactId: pick(body.contactId, custom.contactId, body.contact_id, body.contact?.id, custom.contact_id),\n  contactName: pick(body.contactName, custom.contactName, body.full_name, custom.full_name, `${clean(body.first_name)} ${clean(body.last_name)}`),\n  contactPhone: pick(body.contactPhone, custom.contactPhone, body.phone, custom.phone),\n  contactDocument: pick(body.contactDocument, custom.contactDocument, field('nit o cédula', 'nit o cedula', 'documento de identidad', 'cedula', 'document')),\n  contactAddress: pick(body.contactAddress, custom.contactAddress, field('agrega direccion de entrega', 'dirección completa', 'direccion de envio', 'address1'), body.full_address),\n  contactNeighborhood: pick(body.contactNeighborhood, body.contactBarrio, custom.contactNeighborhood, custom.contactBarrio, field('barrio')),\n  contactZone: pick(body.contactZone, body.contactZona, custom.contactZone, custom.contactZona, field('zona')),\n  deliveryType: pick(body.deliveryType, body.delivery_type, custom.deliveryType, custom.delivery_type, field('¿es a domicilio o recoges en tienda? *', 'es a domicilio o recoges en tienda? *', 'es a domicilio o recoges en tienda', 'modalidad de entrega', 'entrega')),\n  registrationComplete: pick(body.registrationComplete, custom.registrationComplete, field('registro minorista completo')),\n} }];"
       },
-      "id": "6318b0b9-7f18-4ca9-9347-40df6f0d38c0",
+      "id": "713f084c-8782-4977-bd95-92230780fcba",
       "name": "Normalizar entrada",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -18912,
-        4864
+        -176,
+        320
       ]
     },
     {
@@ -930,13 +942,13 @@
           "responseCode": 401
         }
       },
-      "id": "465e44de-15b6-4a5d-90e4-77708ed72e63",
+      "id": "f899f351-3ea8-4624-8503-8d19be145074",
       "name": "401 No autorizado",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [
-        -18912,
-        5104
+        -176,
+        560
       ]
     },
     {
@@ -951,7 +963,7 @@
           "conditions": [
             {
               "id": "75f280d0-e66c-47f0-b9fb-608a4a4b4990",
-              "leftValue": "={{ Webhook.item.json.headers['x-fenix-secret'] }}",
+              "leftValue": "={{ $('Webhook').item.json.headers['x-fenix-secret'] }}",
               "rightValue": "={{ $('Config').item.json.INBOUND_SECRET }}",
               "operator": {
                 "type": "string",
@@ -963,13 +975,13 @@
         },
         "options": {}
       },
-      "id": "fe100bf6-2492-4575-a837-25c69044a847",
+      "id": "12b02574-f8bd-4fa0-ae3b-8880677f0acd",
       "name": "¿Secreto válido?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        -19136,
-        4880
+        -400,
+        336
       ]
     },
     {
@@ -979,13 +991,13 @@
         "responseMode": "responseNode",
         "options": {}
       },
-      "id": "135d0a6d-a983-46ed-a4f2-e87b24351ce7",
+      "id": "8d09f2a6-2371-4e5e-992b-bc80577d855d",
       "name": "Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
       "position": [
-        -19584,
-        4880
+        -848,
+        336
       ],
       "webhookId": "cfe38ca3-c8e6-4f5a-a497-2604c32a02a4"
     },
@@ -1014,13 +1026,13 @@
         },
         "options": {}
       },
-      "id": "31808297-b81b-4a97-887a-33bf3ce16d75",
+      "id": "af7e5348-c0ee-4ec0-97a7-f5b357d9f0e8",
       "name": "¿Para otro día?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        -14560,
-        4528
+        4192,
+        -32
       ]
     },
     {
@@ -1056,13 +1068,13 @@
           }
         }
       },
-      "id": "49f8d22c-2eeb-4605-8d01-ba104a9b9795",
+      "id": "c04ba12f-2e0c-4d1b-b111-ed093b81fd72",
       "name": "Avisar día de entrega",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -14128,
-        4272
+        4624,
+        -288
       ],
       "onError": "continueRegularOutput"
     },
@@ -1097,7 +1109,7 @@
             {
               "id": "74f61bc5-0003-4624-81e4-1d885e4bd63c",
               "name": "SEND_CONFIRMATION",
-        "value": "true",
+              "value": "true",
               "type": "string"
             },
             {
@@ -1121,7 +1133,7 @@
             {
               "id": "9d6d6676-8130-41ea-b52c-9e0bc0955715",
               "name": "CF_CEDULA",
-              "value": "",
+              "value": "contact.nit_o_cedula",
               "type": "string"
             },
             {
@@ -1133,7 +1145,7 @@
             {
               "id": "1c92e647-badc-4414-b5a0-12e90a3843aa",
               "name": "CF_METODO_PAGO",
-              "value": "",
+              "value": "contact.metodo_de_pago",
               "type": "string"
             },
             {
@@ -1157,41 +1169,58 @@
             {
               "id": "75003acc-6372-4fbc-ba75-c4fef815c8f2",
               "name": "CF_REGISTRO_MINORISTA",
-              "value": "",
+              "value": "contact.registro_minorista_completo",
               "type": "string"
             },
             {
               "id": "7b5df8d7-9b1a-4a3c-8ac5-92fa41ca061b",
               "name": "CF_BARRIO",
-              "value": "",
+              "value": "contact.barrio",
               "type": "string"
             },
             {
               "id": "dd9945bd-7a3c-4cab-9ec6-f985b87bb137",
               "name": "CF_ZONA",
-              "value": "",
+              "value": "contact.zona",
               "type": "string"
             },
             {
               "id": "669f0611-4d7d-47f9-8247-fdeedc747c0d",
               "name": "CF_ENTREGA",
-              "value": "",
+              "value": "contact.es_a_domicilio_o_recoges_en_tienda",
               "type": "string"
             }
           ]
         },
         "options": {}
       },
-      "id": "379a41d2-571b-48b2-8e33-30acb180fd8f",
+      "id": "53f58895-b702-45b7-9539-b05869a482c9",
       "name": "Config",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        -19376,
-        4880
+        -640,
+        336
       ],
       "notesInFlow": true,
       "notes": "Completa estos valores antes de activar el workflow."
+    },
+    {
+      "id": "e7077e09-1ebb-4f88-8c8b-13638e0de4cf",
+      "name": "Separar pedidos extraídos",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1.1,
+      "position": [
+        2630,
+        336
+      ],
+      "parameters": {
+        "fieldToSplitOut": "output.orders",
+        "include": "allOtherFields",
+        "options": {
+          "destinationFieldName": "output"
+        }
+      }
     }
   ],
   "connections": {
@@ -1383,17 +1412,6 @@
           {
             "node": "Basic LLM Chain",
             "type": "ai_languageModel",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Basic LLM Chain": {
-      "main": [
-        [
-          {
-            "node": "Validar extracción",
-            "type": "main",
             "index": 0
           }
         ]
@@ -1642,12 +1660,41 @@
           }
         ]
       ]
+    },
+    "Basic LLM Chain": {
+      "main": [
+        [
+          {
+            "node": "Separar pedidos extraídos",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Validar extracción",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Separar pedidos extraídos": {
+      "main": [
+        [
+          {
+            "node": "Validar extracción",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "pinData": {},
   "meta": {
-    "templateCredsSetupCompleted": true,
-    "instanceId": "cf108f1de401626491bd79f9736f4ba080294f2ae3247d690d1d48c88c98a352"
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp"
   },
   "name": "Fénix · Minoristas · Pedido IA → Panel"
 }

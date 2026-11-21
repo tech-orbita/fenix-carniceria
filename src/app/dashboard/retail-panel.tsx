@@ -28,6 +28,7 @@ export type EditableOrderDetails = Pick<Order, "customer" | "phone" | "address">
 
 type PaymentFilter = "all" | "paid" | "pending";
 type RangePreset = "today" | "tomorrow" | "yesterday" | "week" | "month" | "custom";
+type RetailView = OperationalPhase | "all";
 type DateRange = { from: string; to: string };
 export type ManualRetailOrderInput = {
   customerName: string;
@@ -520,7 +521,7 @@ export function RetailPanel({ catalog, orders, pendingId, onAdvance, onConvertHe
   const today = bogotaDay.format(new Date());
   const [preset, setPreset] = useState<RangePreset>("today");
   const [custom, setCustom] = useState<DateRange>({ from: today, to: today });
-  const [activePhase, setActivePhase] = useState<OperationalPhase>("new");
+  const [activeView, setActiveView] = useState<RetailView>("new");
   const [paymentFilter, setPaymentFilter] = useState<PaymentFilter>("all");
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState("");
@@ -538,9 +539,10 @@ export function RetailPanel({ catalog, orders, pendingId, onAdvance, onConvertHe
   }), [orders, range.from, range.to]);
   const searchedOrders = useMemo(() => rangeOrders.filter((order) => !normalized || `${order.orderNumber} ${order.customer} ${order.businessName ?? ""} ${order.phone} ${order.address}`.toLocaleLowerCase("es").includes(normalized)), [normalized, rangeOrders]);
   const phaseCounts = searchedOrders.reduce<Record<OperationalPhase, number>>((totals, order) => { totals[phaseForStatus(order.status)] += 1; return totals; }, { new: 0, preparing: 0, dispatched: 0, help: 0 });
-  const phaseOrders = searchedOrders.filter((order) => phaseForStatus(order.status) === activePhase);
-  const paymentCounts: Record<PaymentFilter, number> = { all: phaseOrders.length, paid: phaseOrders.filter(isPaid).length, pending: phaseOrders.filter((order) => !isPaid(order)).length };
-  const visibleOrders = activePhase === "help" ? phaseOrders : phaseOrders.filter((order) => paymentFilter === "all" || (paymentFilter === "paid" ? isPaid(order) : !isPaid(order)));
+  const operationalOrders = searchedOrders.filter((order) => order.status !== "cancelled" && !isHelpRequest(order));
+  const viewOrders = activeView === "all" ? operationalOrders : searchedOrders.filter((order) => phaseForStatus(order.status) === activeView);
+  const paymentCounts: Record<PaymentFilter, number> = { all: viewOrders.length, paid: viewOrders.filter(isPaid).length, pending: viewOrders.filter((order) => !isPaid(order)).length };
+  const visibleOrders = activeView === "help" ? viewOrders : viewOrders.filter((order) => paymentFilter === "all" || (paymentFilter === "paid" ? isPaid(order) : !isPaid(order)));
   const selected = visibleOrders.find((order) => order.id === selectedId) ?? visibleOrders[0];
 
   // Resumen del periodo: los cancelados no suman ventas.
@@ -558,6 +560,7 @@ export function RetailPanel({ catalog, orders, pendingId, onAdvance, onConvertHe
     const oldest = staleOpen.reduce((min, order) => receivedDay(order) < min ? receivedDay(order) : min, range.from);
     setCustom({ from: oldest, to: range.to });
     setPreset("custom");
+    setActiveView("all");
   };
 
   return (
@@ -565,7 +568,7 @@ export function RetailPanel({ catalog, orders, pendingId, onAdvance, onConvertHe
       <div className="rt-toolbar">
         <div aria-label="Periodo" className="rt-range" role="group">
           <Icon name="calendar" />
-          {(Object.keys(rangeLabels) as RangePreset[]).map((option) => <button aria-pressed={preset === option} key={option} onClick={() => { if (option === "custom") setCustom(range); setPreset(option); }} type="button">{rangeLabels[option]}{option === "tomorrow" ? ` (${tomorrowOrders.length})` : ""}</button>)}
+          {(Object.keys(rangeLabels) as RangePreset[]).map((option) => <button aria-pressed={preset === option} key={option} onClick={() => { if (option === "custom") setCustom(range); setPreset(option); setActiveView("all"); }} type="button">{rangeLabels[option]}{option === "tomorrow" ? ` (${tomorrowOrders.length})` : ""}</button>)}
         </div>
         {preset === "custom" && <div className="rt-dates">
           <label>Desde<input onChange={(event) => event.target.value && setCustom((current) => ({ ...current, from: event.target.value }))} type="date" value={custom.from} /></label>
@@ -580,14 +583,15 @@ export function RetailPanel({ catalog, orders, pendingId, onAdvance, onConvertHe
         <div className="rt-stat"><span>Pedidos</span><strong>{billable.length}</strong><small>{deliveries} {deliveries === 1 ? "domicilio" : "domicilios"}</small></div>
         <div className="rt-stat"><span>Ventas</span><strong>{money.format(sales)}</strong><small>{pendingValueOrders ? `${pendingValueOrders} con valor pendiente` : "Total del periodo"}</small></div>
         <div className="rt-stat is-paid"><span>Cobrado</span><strong>{money.format(collected)}</strong><small>{paidOrders.length} {paidOrders.length === 1 ? "pedido pagado" : "pedidos pagados"}</small></div>
-        <div className="rt-stat is-pending"><span>Por cobrar</span><strong>{money.format(sales - collected)}</strong><small>{valuedOrders.length - paidOrders.length} {valuedOrders.length - paidOrders.length === 1 ? "pedido pendiente" : "pedidos pendientes"}</small></div>
+        <button className="rt-stat is-pending rt-stat-action" onClick={() => { setActiveView("all"); setPaymentFilter("pending"); }} type="button"><span>Por cobrar</span><strong>{money.format(sales - collected)}</strong><small>{valuedOrders.length - paidOrders.length} {valuedOrders.length - paidOrders.length === 1 ? "pedido pendiente" : "pedidos pendientes"}</small></button>
       </div>
 
       {staleOpen.length > 0 && <div className="rt-alert" role="status"><Icon name="help" /><span>Hay <b>{staleOpen.length}</b> {staleOpen.length === 1 ? "pedido sin despachar" : "pedidos sin despachar"} de días anteriores a este periodo.</span><button onClick={showStale} type="button">Verlos</button></div>}
-      {preset === "today" && tomorrowOrders.length > 0 && <div className="rt-alert rt-delivery-alert" role="status"><Icon name="calendar" /><span>Hay <b>{tomorrowOrders.length}</b> {tomorrowOrders.length === 1 ? "pedido programado" : "pedidos programados"} para mañana.</span><button onClick={() => setPreset("tomorrow")} type="button">Ver mañana</button></div>}
+      {preset === "today" && tomorrowOrders.length > 0 && <div className="rt-alert rt-delivery-alert" role="status"><Icon name="calendar" /><span>Hay <b>{tomorrowOrders.length}</b> {tomorrowOrders.length === 1 ? "pedido programado" : "pedidos programados"} para mañana.</span><button onClick={() => { setPreset("tomorrow"); setActiveView("all"); }} type="button">Ver mañana</button></div>}
 
       <nav aria-label="Estado de los pedidos" className="rt-phases">
-        {(Object.keys(phaseLabels) as OperationalPhase[]).map((phase) => <button aria-pressed={activePhase === phase} className={`phase-${phase}`} key={phase} onClick={() => setActivePhase(phase)} type="button">
+        <button aria-pressed={activeView === "all"} className="phase-all" onClick={() => setActiveView("all")} type="button"><span>Movimientos<small>Todo el periodo</small></span><strong>{operationalOrders.length}</strong></button>
+        {(Object.keys(phaseLabels) as OperationalPhase[]).map((phase) => <button aria-pressed={activeView === phase} className={`phase-${phase}`} key={phase} onClick={() => setActiveView(phase)} type="button">
           <span>{phase === "help" && <Icon name="help" />}{phaseLabels[phase]}<small>{phaseHints[phase]}</small></span>
           <strong>{phaseCounts[phase]}</strong>
         </button>)}
@@ -596,12 +600,12 @@ export function RetailPanel({ catalog, orders, pendingId, onAdvance, onConvertHe
       <div className="rt-workspace">
         <aside className="rt-list">
           <div className="rt-list-head">
-            <div className="rt-list-title"><div><h2>{phaseLabels[activePhase]}</h2><p>{visibleOrders.length} {activePhase === "help" ? visibleOrders.length === 1 ? "solicitud" : "solicitudes" : visibleOrders.length === 1 ? "pedido" : "pedidos"}</p></div>{activePhase === "new" ? <div className="rt-list-actions"><button className="rt-button is-paid" onClick={() => setAddingOrder(true)} type="button"><span aria-hidden="true">＋</span> Agregar pedido</button>{selected ? <button className="rt-button is-delete" disabled={pendingId === selected.id} onClick={() => onDelete(selected)} type="button"><Icon name="trash" /> Eliminar</button> : null}</div> : null}</div>
-            {activePhase !== "help" && <div aria-label="Filtrar por estado de pago" className="rt-segment" role="group">{(["all", "paid", "pending"] as PaymentFilter[]).map((filter) => <button aria-pressed={paymentFilter === filter} key={filter} onClick={() => setPaymentFilter(filter)} type="button">{paymentFilterLabels[filter]}<b>{paymentCounts[filter]}</b></button>)}</div>}
+            <div className="rt-list-title"><div><h2>{activeView === "all" ? "Movimientos" : phaseLabels[activeView]}</h2><p>{visibleOrders.length} {activeView === "help" ? visibleOrders.length === 1 ? "solicitud" : "solicitudes" : visibleOrders.length === 1 ? "pedido" : "pedidos"}</p></div>{activeView === "new" ? <div className="rt-list-actions"><button className="rt-button is-paid" onClick={() => setAddingOrder(true)} type="button"><span aria-hidden="true">＋</span> Agregar pedido</button>{selected ? <button className="rt-button is-delete" disabled={pendingId === selected.id} onClick={() => onDelete(selected)} type="button"><Icon name="trash" /> Eliminar</button> : null}</div> : null}</div>
+            {activeView !== "help" && <div aria-label="Filtrar por estado de pago" className="rt-segment" role="group">{(["all", "paid", "pending"] as PaymentFilter[]).map((filter) => <button aria-pressed={paymentFilter === filter} key={filter} onClick={() => setPaymentFilter(filter)} type="button">{paymentFilterLabels[filter]}<b>{paymentCounts[filter]}</b></button>)}</div>}
           </div>
           <div className="rt-cards">
             {visibleOrders.map((order) => <OrderCard key={order.id} onSelect={() => setSelectedId(order.id)} order={order} selected={selected?.id === order.id} />)}
-            {!visibleOrders.length && <div className="rt-empty"><strong>No hay pedidos aquí</strong><span>{normalized ? "Ningún pedido coincide con la búsqueda." : `No hay pedidos en “${phaseLabels[activePhase]}” para ${preset === "custom" ? "estas fechas" : rangeLabels[preset].toLocaleLowerCase("es")}.`}</span></div>}
+            {!visibleOrders.length && <div className="rt-empty"><strong>No hay pedidos aquí</strong><span>{normalized ? "Ningún pedido coincide con la búsqueda." : `No hay pedidos en “${activeView === "all" ? "Movimientos" : phaseLabels[activeView]}” para ${preset === "custom" ? "estas fechas" : rangeLabels[preset].toLocaleLowerCase("es")}.`}</span></div>}
           </div>
         </aside>
         <div className="rt-detail-panel">{selected

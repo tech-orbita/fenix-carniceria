@@ -27,8 +27,6 @@ function routeFilters(value: string | string[] | undefined) {
 export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ demo?: string; page?: string; routes?: string | string[] }> }) {
   const { demo, page: rawPage, routes: rawRoutes } = await searchParams;
   const requestedRoutes = routeFilters(rawRoutes);
-  const page = Math.min(10, Math.max(1, Number.parseInt(rawPage ?? "1", 10) || 1));
-  const requestedRows = page * dashboardPageSize;
   if (process.env.NODE_ENV !== "production" && demo === "contacto") {
     const demoRows = demoOrders().filter((order) => !requestedRoutes.length || requestedRoutes.includes(order.route));
     return <OrdersPanel initialOrders={demoRows} loadError="Vista previa local: empresa y persona de contacto separadas." serverRouteFilter={requestedRoutes} />;
@@ -39,6 +37,12 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   }
 
   const viewer = await requireViewer();
+  // El selector de fechas minorista trabaja sobre el conjunto ya cargado en el
+  // navegador. Cargar el historial disponible evita que un día anterior aparezca
+  // vacío solo porque sus pedidos quedaron fuera de la primera página de 100.
+  const defaultPage = viewer.customerType === "wholesale" ? 1 : 10;
+  const page = Math.min(10, Math.max(1, Number.parseInt(rawPage ?? String(defaultPage), 10) || defaultPage));
+  const requestedRows = page * dashboardPageSize;
   const supabase = await createClient();
   const canSeeWholesaleWallet = viewer.role === "admin";
   // La ruta vigente pertenece al cliente. Resolver primero sus identificadores
