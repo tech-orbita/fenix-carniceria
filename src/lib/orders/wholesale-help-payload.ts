@@ -4,6 +4,8 @@ export type WholesaleHelpPayload = {
   conversationId?: string;
   conversationUrl?: string;
   sourceEventId?: string;
+  attachmentUrl?: string;
+  attachmentType?: string;
   reason: string;
   customer: {
     name: string;
@@ -43,6 +45,8 @@ export function normalizeWholesaleHelpPayload(value: unknown):
       conversationId: textValue(160, body.conversationId, body.conversation_id),
       conversationUrl: textValue(1_000, body.conversationUrl, body.conversation_url),
       sourceEventId: textValue(250, body.sourceEventId, body.source_event_id),
+      attachmentUrl: textValue(2_000, body.attachmentUrl, body.attachment_url, body.mediaUrl, body.media_url, body.fileUrl, body.file_url),
+      attachmentType: textValue(120, body.attachmentType, body.attachment_type, body.mimeType, body.mime_type),
       reason,
       customer: {
         name,

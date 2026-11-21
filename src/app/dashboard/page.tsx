@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { loadRetailCatalog } from "@/lib/orders/retail-agent";
 import { retailCatalogPrice } from "@/lib/orders/retail-normalization";
 import { unassignedWholesaleRoute, wholesaleRoutes } from "@/lib/orders/wholesale-routes";
+import { resolveSiteUrl } from "@/lib/auth/site-url";
 
 import "../auth.css";
 import { OrdersPanel } from "./orders-panel";
@@ -91,6 +92,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       payload_conversation_id:source_payload->>conversationId,
       payload_conversation_url:source_payload->>conversationUrl,
       help_without_order:source_payload->>helpWithoutOrder,
+      help_attachment_url:source_payload->>attachmentUrl,
       manual_created_by:source_payload->manual_entry->>created_by,
       customers (name, business_name, phone, address, routes (name)),
       order_route:routes(name),
@@ -104,7 +106,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         notes,
         unit_price,
         is_prepared
-      )
+      ),
+      order_attachments (id, kind)
     `)
     .order("received_at", { ascending: false })
     // Pide una fila extra para saber si existe otro lote sin ejecutar COUNT(*).
@@ -151,13 +154,17 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         const items = storedItems;
         const storedAddress = cleanAddress(row.delivery_address) ?? cleanAddress(customer?.address);
         const canSeeOrderPayments = row.customer_type === "retail" || canSeeWholesaleWallet;
+        const paymentAttachment = (row.order_attachments ?? []).find((attachment) => attachment.kind === "payment_proof");
+        const paymentAttachmentUrl = paymentAttachment
+          ? `${resolveSiteUrl({ configured: process.env.NEXT_PUBLIC_SITE_URL, vercelProductionHost: process.env.VERCEL_PROJECT_PRODUCTION_URL })}/api/order-attachments/${paymentAttachment.id}`
+          : undefined;
         const safeFormData = row.source === "form" ? {
           form: row.form_name ?? "Pedido mayorista",
           tax_id: row.form_tax_id ?? undefined,
           billing: row.form_billing ?? undefined,
           maps_url: row.form_maps_url ?? undefined,
           receiver_phone: row.form_receiver_phone ?? undefined,
-          payment_proof: canSeeOrderPayments ? row.form_payment_proof ?? undefined : undefined,
+          payment_proof: canSeeOrderPayments ? paymentAttachmentUrl ?? row.form_payment_proof ?? undefined : undefined,
           contact_id: row.form_contact_id ?? undefined,
           location_id: row.form_location_id ?? undefined,
           conversation_id: row.form_conversation_id ?? undefined,
@@ -194,6 +201,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             conversationUrl: row.form_conversation_url ?? row.payload_conversation_url ?? undefined,
           },
           helpRequest: row.help_without_order === "true",
+          helpAttachmentUrl: canSeeOrderPayments ? row.help_attachment_url ?? undefined : undefined,
           notes: row.notes ?? undefined,
           deletedAt: row.deleted_at ?? undefined,
         };

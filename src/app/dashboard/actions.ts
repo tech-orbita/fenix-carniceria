@@ -1036,8 +1036,12 @@ function parseWholesaleCell(productName: string, value: string) {
     return parsed.every(Boolean) ? parsed as Array<{ quantity: number; unit: string; preparation: string }> : null;
   }
   if (normalizedProduct !== "blanda") {
-    const parsed = parseQuantity(value);
-    return parsed ? [{ ...parsed, preparation: null as string | null }] : null;
+    const parts = value.split("/").map((part) => part.trim()).filter(Boolean);
+    if (!parts.length) return null;
+    const parsed = parts.map((part) => parseQuantity(part));
+    return parsed.every(Boolean)
+      ? parsed.map((item) => ({ ...item!, preparation: null as string | null }))
+      : null;
   }
   const parts = value.split("/").map((part) => part.trim()).filter(Boolean);
   if (!parts.length) return null;

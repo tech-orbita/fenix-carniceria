@@ -358,3 +358,12 @@
   .route-bulk-toolbar > span { align-self: flex-start; }
   .route-bulk-toolbar select, .route-bulk-toolbar button { width: 100%; }
 }
+.form-submissions-table-wrap { overflow: auto; border: 1px solid #ded8d0; border-radius: 12px; }
+.form-submissions-table { width: 100%; min-width: 1080px; border-collapse: collapse; background: #fff; color: #202020; font-size: 14px; }
+.form-submissions-table th { padding: 13px 14px; background: #151515; color: #fff; font-size: 12px; letter-spacing: .04em; text-align: left; text-transform: uppercase; }
+.form-submissions-table td { padding: 13px 14px; border-top: 1px solid #e8e3dd; vertical-align: top; }
+.form-submissions-table tbody tr:hover { background: #faf7f2; }
+.submission-status { display: inline-flex; border-radius: 999px; padding: 5px 9px; background: #ece8e3; font-size: 12px; font-weight: 800; white-space: nowrap; }
+.submission-status.is-created { background: #def4e5; color: #17622e; }
+.submission-status.is-failed { background: #ffe2e3; color: #a41117; }
+.submission-status.is-processing, .submission-status.is-received { background: #fff0cf; color: #795209; }
