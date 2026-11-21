@@ -10,6 +10,25 @@ export const wholesaleRoutes = [
 
 export const unassignedWholesaleRoute = "Sin clasificar";
 
+const allowedWholesaleRouteFilters = new Set<string>([...wholesaleRoutes, unassignedWholesaleRoute]);
+
+export function wholesaleRouteFilters(value: string | string[] | undefined) {
+  const raw = Array.isArray(value) ? value.join(",") : value ?? "";
+  return [...new Set(raw.split(",").map((route) => route.trim()).filter((route) => allowedWholesaleRouteFilters.has(route)))];
+}
+
+export function splitWholesaleRouteFilters(routes: string[]) {
+  return {
+    assigned: routes.filter((route) => route !== unassignedWholesaleRoute),
+    includeUnassigned: routes.includes(unassignedWholesaleRoute),
+  };
+}
+
+export function wholesaleRouteRank(route: string) {
+  const index = [...wholesaleRoutes, unassignedWholesaleRoute].indexOf(route as (typeof wholesaleRoutes)[number] | typeof unassignedWholesaleRoute);
+  return index < 0 ? wholesaleRoutes.length + 1 : index;
+}
+
 export function wholesaleRouteLabel(route: string) {
   return wholesaleRoutes.includes(route as (typeof wholesaleRoutes)[number]) ? `Ruta ${route}` : route;
 }

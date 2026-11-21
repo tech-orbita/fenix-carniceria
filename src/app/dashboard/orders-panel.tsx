@@ -11,7 +11,7 @@ import type { RetailCatalogProduct } from "@/lib/orders/retail-normalization";
 import type { WholesaleProduct } from "@/lib/orders/product-parser";
 import { wholesaleServiceDay } from "@/lib/orders/wholesale-service-day";
 import { changedWholesaleTableRow } from "@/lib/orders/wholesale-table-edit";
-import { unassignedWholesaleRoute, wholesaleRouteLabel, wholesaleRoutes } from "@/lib/orders/wholesale-routes";
+import { unassignedWholesaleRoute, wholesaleRouteLabel, wholesaleRouteRank, wholesaleRoutes } from "@/lib/orders/wholesale-routes";
 import { highLevelConversationUrl as highLevelAppConversationUrl, safeHighLevelConversationUrl } from "@/lib/orders/highlevel-conversation-url";
 
 import { convertRetailHelpToNewOrder, createManualRetailOrder, createManualWholesaleOrder, deleteRetailOrder, deleteWholesaleOrder, findWholesaleCustomer, resolveOrderHelp, restoreWholesaleOrder, scheduleRetailOrder, scheduleWholesaleOrder, sendRetailPaymentSummary, setWholesaleProductPrepared, updateOrderDetails, updateOrderPaymentStatus, updateOrderStatus, updateWholesalePayment, updateWholesaleRoute, updateWholesaleTable } from "./actions";
@@ -646,7 +646,11 @@ function WholesaleOrdersTable({ hasMoreOrders, isAdmin, loadedOrderPages, orders
     (!zones.length || zones.includes(order.route))
     && (!cuts.length || cuts.some((cut) => orderCuts.get(order.id)?.has(cut)))
     && matchesSearch(order, searchTerms)
-  )), [cuts, orderCuts, orders, searchTerms, zones]);
+  )).sort((left, right) => {
+    const routeComparison = wholesaleRouteRank(left.route) - wholesaleRouteRank(right.route);
+    if (routeComparison) return routeComparison;
+    return wholesaleCustomerName(left).localeCompare(wholesaleCustomerName(right), "es", { sensitivity: "base" });
+  }), [cuts, orderCuts, orders, searchTerms, zones]);
   const visibleProducts = useMemo(() => {
     const normallyVisibleProducts = products.filter((product) => {
       if (cuts.length) return cuts.includes(product.name) || (editing && extraColumns.includes(product.name));

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { customerIdentityKey, wholesaleRouteLabel, wholesaleRoutes } from "../src/lib/orders/wholesale-routes.ts";
+import { customerIdentityKey, splitWholesaleRouteFilters, wholesaleRouteFilters, wholesaleRouteLabel, wholesaleRouteRank, wholesaleRoutes } from "../src/lib/orders/wholesale-routes.ts";
 
 test("ofrece las siete rutas operativas solicitadas", () => {
   assert.deepEqual(wholesaleRoutes, ["Centro", "Cacique", "Cordialidad", "Soledad", "Norte", "Galapa", "Barrio"]);
@@ -18,4 +18,20 @@ test("identifica mayoristas por establecimiento aunque compartan teléfono", () 
 
 test("mantiene el teléfono como identidad del minorista", () => {
   assert.equal(customerIdentityKey("retail", { name: "Cliente", phone: "+57 300 123 4567" }), "phone:573001234567");
+});
+
+test("incluye sin clasificar como filtro de clientes que no tienen ruta", () => {
+  assert.deepEqual(splitWholesaleRouteFilters(wholesaleRouteFilters("Norte,Sin clasificar,Norte")), {
+    assigned: ["Norte"],
+    includeUnassigned: true,
+  });
+});
+
+test("organiza las rutas en un orden estable y deja sin clasificar al final", () => {
+  const routes = ["Norte", "Sin clasificar", "Centro"];
+  assert.deepEqual(routes.toSorted((left, right) => wholesaleRouteRank(left) - wholesaleRouteRank(right)), [
+    "Centro",
+    "Norte",
+    "Sin clasificar",
+  ]);
 });
