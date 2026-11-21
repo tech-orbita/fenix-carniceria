@@ -12,7 +12,7 @@ import type { WholesaleProduct } from "@/lib/orders/product-parser";
 import { wholesaleServiceDay } from "@/lib/orders/wholesale-service-day";
 import { changedWholesaleTableRow } from "@/lib/orders/wholesale-table-edit";
 import { formatWholesaleDisplayLines } from "@/lib/orders/wholesale-lines";
-import { unassignedWholesaleRoute, wholesaleRouteLabel, wholesaleRoutes } from "@/lib/orders/wholesale-routes";
+import { unassignedWholesaleRoute, wholesaleRouteLabel, wholesaleRouteRank, wholesaleRoutes } from "@/lib/orders/wholesale-routes";
 import { highLevelConversationUrl as highLevelAppConversationUrl, safeHighLevelConversationUrl } from "@/lib/orders/highlevel-conversation-url";
 
 import { convertRetailHelpToNewOrder, createManualRetailOrder, createManualWholesaleOrder, deleteRetailOrder, deleteWholesaleOrder, findWholesaleCustomer, resolveOrderHelp, restoreWholesaleOrder, scheduleRetailOrder, scheduleWholesaleOrder, sendRetailPaymentSummary, setWholesaleProductPrepared, updateOrderDetails, updateOrderPaymentStatus, updateOrderStatus, updateWholesalePayment, updateWholesaleRoute, updateWholesaleTable } from "./actions";
@@ -642,10 +642,9 @@ function WholesaleOrdersTable({ hasMoreOrders, isAdmin, loadedOrderPages, orders
     && (!cuts.length || cuts.some((cut) => orderCuts.get(order.id)?.has(cut)))
     && matchesSearch(order, searchTerms)
   )).sort((left, right) => {
-    const routeOrder = zones.length ? zones : [...wholesaleRoutes, unassignedWholesaleRoute];
-    const leftRoute = routeOrder.indexOf(left.route as (typeof routeOrder)[number]);
-    const rightRoute = routeOrder.indexOf(right.route as (typeof routeOrder)[number]);
-    const routeComparison = (leftRoute < 0 ? routeOrder.length : leftRoute) - (rightRoute < 0 ? routeOrder.length : rightRoute);
+    // El orden de las rutas es estable y no depende del orden en que el usuario
+    // marcó las casillas del filtro. Dentro de cada ruta, ordena por negocio.
+    const routeComparison = wholesaleRouteRank(left.route) - wholesaleRouteRank(right.route);
     if (routeComparison) return routeComparison;
     return wholesaleCustomerName(left).localeCompare(wholesaleCustomerName(right), "es", { sensitivity: "base" });
   }), [cuts, orderCuts, orders, searchTerms, zones]);

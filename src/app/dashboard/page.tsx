@@ -3,7 +3,7 @@ import { hasSupabaseEnvironment } from "@/lib/supabase/config";
 import { createClient } from "@/lib/supabase/server";
 import { loadRetailCatalog } from "@/lib/orders/retail-agent";
 import { retailCatalogPrice } from "@/lib/orders/retail-normalization";
-import { unassignedWholesaleRoute, wholesaleRoutes } from "@/lib/orders/wholesale-routes";
+import { splitWholesaleRouteFilters, wholesaleRouteFilters } from "@/lib/orders/wholesale-routes";
 import { resolveSiteUrl } from "@/lib/auth/site-url";
 
 import "../auth.css";
@@ -18,16 +18,9 @@ function cleanAddress(value: unknown) {
 }
 
 const dashboardPageSize = 100;
-const allowedRouteFilters = new Set<string>([...wholesaleRoutes, unassignedWholesaleRoute]);
-
-function routeFilters(value: string | string[] | undefined) {
-  const raw = Array.isArray(value) ? value.join(",") : value ?? "";
-  return [...new Set(raw.split(",").map((route) => route.trim()).filter((route) => allowedRouteFilters.has(route)))];
-}
-
 export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ demo?: string; page?: string; routes?: string | string[] }> }) {
   const { demo, page: rawPage, routes: rawRoutes } = await searchParams;
-  const requestedRoutes = routeFilters(rawRoutes);
+  const requestedRoutes = wholesaleRouteFilters(rawRoutes);
   if (process.env.NODE_ENV !== "production" && demo === "contacto") {
     const demoRows = demoOrders().filter((order) => !requestedRoutes.length || requestedRoutes.includes(order.route));
     return <OrdersPanel initialOrders={demoRows} loadError="Vista previa local: empresa y persona de contacto separadas." serverRouteFilter={requestedRoutes} />;
@@ -48,14 +41,25 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const canSeeWholesaleWallet = viewer.role === "admin";
   // La ruta vigente pertenece al cliente. Resolver primero sus identificadores
   // evita que la copia histórica del pedido oculte una sede ya clasificada.
-  const routedCustomers = requestedRoutes.length
+  const { assigned: assignedRouteFilters, includeUnassigned } = splitWholesaleRouteFilters(requestedRoutes);
+  const assignedCustomersPromise = assignedRouteFilters.length
     ? await supabase
       .from("customers")
       .select("id,routes!inner(name)")
       .eq("customer_type", "wholesale")
-      .in("routes.name", requestedRoutes)
+      .in("routes.name", assignedRouteFilters)
     : { data: undefined, error: null };
-  const routedCustomerIds = routedCustomers.data?.map((customer) => customer.id) ?? [];
+  const unassignedCustomersPromise = includeUnassigned
+    ? await supabase
+      .from("customers")
+      .select("id")
+      .eq("customer_type", "wholesale")
+      .is("route_id", null)
+    : { data: undefined, error: null };
+  const routedCustomerIds = [...new Set([
+    ...(assignedCustomersPromise.data?.map((customer) => customer.id) ?? []),
+    ...(unassignedCustomersPromise.data?.map((customer) => customer.id) ?? []),
+  ])];
 
   // RLS limita las filas al segmento del usuario; el filtro explícito lo deja claro.
   let query = supabase
@@ -123,7 +127,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const hasMoreOrders = (queriedRows?.length ?? 0) > requestedRows;
   const rows = queriedRows?.slice(0, requestedRows);
 
-  const loadOrdersError = ordersError ?? routedCustomers.error;
+  const loadOrdersError = ordersError ?? assignedCustomersPromise.error ?? unassignedCustomersPromise.error;
   const orders: Order[] = loadOrdersError
     ? []
     : (rows ?? []).map((row) => {
@@ -183,7 +187,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           address: storedAddress ?? "Sin dirección",
           // La clasificación pertenece al cliente. Usarla como fuente principal
           // evita que un pedido antiguo o sin ruta desaparezca del filtro recién asignado.
-          route: customerRoute?.name ?? route?.name ?? "Sin clasificar",
+          route: customer ? customerRoute?.name ?? "Sin clasificar" : route?.name ?? "Sin clasificar",
           source: row.source,
           createdBy: row.manual_created_by ?? undefined,
           paymentMethod: canSeeOrderPayments ? row.payment_method ?? undefined : undefined,
