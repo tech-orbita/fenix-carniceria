@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { customerIdentityKey, splitWholesaleRouteFilters, wholesaleRouteFilters, wholesaleRouteLabel, wholesaleRouteRank, wholesaleRoutes } from "../src/lib/orders/wholesale-routes.ts";
+import { customerIdentityKey, splitWholesaleRouteFilters, wholesaleCustomerRouteId, wholesaleRouteFilters, wholesaleRouteLabel, wholesaleRouteRank, wholesaleRoutes } from "../src/lib/orders/wholesale-routes.ts";
 
 test("ofrece las siete rutas operativas solicitadas", () => {
   assert.deepEqual(wholesaleRoutes, ["Centro", "Cacique", "Cordialidad", "Soledad", "Norte", "Galapa", "Barrio"]);
@@ -34,4 +34,10 @@ test("organiza las rutas en un orden estable y deja sin clasificar al final", ()
     "Norte",
     "Sin clasificar",
   ]);
+});
+
+test("un pedido nuevo conserva la ruta que el usuario asignó al cliente", () => {
+  assert.equal(wholesaleCustomerRouteId({ route_id: 12 }, 99), 12);
+  assert.equal(wholesaleCustomerRouteId({ route_id: null }, 99), null);
+  assert.equal(wholesaleCustomerRouteId(null, 99), 99);
 });

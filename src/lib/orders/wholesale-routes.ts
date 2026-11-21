@@ -29,6 +29,13 @@ export function wholesaleRouteRank(route: string) {
   return index < 0 ? wholesaleRoutes.length + 1 : index;
 }
 
+export function wholesaleCustomerRouteId(
+  existingCustomer: { route_id: number | null } | null | undefined,
+  incomingRouteId: number | null,
+) {
+  return existingCustomer ? existingCustomer.route_id : incomingRouteId;
+}
+
 export function wholesaleRouteLabel(route: string) {
   return wholesaleRoutes.includes(route as (typeof wholesaleRoutes)[number]) ? `Ruta ${route}` : route;
 }
