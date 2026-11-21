@@ -35,7 +35,7 @@ export function CatalogOrderForm({ demo = false, products }: { demo?: boolean; p
     setNotice({ kind: "loading", message: "Comprobando la prueba…" });
     if (demo) {
       try {
-        const response = await fetch("/api/wholesale-order/test", {
+        const response = await fetch("https://fenix-carniceria.vercel.app/api/wholesale-order/test", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -44,6 +44,7 @@ export function CatalogOrderForm({ demo = false, products }: { demo?: boolean; p
             notes,
             paymentProofName: proof?.name,
             variant: "catalog",
+            testAccess: "620ec1f64681e8ea2cac222a21601638d79caf8a6ec3d4a6",
             items: rows.map((row) => ({ productName: row.productName, quantity: Number(row.quantity), unit: row.unit, preparation: row.preparation })),
           }),
         });

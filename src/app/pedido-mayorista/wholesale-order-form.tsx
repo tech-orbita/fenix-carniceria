@@ -27,10 +27,10 @@ export function WholesaleOrderForm({ demo = false }: { demo?: boolean }) {
     setNotice({ kind: "loading", message: demo ? "Comprobando la prueba…" : "Guardando tu pedido…" });
     if (demo) {
       try {
-        const response = await fetch("/api/wholesale-order/test", {
+        const response = await fetch("https://fenix-carniceria.vercel.app/api/wholesale-order/test", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ businessName, phone, orderText, notes, items: parsed.items, paymentProofName: proof?.name, variant: "free_text" }),
+          body: JSON.stringify({ businessName, phone, orderText, notes, items: parsed.items, paymentProofName: proof?.name, variant: "free_text", testAccess: "620ec1f64681e8ea2cac222a21601638d79caf8a6ec3d4a6" }),
         });
         const result = await response.json() as { error?: string; orderNumber?: string };
         if (!response.ok || !result.orderNumber) throw new Error(result.error || "No pudimos guardar la prueba.");
