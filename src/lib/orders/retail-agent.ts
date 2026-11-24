@@ -6,7 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { classifyHighLevelContact, syncHighLevelOrderFields, syncRetailPipeline } from "@/lib/orders/highlevel-pipeline";
 import type { OrderPipelineStage } from "@/lib/orders/highlevel-pipeline";
 import { customerIdentityKey } from "@/lib/orders/wholesale-routes";
-import { isDirectRetailOrderPhrase, isStandaloneRetailHelpPayload, normalizeRetailItems, requiresRetailHelp } from "@/lib/orders/retail-normalization";
+import { isDirectRetailOrderPhrase, isStandaloneRetailHelpPayload, normalizeRetailCustomerName, normalizeRetailItems, requiresRetailHelp } from "@/lib/orders/retail-normalization";
 import type { RetailCatalogProduct, RetailInputItem } from "@/lib/orders/retail-normalization";
 import { retailOrderDayStart } from "@/lib/orders/retail-order-window";
 
@@ -211,7 +211,9 @@ export async function upsertRetailOrder(value: unknown) {
   const { data: existingCustomer } = existingCustomerId
     ? await supabase.from("customers").select("name,phone,tax_id,address,neighborhood,city,route_id,identity_key").eq("id", existingCustomerId).single()
     : { data: null };
-  const name = String(body.customer?.name ?? existingCustomer?.name ?? "Cliente WhatsApp").trim();
+  const name = normalizeRetailCustomerName(body.customer?.name)
+    || normalizeRetailCustomerName(existingCustomer?.name)
+    || "Cliente WhatsApp";
   const effectivePhone = phone || existingCustomer?.phone || "";
   const identityKey = existingCustomer?.identity_key
     || (effectivePhone ? customerIdentityKey("retail", { name, phone: effectivePhone }) : `ghl-contact:${contactId}`);

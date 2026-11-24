@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { matchRetailProduct, normalizeRetailItems, requiresRetailHelp, retailCatalogPrice } from "../src/lib/orders/retail-normalization.ts";
+import { matchRetailProduct, normalizeRetailCustomerName, normalizeRetailItems, requiresRetailHelp, retailCatalogPrice } from "../src/lib/orders/retail-normalization.ts";
 
 const catalog = [
   { id: "pulpa", name: "Pulpa", catalogKey: "cerdo:pulpa", pricePerKg: 22_000 },
@@ -35,6 +35,34 @@ test("normaliza las líneas operativas que envía n8n", () => {
     { product_name: "Pulpa", quantity: 1, unit_price: 22_000 },
     { product_name: "Molida súper especial", quantity: 0.5, unit_price: 23_000 },
   ]);
+});
+
+test("recupera todos los productos cuando el extractor aplana una lista con comas", () => {
+  const extendedCatalog = [
+    ...catalog,
+    { id: "blanda", name: "Carne blanda", catalogKey: "res:carne blanda", pricePerKg: 34_000 },
+    { id: "atravessado", name: "Atravessado", catalogKey: "res:atravessado", pricePerKg: 31_400 },
+    { id: "chuleta", name: "Chuleta ahumada", catalogKey: "cerdo:chuleta ahumada", pricePerKg: 24_000 },
+    { id: "muslo", name: "Muslo Colombina", catalogKey: "pollo:muslo colombina", pricePerKg: 10_000 },
+    { id: "chorizo", name: "Chorizo", catalogKey: "otros:chorizo", pricePerKg: 9_000 },
+  ];
+  const rawOrderText = "8 mil carne molida especial, 10 mil d carne blanda limpia SIN RELAJAR, 10 mil d carne en posta, 10 mil d lomo d cerdo sin gordo, 1 libra d chuleta ahumada, 1 libra d muslo, 1 pechuga (en torreja), 1 libra d chorizo y butifarra";
+  const items = normalizeRetailItems([
+    { name: rawOrderText, quantity: 8_000, unit: "COP", quantityKind: "amount", rawText: rawOrderText },
+  ], rawOrderText, extendedCatalog);
+
+  assert.equal(items.length, 8);
+  assert.deepEqual(items.slice(0, 2).map(({ product_name }) => product_name), ["Molida súper especial", "Carne blanda"]);
+  assert.equal(items.at(-1).product_name, "Butifarra");
+});
+
+test("no divide una cantidad con coma decimal y descarta nombres de relleno", () => {
+  const items = normalizeRetailItems([], "1,5 kg de pulpa, 1 libra de carne molida", catalog);
+  assert.equal(items.length, 2);
+  assert.equal(items[0].quantity, 1.5);
+  assert.equal(normalizeRetailCustomerName("any"), "");
+  assert.equal(normalizeRetailCustomerName("🙏🌻✨"), "");
+  assert.equal(normalizeRetailCustomerName("Ana Pérez"), "Ana Pérez");
 });
 
 test("usa molida súper especial por defecto y corriente solo si el cliente lo especifica", () => {

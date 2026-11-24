@@ -33,6 +33,14 @@ export type NormalizedRetailItem = {
 
 const unitPattern = "(?:kg|kgs|kilo|kilos|kilogramo|kilogramos|lb|lbs|lib|libra|libras)";
 
+export function normalizeRetailCustomerName(value: unknown) {
+  const name = String(value ?? "").replace(/\s+/g, " ").trim().slice(0, 200);
+  const normalized = normalizeProductName(name);
+  if (!/[a-záéíóúñ]{2}/i.test(name)) return "";
+  if (/^(?:any|cliente|cliente whatsapp|sin nombre|desconocido|unknown|n a|na|ninguno)$/.test(normalized)) return "";
+  return name;
+}
+
 const retailAliases: Record<string, string> = {
   "carne para desmechar": "carne blanda",
   "carne molida especial": "molida super especial",
@@ -238,12 +246,17 @@ export function normalizeRetailItems(
   rawOrderText: string,
   catalog: readonly RetailCatalogProduct[],
 ) {
+  // El extractor puede convertir una lista con saltos de línea en una sola
+  // frase separada por comas. Una coma decimal (1,5 kg) no divide productos;
+  // una coma seguida por la cantidad del siguiente renglón sí lo hace.
   const fallback: RetailInputItem[] = rawOrderText
-    .split(/\r?\n|;+/)
+    .split(/\r?\n|;+|(?<!\d),(?=\s*(?:[-*•]\s*)?\$?\s*\d)/)
     .map((line) => line.replace(/^\s*(?:[-*•]|\d+[.)])\s*/, "").trim())
     .filter(Boolean)
     .map((rawText) => ({ rawText }));
-  const input = supplied.length ? supplied : fallback;
+  // No se confía en una extracción estructurada incompleta. Si el texto
+  // original contiene más renglones reconocibles, estos son la fuente fiel.
+  const input = fallback.length > supplied.length ? fallback : supplied.length ? supplied : fallback;
 
   return input.slice(0, 100).map((item): NormalizedRetailItem | null => {
     const parsed = parsedLine(item);
