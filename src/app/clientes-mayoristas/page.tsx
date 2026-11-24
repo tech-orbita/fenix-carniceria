@@ -36,8 +36,7 @@ export default async function WholesaleCustomersPage() {
           <span>{viewer.email}</span>
           <Link href="/registro-mayorista" target="_blank">Abrir formulario</Link>
           <Link href="/pedido-mayorista" target="_blank">Formulario de pedidos</Link>
-          <Link href="/formularios">Historial de ingresos</Link>
-          {viewer.role === "admin" && <Link href="/formularios">Ver envíos</Link>}
+          {viewer.role === "admin" && <Link href="/formularios">Formularios recibidos</Link>}
           <Link href="/">Volver a pedidos</Link>
           <form action={signOut}><button type="submit">Salir</button></form>
         </div>

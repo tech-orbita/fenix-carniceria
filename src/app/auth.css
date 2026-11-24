@@ -358,12 +358,57 @@
   .route-bulk-toolbar > span { align-self: flex-start; }
   .route-bulk-toolbar select, .route-bulk-toolbar button { width: 100%; }
 }
-.form-submissions-table-wrap { overflow: auto; border: 1px solid #ded8d0; border-radius: 12px; }
-.form-submissions-table { width: 100%; min-width: 1080px; border-collapse: collapse; background: #fff; color: #202020; font-size: 14px; }
-.form-submissions-table th { padding: 13px 14px; background: #151515; color: #fff; font-size: 12px; letter-spacing: .04em; text-align: left; text-transform: uppercase; }
-.form-submissions-table td { padding: 13px 14px; border-top: 1px solid #e8e3dd; vertical-align: top; }
+.form-submissions-page { max-width: 1440px; }
+.form-submissions-page .users-header { justify-content: space-between; }
+.form-submissions-page .users-header p { max-width: 680px; margin: 6px 0 0; color: #66758d; font-size: 13px; line-height: 1.5; }
+.submissions-guide { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 18px; }
+.submissions-guide div { min-width: 0; border: 1px solid #dce7f5; border-radius: 10px; padding: 12px 14px; background: #f7faff; }
+.submissions-guide strong, .submissions-guide span { display: block; }
+.submissions-guide strong { margin-bottom: 4px; color: #174f9d; font-size: 12px; }
+.submissions-guide span { color: #66758d; font-size: 11px; line-height: 1.45; }
+.submissions-empty { display: grid; justify-items: center; gap: 7px; border: 1px dashed #b9c9dd; border-radius: 12px; padding: 34px 20px; background: #f9fbfe; text-align: center; }
+.submissions-empty strong { color: #18345c; font-size: 16px; }
+.submissions-empty span { max-width: 620px; color: #6e7f99; font-size: 13px; line-height: 1.5; }
+.form-submissions-table-wrap { width: 100%; overflow: hidden; border: 1px solid #ded8d0; border-radius: 12px; }
+.form-submissions-table { width: 100%; table-layout: fixed; border-collapse: collapse; background: #fff; color: #202020; font-size: 13px; }
+.form-submissions-table th { padding: 12px 10px; background: #151515; color: #fff; font-size: 10px; letter-spacing: .025em; line-height: 1.3; text-align: left; text-transform: uppercase; }
+.form-submissions-table td { overflow-wrap: anywhere; padding: 13px 10px; border-top: 1px solid #e8e3dd; line-height: 1.4; vertical-align: top; }
+.form-submissions-table th:nth-child(1) { width: 14%; }
+.form-submissions-table th:nth-child(2) { width: 13%; }
+.form-submissions-table th:nth-child(3) { width: 16%; }
+.form-submissions-table th:nth-child(4) { width: 13%; }
+.form-submissions-table th:nth-child(5) { width: 15%; }
+.form-submissions-table th:nth-child(6) { width: 15%; }
+.form-submissions-table th:nth-child(7) { width: 14%; }
 .form-submissions-table tbody tr:hover { background: #faf7f2; }
 .submission-status { display: inline-flex; border-radius: 999px; padding: 5px 9px; background: #ece8e3; font-size: 12px; font-weight: 800; white-space: nowrap; }
 .submission-status.is-created { background: #def4e5; color: #17622e; }
 .submission-status.is-failed { background: #ffe2e3; color: #a41117; }
 .submission-status.is-processing, .submission-status.is-received { background: #fff0cf; color: #795209; }
+.submission-status.is-needs_review { background: #ffe6bd; color: #7d4700; }
+.integration-status.is-sent { background: #def4e5; color: #17622e; }
+.integration-status.is-pending { background: #fff0cf; color: #795209; }
+.integration-status.is-not_required { background: #edf1f6; color: #4d6079; }
+
+@media (max-width: 1024px) {
+  .form-submissions-page { padding: 18px 10px 40px; }
+  .form-submissions-page .users-header { align-items: flex-start; }
+  .form-submissions-page .session-bar { width: 100%; margin-left: 0; overflow-x: auto; padding-bottom: 2px; }
+  .form-submissions-page .users-panel { padding: 14px; }
+  .submissions-guide { grid-template-columns: 1fr; }
+  .form-submissions-table-wrap { overflow: visible; border: 0; border-radius: 0; }
+  .form-submissions-table, .form-submissions-table tbody, .form-submissions-table tr, .form-submissions-table td { display: block; width: 100%; }
+  .form-submissions-table { table-layout: auto; background: transparent; }
+  .form-submissions-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .form-submissions-table tbody { display: grid; gap: 14px; }
+  .form-submissions-table tr { overflow: hidden; border: 1px solid #dce4ef; border-radius: 12px; background: #fff; box-shadow: 0 3px 12px rgba(32, 56, 85, .06); }
+  .form-submissions-table td { display: grid; grid-template-columns: minmax(125px, 38%) minmax(0, 1fr); gap: 12px; align-items: start; border-top: 1px solid #edf1f5; padding: 10px 12px; }
+  .form-submissions-table td:first-child { border-top: 0; background: #f6f9fd; }
+  .form-submissions-table td::before { content: attr(data-label); color: #62738a; font-size: 10px; font-weight: 900; letter-spacing: .035em; text-transform: uppercase; }
+  .submission-status { width: fit-content; max-width: 100%; white-space: normal; }
+}
+
+@media (max-width: 560px) {
+  .form-submissions-page .users-panel { padding: 10px; }
+  .form-submissions-table td { grid-template-columns: 1fr; gap: 4px; }
+}
