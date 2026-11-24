@@ -67,7 +67,7 @@ export function WholesaleOrderForm({ demo = false }: { demo?: boolean }) {
   if (receipt) return (
     <section className="wholesale-order-card portal-receipt" role="status">
         <span className="portal-receipt-check">✓</span><p>{demo ? "Prueba visible en el panel" : "Pedido recibido"}</p><h2>{receipt}</h2><strong>{businessName}</strong>
-      <ul><li>Los renglones repetidos se conservaron por separado.</li><li>La ruta asignada al establecimiento se aplicó automáticamente.</li></ul>
+      <ul><li>Cada línea de tu pedido se guardó por separado.</li><li>La ruta asignada al establecimiento se aplicó automáticamente.</li></ul>
       <button className="portal-primary-button" onClick={reset} type="button">Hacer otro pedido</button>
     </section>
   );
@@ -80,16 +80,16 @@ export function WholesaleOrderForm({ demo = false }: { demo?: boolean }) {
           <label><span>Nombre del establecimiento</span><input autoComplete="organization" maxLength={160} onChange={(event) => setBusinessName(event.target.value)} placeholder="Ej. Tienda Colonial" required value={businessName} /></label>
           <label><span>Teléfono / WhatsApp</span><input autoComplete="tel" inputMode="tel" maxLength={30} onChange={(event) => setPhone(event.target.value)} placeholder="Ej. 300 123 4567" required value={phone} /></label>
         </div>
-        <label className="portal-free-order"><span>Escribe tu pedido</span><small>Puedes escribir como lo haces hoy. Para mayor precisión, usa un producto por renglón. Si repites un producto, cada renglón se conserva.</small><textarea maxLength={6000} onChange={(event) => setOrderText(event.target.value)} placeholder={exampleOrder} required rows={8} value={orderText} /></label>
+        <label className="portal-free-order"><span>Escribe tu pedido</span><small>Escribe primero la cantidad y después el producto. Usa una línea nueva para cada producto. Si necesitas el mismo producto con cantidades diferentes, escríbelo nuevamente en otra línea.</small><textarea maxLength={6000} onChange={(event) => setOrderText(event.target.value)} placeholder={exampleOrder} required rows={8} value={orderText} /></label>
         <section className="portal-order-preview" aria-live="polite">
-          <header><div><span>Revisión antes de enviar</span><h3>Así recibiremos tu pedido</h3></div><strong>{parsed.items.length} {parsed.items.length === 1 ? "renglón" : "renglones"}</strong></header>
-          {parsed.items.length ? <ol>{parsed.items.map((item, index) => <li key={`${index}-${item.product_name}`}><b>{item.quantity || "Sin cantidad"}{item.quantity ? ` ${item.unit === "cantidad" ? "" : item.unit}` : ""}</b><span>{item.product_name}{item.preparation ? ` · ${item.preparation}` : ""}</span></li>)}</ol> : <p>Escribe el pedido arriba y aquí podrás revisarlo antes de aprobar el envío.</p>}
+          <header><div><span>Revisión antes de enviar</span><h3>Así recibiremos tu pedido</h3></div><strong>{parsed.items.length} {parsed.items.length === 1 ? "producto" : "productos"}</strong></header>
+          {parsed.items.length ? <ol>{parsed.items.map((item, index) => <li key={`${index}-${item.product_name}`}><b>{item.quantity || "Sin cantidad"}{item.quantity ? ` ${item.unit === "cantidad" ? "" : item.unit}` : ""}</b><span>{item.product_name}{item.preparation ? ` · ${item.preparation}` : ""}</span></li>)}</ol> : <p>Tu pedido aparecerá aquí organizado para que puedas revisarlo antes de enviarlo.</p>}
           {parsed.unresolved.length > 0 && <p className="portal-preview-warning">Revisa estas líneas: {parsed.unresolved.join(" · ")}</p>}
         </section>
         <div className="portal-details-grid"><label className="portal-wide"><span>Observaciones <small>opcional</small></span><textarea maxLength={2000} onChange={(event) => setNotes(event.target.value)} placeholder="Indicaciones generales para preparar el pedido" rows={3} value={notes} /></label></div>
         {notice.message && <p className={`portal-notice is-${notice.kind}`} role={notice.kind === "error" ? "alert" : "status"}>{notice.message}</p>}
         {registrationRequired ? <p className="portal-registration-required"><Link href="/registro-mayorista">Registrarme como cliente mayorista</Link></p> : null}
-        <div className="portal-submit-row"><p>Comprueba el resumen antes de enviar. No necesitas escoger productos de una lista.</p><button className="portal-primary-button" disabled={notice.kind === "loading"} type="submit">{notice.kind === "loading" ? "Revisando…" : demo ? "Probar envío" : "Enviar pedido"}</button></div>
+        <div className="portal-submit-row"><p>Antes de enviar, revisa que las cantidades y los productos estén correctos.</p><button className="portal-primary-button" disabled={notice.kind === "loading"} type="submit">{notice.kind === "loading" ? "Revisando…" : demo ? "Probar envío" : "Enviar pedido"}</button></div>
       </form>
     </section>
   );

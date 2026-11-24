@@ -17,7 +17,7 @@ export default async function WholesaleOrderPage({ searchParams }: { searchParam
       <div className="wholesale-order-shell">
         <header className="wholesale-order-brand">
           <Image alt="Fénix Carnes" height={120} priority src="/logo-fenix-bn.svg" width={230} />
-          <div><span>Portal mayorista</span><h1>Haz tu pedido directamente</h1><p>Cada producto se conserva en su propio renglón y recibirás un número de confirmación real.</p></div>
+          <div><span>Portal mayorista</span><h1>Haz tu pedido directamente</h1><p>Escribe cada producto en una línea y al finalizar recibirás tu número de pedido.</p></div>
         </header>
         {demo && <div className="portal-demo-banner" role="status">Vista de prueba · El pedido aparecerá en el panel con la marca PRUEBA y no activará automatizaciones</div>}
         <WholesaleOrderForm demo={demo} />
