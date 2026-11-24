@@ -44,12 +44,23 @@ function normalizedIdentityPart(value: string) {
   return value.trim().replace(/\s+/g, " ").toLocaleLowerCase("es");
 }
 
+export function normalizedWholesaleBusiness(value?: string | null) {
+  return normalizedIdentityPart(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
 export function normalizedTaxId(value?: string | null) {
   return (value ?? "").replace(/[^a-z0-9]/gi, "").toLocaleLowerCase("es");
 }
 
 export function normalizedCustomerPhone(value?: string | null) {
   return (value ?? "").replace(/\D/g, "");
+}
+
+export function normalizedWholesalePhone(value?: string | null) {
+  const digits = normalizedCustomerPhone(value);
+  return digits.length === 10 && digits.startsWith("3") ? `57${digits}` : digits;
 }
 
 export function customerIdentityKey(

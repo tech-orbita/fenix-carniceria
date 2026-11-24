@@ -21,7 +21,7 @@ import type { OperationalPhase } from "./panel-shared";
 import { RetailPanel } from "./retail-panel";
 import type { ManualRetailOrderInput } from "./retail-panel";
 import type { EditableOrderDetails } from "./retail-panel";
-import type { CustomerType, Order } from "./types";
+import type { CustomerType, FormSubmissionAlert, Order } from "./types";
 import { useOrdersRealtime } from "./use-orders-realtime";
 import { signOut } from "../login/actions";
 import type { Viewer } from "@/lib/auth/viewer";
@@ -544,7 +544,7 @@ type SavedWholesaleRow = {
   items: Order["items"];
 };
 
-function WholesaleOrdersTable({ hasMoreOrders, isAdmin, loadedOrderPages, orders: allOrders, pendingId, serverRouteFilter, onRowsSaved, onStatusChange }: { hasMoreOrders: boolean; isAdmin: boolean; loadedOrderPages: number; orders: Order[]; pendingId?: string; serverRouteFilter: string[]; onRowsSaved: (rows: SavedWholesaleRow[]) => void; onStatusChange: (order: Order, phase: OperationalPhase) => void }) {
+function WholesaleOrdersTable({ formAlertsError, formSubmissionAlerts, hasMoreOrders, isAdmin, loadedOrderPages, orders: allOrders, pendingId, serverRouteFilter, onRowsSaved, onStatusChange }: { formAlertsError?: string; formSubmissionAlerts: FormSubmissionAlert[]; hasMoreOrders: boolean; isAdmin: boolean; loadedOrderPages: number; orders: Order[]; pendingId?: string; serverRouteFilter: string[]; onRowsSaved: (rows: SavedWholesaleRow[]) => void; onStatusChange: (order: Order, phase: OperationalPhase) => void }) {
   const router = useRouter();
   const matrixScrollRef = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState("");
@@ -598,7 +598,7 @@ function WholesaleOrdersTable({ hasMoreOrders, isAdmin, loadedOrderPages, orders
   const orders = useMemo(() => baseOrders.map((order) => routeOverrides[order.id]
     ? { ...order, route: routeOverrides[order.id] }
     : order), [baseOrders, routeOverrides]);
-  const helpCount = chatHelpRequests.length;
+  const helpCount = chatHelpRequests.length + formSubmissionAlerts.length;
   const dispatchedCount = dispatchedOrders.length;
   const deletedCount = deletedOrders.length;
   const orderCount = openOrders.length;
@@ -839,6 +839,11 @@ function WholesaleOrdersTable({ hasMoreOrders, isAdmin, loadedOrderPages, orders
       </div>
       {creatingOrder && <ManualWholesaleOrderForm onClose={() => setCreatingOrder(false)} orders={allOrders} />}
       {editNotice && <div className="table-edit-notice" role="status">{editNotice}</div>}
+      {listMode === "help" && (formAlertsError || formSubmissionAlerts.length > 0) ? <section aria-label="Formularios que requieren ayuda" className="form-intake-alerts">
+        <header><div><span>Formularios del sistema</span><h2>Ingresos que requieren revisión</h2></div><Link href="/formularios">Ver historial completo</Link></header>
+        {formAlertsError ? <p className="form-intake-alert-error" role="alert">{formAlertsError}</p> : null}
+        <div>{formSubmissionAlerts.map((alert) => <article key={alert.id}><strong>{alert.formType === "wholesale_registration" ? "Registro mayorista" : alert.formType === "wholesale_payment" ? "Comprobante de pago" : "Pedido mayorista"}</strong><span>{alert.businessName || "Cliente sin identificar"}{alert.phone ? ` · ${alert.phone}` : ""}</span><small>{dateTime.format(new Date(alert.submittedAt))}</small><p>{alert.errorMessage}</p></article>)}</div>
+      </section> : null}
       <div className="matrix-scroll-shell">
         <p className="matrix-scroll-hint">Desplázate arriba o abajo para recorrer pedidos y hacia los lados para ver todos los cortes.</p>
         <div aria-label="Controles de desplazamiento de la planilla" className="matrix-scroll-controls">
@@ -893,7 +898,7 @@ function WholesaleOrdersTable({ hasMoreOrders, isAdmin, loadedOrderPages, orders
   );
 }
 
-export function OrdersPanel({ hasMoreOrders = false, initialOrders, loadedOrderPages = 1, loadError, retailCatalog = [], serverRouteFilter = [], viewer }: { hasMoreOrders?: boolean; initialOrders: Order[]; loadedOrderPages?: number; loadError?: string; retailCatalog?: RetailCatalogProduct[]; serverRouteFilter?: string[]; viewer?: Viewer }) {
+export function OrdersPanel({ formAlertsError, formSubmissionAlerts = [], hasMoreOrders = false, initialOrders, loadedOrderPages = 1, loadError, retailCatalog = [], serverRouteFilter = [], viewer }: { formAlertsError?: string; formSubmissionAlerts?: FormSubmissionAlert[]; hasMoreOrders?: boolean; initialOrders: Order[]; loadedOrderPages?: number; loadError?: string; retailCatalog?: RetailCatalogProduct[]; serverRouteFilter?: string[]; viewer?: Viewer }) {
   const router = useRouter();
   const [orders, setOrders] = useState(initialOrders);
   // Sincroniza los datos refrescados del servidor sin remontar el panel (conserva día, filtros y edición).
@@ -1044,7 +1049,7 @@ export function OrdersPanel({ hasMoreOrders = false, initialOrders, loadedOrderP
         </div>}
       </div>
       {notice && <div className="operation-notice" role="status">{notice}</div>}
-      {activeType === "wholesale" ? <WholesaleOrdersTable hasMoreOrders={hasMoreOrders} isAdmin={viewer?.role === "admin"} loadedOrderPages={loadedOrderPages} onRowsSaved={(savedRows) => setOrders((current) => {
+      {activeType === "wholesale" ? <WholesaleOrdersTable formAlertsError={formAlertsError} formSubmissionAlerts={formSubmissionAlerts} hasMoreOrders={hasMoreOrders} isAdmin={viewer?.role === "admin"} loadedOrderPages={loadedOrderPages} onRowsSaved={(savedRows) => setOrders((current) => {
         const updates = new Map(savedRows.map((row) => [row.orderId, row]));
         return current.map((order) => {
           const saved = updates.get(order.id);

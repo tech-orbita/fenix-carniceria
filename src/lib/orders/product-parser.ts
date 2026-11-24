@@ -149,6 +149,9 @@ export function catalogProductFor(value: string) {
     // \"cerdo\" solo es la abreviatura operativa de lomo cuando viene solo.
     // Dentro de \"piel cerdo\" es la especie, no el nombre del corte.
     if (product.name === "Lomo cerdo" && alias === "cerdo") return false;
+    // En "tira(s) de costilla" la palabra tira describe la presentación de
+    // la costilla; no corresponde al corte independiente "Tira tira".
+    if (product.name === "Tira tira" && alias === "tira" && /\bcostill/.test(normalized)) return false;
     // "Hueso" solo identifica la columna genérica cuando viene solo. Un
     // descriptor desconocido (p. ej. "hueso rojo") debe conservarse como una
     // columna independiente, no sumarse silenciosamente como hueso de res.

@@ -1,10 +1,10 @@
--- Portal propio de pedidos mayoristas. Todo es aditivo para que los formularios
--- y workflows vigentes puedan seguir operando durante la transición.
+-- Auditoría y creación transaccional para los formularios propios. Todo es
+-- aditivo: los webhooks y formularios vigentes de GHL continúan operando.
 
 create table public.form_submissions (
   id uuid primary key default gen_random_uuid(),
-  form_type text not null check (form_type in ('wholesale_registration', 'wholesale_order')),
-  source text not null default 'system' check (source in ('system', 'ghl', 'recovery')),
+  form_type text not null check (form_type in ('wholesale_registration', 'wholesale_order', 'wholesale_payment')),
+  source text not null default 'system' check (source in ('system', 'ghl', 'chat', 'recovery')),
   idempotency_key uuid,
   customer_id bigint references public.customers (id) on delete set null,
   order_id bigint references public.orders (id) on delete set null,
@@ -13,9 +13,6 @@ create table public.form_submissions (
   ),
   integration_status text not null default 'pending' check (
     integration_status in ('not_required', 'pending', 'sent', 'failed')
-  ),
-  payment_proof_status text not null default 'none' check (
-    payment_proof_status in ('none', 'received', 'forwarded', 'failed')
   ),
   client_fingerprint text,
   payload jsonb not null default '{}'::jsonb,
@@ -28,10 +25,11 @@ create table public.form_submissions (
 create unique index form_submissions_idempotency_uidx
   on public.form_submissions (form_type, idempotency_key)
   where idempotency_key is not null;
-create index form_submissions_recent_idx
-  on public.form_submissions (submitted_at desc);
-create index form_submissions_customer_idx
-  on public.form_submissions (customer_id, submitted_at desc);
+create index form_submissions_recent_idx on public.form_submissions (submitted_at desc);
+create index form_submissions_customer_idx on public.form_submissions (customer_id, submitted_at desc);
+create index form_submissions_attention_idx
+  on public.form_submissions (submitted_at desc)
+  where status in ('needs_review', 'failed') or integration_status = 'failed';
 
 create trigger form_submissions_set_updated_at
 before update on public.form_submissions
@@ -65,32 +63,16 @@ create table public.wholesale_portal_access_attempts (
 create index wholesale_portal_attempts_fingerprint_idx
   on public.wholesale_portal_access_attempts (client_fingerprint, attempted_at desc);
 
-insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-values (
-  'wholesale-payment-proofs',
-  'wholesale-payment-proofs',
-  false,
-  8388608,
-  array['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
-)
-on conflict (id) do update set
-  public = excluded.public,
-  file_size_limit = excluded.file_size_limit,
-  allowed_mime_types = excluded.allowed_mime_types;
-
--- La función permite que pedido, renglones, comprobante, auditoría y eventos
--- queden confirmados en una sola transacción. Solo la llave secreta del servidor
--- puede ejecutarla; nunca se expone al navegador.
-create function public.create_wholesale_portal_order(
+-- Pedido, renglones, auditoría y evento durable se confirman en una sola
+-- transacción. La ruta se copia siempre desde la ficha vigente del cliente.
+create function public.create_wholesale_form_order(
   p_submission_id uuid,
   p_customer_id bigint,
   p_source_reference text,
   p_source_payload jsonb,
-  p_requested_delivery_at timestamptz,
+  p_status text,
   p_notes text,
-  p_items jsonb,
-  p_payment_storage_path text default null,
-  p_payment_mime_type text default null
+  p_items jsonb
 )
 returns table (order_id bigint, order_number text, order_status text)
 language plpgsql
@@ -112,6 +94,9 @@ begin
 
   if not found then
     raise exception 'Registered wholesale customer not found';
+  end if;
+  if p_status not in ('received', 'needs_review') then
+    raise exception 'Invalid order status';
   end if;
   if jsonb_typeof(p_items) <> 'array' or jsonb_array_length(p_items) = 0 or jsonb_array_length(p_items) > 50 then
     raise exception 'Order items must contain between 1 and 50 rows';
@@ -137,18 +122,18 @@ begin
     'form',
     p_source_reference,
     coalesce(p_source_payload, '{}'::jsonb),
-    'received',
+    p_status,
     'delivery',
-    p_requested_delivery_at,
+    null,
     v_customer.address,
-    case when p_payment_storage_path is null then 'pending' else 'proof_received' end,
+    'pending',
     nullif(trim(p_notes), '')
   ) returning * into v_order;
 
   for v_item in select value from jsonb_array_elements(p_items)
   loop
     if coalesce(trim(v_item->>'product_name'), '') = ''
-      or coalesce((v_item->>'quantity')::numeric, 0) <= 0
+      or coalesce((v_item->>'quantity')::numeric, -1) < 0
       or coalesce(trim(v_item->>'unit'), '') not in ('cantidad', 'kg', 'lb', 'und') then
       raise exception 'Invalid order item at row %', v_position + 1;
     end if;
@@ -167,16 +152,10 @@ begin
     v_position := v_position + 1;
   end loop;
 
-  if p_payment_storage_path is not null then
-    insert into public.order_attachments (order_id, kind, storage_path, mime_type)
-    values (v_order.id, 'payment_proof', p_payment_storage_path, p_payment_mime_type);
-  end if;
-
   update public.form_submissions
   set customer_id = v_customer.id,
       order_id = v_order.id,
       status = 'created',
-      payment_proof_status = case when p_payment_storage_path is null then 'none' else 'received' end,
       integration_status = 'pending',
       completed_at = now(),
       error_message = null
@@ -190,21 +169,6 @@ begin
     jsonb_build_object('order_id', v_order.id, 'submission_id', p_submission_id)
   );
 
-  if p_payment_storage_path is not null then
-    insert into public.integration_outbox (event_type, aggregate_type, aggregate_id, payload)
-    values (
-      'wholesale.payment_proof.received',
-      'order',
-      v_order.id::text,
-      jsonb_build_object(
-        'order_id', v_order.id,
-        'submission_id', p_submission_id,
-        'storage_path', p_payment_storage_path,
-        'mime_type', p_payment_mime_type
-      )
-    );
-  end if;
-
   return query select v_order.id, v_order.order_number, v_order.status;
 end;
 $$;
@@ -213,14 +177,13 @@ alter table public.form_submissions enable row level security;
 alter table public.integration_outbox enable row level security;
 alter table public.wholesale_portal_access_attempts enable row level security;
 
-create policy "Administrators read form submissions"
+create policy "Panel users read form submissions"
 on public.form_submissions for select
 to authenticated
 using (
   exists (
     select 1 from public.panel_users
     where panel_users.user_id = (select auth.uid())
-      and panel_users.role = 'admin'
   )
 );
 
@@ -229,10 +192,10 @@ revoke all on table public.integration_outbox from anon, authenticated;
 revoke all on table public.wholesale_portal_access_attempts from anon, authenticated;
 grant select on table public.form_submissions to authenticated;
 
-revoke all on function public.create_wholesale_portal_order(uuid, bigint, text, jsonb, timestamptz, text, jsonb, text, text) from public, anon, authenticated;
-grant execute on function public.create_wholesale_portal_order(uuid, bigint, text, jsonb, timestamptz, text, jsonb, text, text) to service_role;
+revoke all on function public.create_wholesale_form_order(uuid, bigint, text, jsonb, text, text, jsonb) from public, anon, authenticated;
+grant execute on function public.create_wholesale_form_order(uuid, bigint, text, jsonb, text, text, jsonb) to service_role;
 
 comment on table public.form_submissions is
-  'Auditoría de formularios propios: conserva envíos creados, fallidos y estado de integraciones.';
+  'Auditoría durable de formularios propios y recibidos desde integraciones.';
 comment on table public.integration_outbox is
-  'Eventos durables para sincronizar GHL, WhatsApp y otros servicios sin perder el pedido local.';
+  'Eventos durables para sincronizar GHL y otras integraciones sin perder el pedido local.';

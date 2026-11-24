@@ -1,5 +1,14 @@
 export type CustomerType = "retail" | "wholesale";
 
+export type FormSubmissionAlert = {
+  id: string;
+  formType: "wholesale_registration" | "wholesale_order" | "wholesale_payment";
+  submittedAt: string;
+  businessName?: string;
+  phone?: string;
+  errorMessage: string;
+};
+
 export type OrderStatus =
   | "needs_review"
   | "received"

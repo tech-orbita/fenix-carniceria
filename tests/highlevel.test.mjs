@@ -435,6 +435,21 @@ test("mantiene costilla, costillita y costillita de cerdo en columnas distintas"
   ]);
 });
 
+test("interpreta tira de costilla por especie y no como Tira tira", () => {
+  const order = mapHighLevelForm({
+    ...base,
+    "Coloca tu Pedido": "2 pezuñas medianas\n3 molida\n2 de higado\n2 tiras costilla de cerdo\n1 tira costilla de res\n3 de panza",
+  }, "mayorista-cliente");
+  assert.deepEqual(order.items, [
+    { product_name: "Pezuña cerdo", quantity: 2, unit: "cantidad" },
+    { product_name: "Molida especial", quantity: 3, unit: "cantidad" },
+    { product_name: "Hígado", quantity: 2, unit: "cantidad" },
+    { product_name: "Costillita de cerdo", quantity: 2, unit: "cantidad" },
+    { product_name: "Costilla", quantity: 1, unit: "cantidad" },
+    { product_name: "Panza", quantity: 3, unit: "cantidad" },
+  ]);
+});
+
 test("separa chuleta ahumada y hueso de cerdo de sus equivalentes genéricos", () => {
   const order = mapHighLevelForm({ ...base, "Coloca tu Pedido": "10 lb chuleta\n8 lb chuleta ahumada\n6 lb hueso de res\n5 lb hueso de cerdo" }, "mayorista-cliente");
   assert.deepEqual(order.items, [

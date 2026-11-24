@@ -9,7 +9,7 @@ import { resolveSiteUrl } from "@/lib/auth/site-url";
 import "../auth.css";
 import { OrdersPanel } from "./orders-panel";
 import { demoOrders } from "./demo-orders";
-import type { Order } from "./types";
+import type { FormSubmissionAlert, Order } from "./types";
 
 export const dynamic = "force-dynamic";
 
@@ -127,7 +127,14 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   // Los operadores mayoristas no necesitan descargar ni procesar el catálogo
   // minorista antes de poder abrir su planilla.
   const retailCatalogPromise = viewer.customerType === "wholesale" ? Promise.resolve([]) : loadRetailCatalog();
-  const [{ data: queriedRows, error: ordersError }, retailCatalog] = await Promise.all([query, retailCatalogPromise]);
+  const formAlertsPromise = viewer.customerType === "retail"
+    ? Promise.resolve({ data: [], error: null })
+    : supabase.from("form_submissions")
+      .select("id,form_type,status,integration_status,error_message,submitted_at,payload")
+      .or("status.in.(needs_review,failed),integration_status.eq.failed")
+      .order("submitted_at", { ascending: false })
+      .limit(50);
+  const [{ data: queriedRows, error: ordersError }, retailCatalog, { data: formAlertRows, error: formAlertsError }] = await Promise.all([query, retailCatalogPromise, formAlertsPromise]);
   const hasMoreOrders = (queriedRows?.length ?? 0) > requestedRows;
   const rows = queriedRows?.slice(0, requestedRows);
 
@@ -217,5 +224,17 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         };
       });
 
-  return <OrdersPanel hasMoreOrders={hasMoreOrders} initialOrders={orders} loadedOrderPages={page} retailCatalog={retailCatalog} serverRouteFilter={requestedRoutes} viewer={viewer} loadError={loadOrdersError ? "No se pudieron cargar los pedidos. Intenta nuevamente." : undefined} />;
+  const formSubmissionAlerts: FormSubmissionAlert[] = (formAlertRows ?? []).map((row) => {
+    const payload = row.payload && typeof row.payload === "object" && !Array.isArray(row.payload) ? row.payload as Record<string, unknown> : {};
+    return {
+      id: row.id,
+      formType: row.form_type,
+      submittedAt: row.submitted_at,
+      businessName: typeof payload.business_name === "string" ? payload.business_name : undefined,
+      phone: typeof payload.phone === "string" ? payload.phone : undefined,
+      errorMessage: row.error_message || "El formulario requiere revisión.",
+    };
+  });
+
+  return <OrdersPanel formAlertsError={formAlertsError ? "No se pudieron consultar las alertas de formularios." : undefined} formSubmissionAlerts={formSubmissionAlerts} hasMoreOrders={hasMoreOrders} initialOrders={orders} loadedOrderPages={page} retailCatalog={retailCatalog} serverRouteFilter={requestedRoutes} viewer={viewer} loadError={loadOrdersError ? "No se pudieron cargar los pedidos. Intenta nuevamente." : undefined} />;
 }
