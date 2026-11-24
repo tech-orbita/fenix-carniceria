@@ -4,11 +4,12 @@ import { createClient } from "@/lib/supabase/server";
 import { loadRetailCatalog } from "@/lib/orders/retail-agent";
 import { retailCatalogPrice } from "@/lib/orders/retail-normalization";
 import { splitWholesaleRouteFilters, wholesaleRouteFilters } from "@/lib/orders/wholesale-routes";
+import { resolveSiteUrl } from "@/lib/auth/site-url";
 
 import "../auth.css";
 import { OrdersPanel } from "./orders-panel";
 import { demoOrders } from "./demo-orders";
-import type { Order } from "./types";
+import type { FormSubmissionAlert, Order } from "./types";
 
 export const dynamic = "force-dynamic";
 
@@ -95,6 +96,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       payload_conversation_id:source_payload->>conversationId,
       payload_conversation_url:source_payload->>conversationUrl,
       help_without_order:source_payload->>helpWithoutOrder,
+      help_attachment_url:source_payload->>attachmentUrl,
       test_submission:source_payload->>test_submission,
       test_customer_name:source_payload->test_customer->>name,
       test_business_name:source_payload->test_customer->>business_name,
@@ -112,7 +114,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         notes,
         unit_price,
         is_prepared
-      )
+      ),
+      order_attachments (id, kind)
     `)
     .order("received_at", { ascending: false })
     // Pide una fila extra para saber si existe otro lote sin ejecutar COUNT(*).
@@ -124,7 +127,14 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   // Los operadores mayoristas no necesitan descargar ni procesar el catálogo
   // minorista antes de poder abrir su planilla.
   const retailCatalogPromise = viewer.customerType === "wholesale" ? Promise.resolve([]) : loadRetailCatalog();
-  const [{ data: queriedRows, error: ordersError }, retailCatalog] = await Promise.all([query, retailCatalogPromise]);
+  const formAlertsPromise = viewer.customerType === "retail"
+    ? Promise.resolve({ data: [], error: null })
+    : supabase.from("form_submissions")
+      .select("id,form_type,status,integration_status,error_message,submitted_at,payload")
+      .or("status.in.(needs_review,failed),integration_status.eq.failed")
+      .order("submitted_at", { ascending: false })
+      .limit(50);
+  const [{ data: queriedRows, error: ordersError }, retailCatalog, { data: formAlertRows, error: formAlertsError }] = await Promise.all([query, retailCatalogPromise, formAlertsPromise]);
   const hasMoreOrders = (queriedRows?.length ?? 0) > requestedRows;
   const rows = queriedRows?.slice(0, requestedRows);
 
@@ -159,6 +169,10 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         const items = storedItems;
         const storedAddress = cleanAddress(row.delivery_address) ?? cleanAddress(customer?.address);
         const canSeeOrderPayments = row.customer_type === "retail" || canSeeWholesaleWallet;
+        const paymentAttachment = (row.order_attachments ?? []).find((attachment) => attachment.kind === "payment_proof");
+        const paymentAttachmentUrl = paymentAttachment
+          ? `${resolveSiteUrl({ configured: process.env.NEXT_PUBLIC_SITE_URL, vercelProductionHost: process.env.VERCEL_PROJECT_PRODUCTION_URL })}/api/order-attachments/${paymentAttachment.id}`
+          : undefined;
         const isTest = row.test_submission === "true";
         const safeFormData = row.source === "form" ? {
           form: row.form_name ?? "Pedido mayorista",
@@ -166,7 +180,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           billing: row.form_billing ?? undefined,
           maps_url: row.form_maps_url ?? undefined,
           receiver_phone: row.form_receiver_phone ?? undefined,
-          payment_proof: canSeeOrderPayments ? row.form_payment_proof ?? undefined : undefined,
+          payment_proof: canSeeOrderPayments ? paymentAttachmentUrl ?? row.form_payment_proof ?? undefined : undefined,
           contact_id: row.form_contact_id ?? undefined,
           location_id: row.form_location_id ?? undefined,
           conversation_id: row.form_conversation_id ?? undefined,
@@ -203,11 +217,24 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             conversationUrl: row.form_conversation_url ?? row.payload_conversation_url ?? undefined,
           },
           helpRequest: row.help_without_order === "true",
+          helpAttachmentUrl: canSeeOrderPayments ? row.help_attachment_url ?? undefined : undefined,
           isTest,
           notes: row.notes ?? undefined,
           deletedAt: row.deleted_at ?? undefined,
         };
       });
 
-  return <OrdersPanel hasMoreOrders={hasMoreOrders} initialOrders={orders} loadedOrderPages={page} retailCatalog={retailCatalog} serverRouteFilter={requestedRoutes} viewer={viewer} loadError={loadOrdersError ? "No se pudieron cargar los pedidos. Intenta nuevamente." : undefined} />;
+  const formSubmissionAlerts: FormSubmissionAlert[] = (formAlertRows ?? []).map((row) => {
+    const payload = row.payload && typeof row.payload === "object" && !Array.isArray(row.payload) ? row.payload as Record<string, unknown> : {};
+    return {
+      id: row.id,
+      formType: row.form_type,
+      submittedAt: row.submitted_at,
+      businessName: typeof payload.business_name === "string" ? payload.business_name : undefined,
+      phone: typeof payload.phone === "string" ? payload.phone : undefined,
+      errorMessage: row.error_message || "El formulario requiere revisión.",
+    };
+  });
+
+  return <OrdersPanel formAlertsError={formAlertsError ? "No se pudieron consultar las alertas de formularios." : undefined} formSubmissionAlerts={formSubmissionAlerts} hasMoreOrders={hasMoreOrders} initialOrders={orders} loadedOrderPages={page} retailCatalog={retailCatalog} serverRouteFilter={requestedRoutes} viewer={viewer} loadError={loadOrdersError ? "No se pudieron cargar los pedidos. Intenta nuevamente." : undefined} />;
 }

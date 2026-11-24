@@ -1,5 +1,14 @@
 export type CustomerType = "retail" | "wholesale";
 
+export type FormSubmissionAlert = {
+  id: string;
+  formType: "wholesale_registration" | "wholesale_order" | "wholesale_payment";
+  submittedAt: string;
+  businessName?: string;
+  phone?: string;
+  errorMessage: string;
+};
+
 export type OrderStatus =
   | "needs_review"
   | "received"
@@ -49,6 +58,7 @@ export type Order = {
   formData?: { form: string; order_text?: string; tax_id?: string; billing?: string; maps_url?: string; receiver_phone?: string; payment_proof?: string; contact_id?: string; location_id?: string; conversation_id?: string; conversation_url?: string };
   highLevel?: { contactId?: string; locationId?: string; conversationId?: string; conversationUrl?: string };
   helpRequest?: boolean;
+  helpAttachmentUrl?: string;
   isTest?: boolean;
   notes?: string;
   deletedAt?: string;

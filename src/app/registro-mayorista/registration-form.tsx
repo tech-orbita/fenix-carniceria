@@ -24,6 +24,7 @@ export function RegistrationForm() {
       requiresInvoice: data.get("requiresInvoice") === "on",
       consent: data.get("consent") === "on",
       website: data.get("website"),
+      submissionId: crypto.randomUUID(),
     };
     try {
       const response = await fetch("/api/wholesale-registration", {

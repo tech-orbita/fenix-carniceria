@@ -37,7 +37,13 @@ function testItems(value: unknown): TestItem[] {
     const unit = text(item.unit, 20) || "cantidad";
     if (!productName) throw new Error(`Falta el producto del renglón ${index + 1}.`);
     if (!Number.isFinite(quantity) || quantity < 0 || quantity > 10_000) throw new Error(`Cantidad inválida en el renglón ${index + 1}.`);
-    return { product_name: productName, quantity, unit, preparation: text(item.preparation, 250) || undefined, notes: text(item.notes, 500) || undefined };
+    return {
+      product_name: productName,
+      quantity,
+      unit,
+      preparation: text(item.preparation, 250) || undefined,
+      notes: text(item.notes, 500) || undefined,
+    };
   });
 }
 
@@ -80,9 +86,10 @@ export async function POST(request: NextRequest) {
     .gte("received_at", new Date(Date.now() - 60 * 60_000).toISOString());
   if (rateError) return json({ error: "No pudimos validar el límite de pruebas." }, 500, origin);
   if ((recentTests ?? 0) >= 50) return json({ error: "Se alcanzó el límite temporal de pruebas. Intenta más tarde." }, 429, origin);
+  const identityKey = "business:pruebas formulario mayorista";
   const { data: testCustomer, error: customerError } = await supabase.from("customers").upsert({
     customer_type: "wholesale",
-    identity_key: "business:pruebas formulario mayorista",
+    identity_key: identityKey,
     name: "Cliente de prueba",
     business_name: "Pruebas formulario mayorista",
     phone: "+570000000000",
@@ -92,12 +99,13 @@ export async function POST(request: NextRequest) {
   }, { onConflict: "customer_type,identity_key" }).select("id").single();
   if (customerError || !testCustomer) return json({ error: "No pudimos preparar el registro de prueba." }, 500, origin);
 
+  const sourceReference = `test-form:${randomUUID()}`;
   const { data: order, error: orderError } = await supabase.from("orders").insert({
     customer_type: "wholesale",
     customer_id: testCustomer.id,
     route_id: null,
     source: "form",
-    source_reference: `test-form:${randomUUID()}`,
+    source_reference: sourceReference,
     source_payload: {
       test_submission: true,
       test_variant: variant,

@@ -39,3 +39,18 @@ test("acepta una solicitud mínima y asigna un motivo por defecto", () => {
   assert.equal(result.data.customer.name, "Cliente WhatsApp");
   assert.equal(result.data.reason, "El cliente mayorista requiere atención humana.");
 });
+
+test("conserva el comprobante recibido por el chat mayorista", () => {
+  const result = normalizeWholesaleHelpPayload({
+    reason: "El cliente envió un comprobante de pago para validar",
+    media_url: "https://example.com/comprobante.jpg",
+    mime_type: "image/jpeg",
+    source_event_id: "message-42",
+    customer: { name: "Colonial", phone: "3001234567" },
+  });
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  assert.equal(result.data.attachmentUrl, "https://example.com/comprobante.jpg");
+  assert.equal(result.data.attachmentType, "image/jpeg");
+  assert.equal(result.data.sourceEventId, "message-42");
+});

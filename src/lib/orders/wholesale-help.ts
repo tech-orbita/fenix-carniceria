@@ -68,6 +68,9 @@ export async function flagWholesaleHelpRequest(value: unknown) {
     conversationUrl: body.conversationUrl ?? null,
     sourceEventId: body.sourceEventId ?? null,
     helpReason: body.reason,
+    helpCategory: /comprobante|soporte|recibo|pago/i.test(body.reason) ? "payment_proof" : "customer_help",
+    attachmentUrl: body.attachmentUrl ?? null,
+    attachmentType: body.attachmentType ?? null,
     helpWithoutForm: true,
   };
   // La solicitud de ayuda siempre vive en una fila independiente y sin

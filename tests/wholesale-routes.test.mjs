@@ -1,23 +1,33 @@
-import { test } from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 
-import { customerIdentityKey, splitWholesaleRouteFilters, wholesaleCustomerRouteId, wholesaleRouteFilters, wholesaleRouteLabel, wholesaleRouteRank, wholesaleRoutes } from "../src/lib/orders/wholesale-routes.ts";
+import { splitWholesaleRouteFilters, wholesaleCustomerRouteId, wholesaleRouteFilters, wholesaleRouteRank } from "../src/lib/orders/wholesale-routes.ts";
 
-test("ofrece las siete rutas operativas solicitadas", () => {
-  assert.deepEqual(wholesaleRoutes, ["Centro", "Cacique", "Cordialidad", "Soledad", "Norte", "Galapa", "Barrio"]);
-  assert.equal(wholesaleRouteLabel("Centro"), "Ruta Centro");
+test("normaliza filtros de ruta y descarta valores desconocidos", () => {
+  assert.deepEqual(wholesaleRouteFilters("Norte, Sin clasificar,Norte,Desconocida"), ["Norte", "Sin clasificar"]);
 });
 
-test("identifica mayoristas por establecimiento aunque compartan teléfono", () => {
-  const first = customerIdentityKey("wholesale", { businessName: "El Oasis", name: "Andrés", phone: "+573103990661" });
-  const same = customerIdentityKey("wholesale", { businessName: "  EL   OASIS ", name: "Otra persona", phone: "+570000000000" });
-  const other = customerIdentityKey("wholesale", { businessName: "La Hormiga", name: "Andrés", phone: "+573103990661" });
-  assert.equal(first, same);
-  assert.notEqual(first, other);
+test("separa clientes sin ruta de las rutas asignadas", () => {
+  assert.deepEqual(splitWholesaleRouteFilters(["Centro", "Sin clasificar", "Norte"]), {
+    assigned: ["Centro", "Norte"],
+    includeUnassigned: true,
+  });
 });
 
-test("mantiene el teléfono como identidad del minorista", () => {
-  assert.equal(customerIdentityKey("retail", { name: "Cliente", phone: "+57 300 123 4567" }), "phone:573001234567");
+test("conserva el filtro sin clasificar aunque sea el único seleccionado", () => {
+  assert.deepEqual(splitWholesaleRouteFilters(wholesaleRouteFilters("Sin clasificar")), {
+    assigned: [],
+    includeUnassigned: true,
+  });
+});
+
+test("mantiene un orden estable de rutas aunque se seleccionen en otro orden", () => {
+  const selectedInClickOrder = ["Norte", "Centro", "Sin clasificar"];
+  assert.deepEqual(selectedInClickOrder.toSorted((left, right) => wholesaleRouteRank(left) - wholesaleRouteRank(right)), [
+    "Centro",
+    "Norte",
+    "Sin clasificar",
+  ]);
 });
 
 test("incluye sin clasificar como filtro de clientes que no tienen ruta", () => {

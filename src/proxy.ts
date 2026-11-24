@@ -19,7 +19,9 @@ export async function proxy(request: NextRequest) {
     || pathname === "/recuperar-contrasena"
     || pathname === "/restablecer-contrasena"
     || pathname === "/auth/callback"
-    || pathname === "/registro-mayorista";
+    || pathname === "/registro-mayorista"
+    || pathname === "/pedido-mayorista"
+    || pathname.startsWith("/pedido-mayorista/");
 
   if ((authenticated && isLogin) || (!authenticated && !isPublicAuthRoute)) {
     const redirect = NextResponse.redirect(new URL(authenticated ? "/" : "/login", request.url));

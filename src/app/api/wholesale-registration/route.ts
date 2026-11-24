@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { randomUUID } from "node:crypto";
 
 import { customerIdentityKey, normalizedCustomerPhone, normalizedTaxId } from "@/lib/orders/wholesale-routes";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -53,6 +54,22 @@ export async function POST(request: Request) {
   try {
     const registration = validateWholesaleRegistration(raw);
     const supabase = createAdminClient();
+    const submissionId = typeof record.submissionId === "string" && /^[0-9a-f-]{36}$/i.test(record.submissionId)
+      ? record.submissionId
+      : randomUUID();
+    const { data: auditSubmission } = await supabase.from("form_submissions").insert({
+      form_type: "wholesale_registration",
+      source: "system",
+      idempotency_key: submissionId,
+      status: "processing",
+      integration_status: "pending",
+      payload: {
+        business_name: registration.businessName,
+        phone: registration.phone,
+        email: registration.email,
+        city: registration.city,
+      },
+    }).select("id").maybeSingle();
     // Un mayorista se identifica por establecimiento: varios negocios pueden compartir
     // teléfono, así que el teléfono no sirve para decidir qué ficha actualizar.
     const identityKey = customerIdentityKey("wholesale", { businessName: registration.businessName, name: registration.name });
@@ -110,6 +127,7 @@ export async function POST(request: Request) {
       }
       throw new Error("No se pudo guardar la inscripción");
     }
+    if (auditSubmission) await supabase.from("form_submissions").update({ customer_id: customer.id }).eq("id", auditSubmission.id);
 
     try {
       const highLevel = await syncWholesaleRegistrationToHighLevel(registration);
@@ -119,6 +137,11 @@ export async function POST(request: Request) {
         ghl_sync_error: null,
       }).eq("id", customer.id);
       if (syncUpdateError) throw new Error("El contacto se sincronizó, pero no se pudo guardar su estado local");
+      if (auditSubmission) await supabase.from("form_submissions").update({
+        status: "created",
+        integration_status: "sent",
+        completed_at: new Date().toISOString(),
+      }).eq("id", auditSubmission.id);
       return NextResponse.json({
         ok: true,
         synced: true,
@@ -131,6 +154,12 @@ export async function POST(request: Request) {
         ghl_sync_status: "error",
         ghl_sync_error: internalMessage.slice(0, 500),
       }).eq("id", customer.id);
+      if (auditSubmission) await supabase.from("form_submissions").update({
+        status: "created",
+        integration_status: "failed",
+        error_message: internalMessage.slice(0, 500),
+        completed_at: new Date().toISOString(),
+      }).eq("id", auditSubmission.id);
       return NextResponse.json({
         ok: true,
         synced: false,
