@@ -6,6 +6,8 @@ export const wholesaleRoutes = [
   "Norte",
   "Galapa",
   "Barrio",
+  "Barrios principales",
+  "7 de Abril",
 ] as const;
 
 export const unassignedWholesaleRoute = "Sin clasificar";
