@@ -56,11 +56,3 @@ begin
   where customer_id = v_original_customer_id
     and source_payload #>> '{form_data,contact_id}' = 'lrL8vg0syIF2TbP7VYqB';
 end $$;
-
-drop index if exists public.customers_wholesale_registration_email_uidx;
-
-create index if not exists customers_wholesale_registration_email_idx
-  on public.customers (lower(email))
-  where customer_type = 'wholesale'
-    and wholesale_registered_at is not null
-    and email is not null;
