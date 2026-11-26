@@ -65,6 +65,38 @@ test("no divide una cantidad con coma decimal y descarta nombres de relleno", ()
   assert.equal(normalizeRetailCustomerName("Ana Pérez"), "Ana Pérez");
 });
 
+test("no convierte nombre, dirección, barrio, instrucciones ni pago en productos", () => {
+  const extendedCatalog = [
+    ...catalog,
+    { id: "blanda", name: "Carne blanda", catalogKey: "res:carne blanda", pricePerKg: 34_000 },
+  ];
+  const rawOrderText = [
+    "12 libras de pechuga deshuesada relajada",
+    "5 libras de carne blanda relajada",
+    "Por favor bien relajado",
+    "A nombre del crustáceo",
+    "Dirección calle 47 #1a2-03",
+    "Ciudadela 20 de julio",
+    "Método de pago transferencia",
+  ].join("\n");
+  const items = normalizeRetailItems(rawOrderText.split("\n").map((name) => ({ name, quantity: 1, rawText: name })), rawOrderText, extendedCatalog);
+
+  assert.deepEqual(items.map(({ product_name, quantity }) => ({ product_name, quantity })), [
+    { product_name: "Pechuga deshuesada relajada", quantity: 6 },
+    { product_name: "Carne blanda", quantity: 2.5 },
+  ]);
+});
+
+test("prefiere el texto original cuando el paso estructurado corrompe '1 kilo'", () => {
+  const items = normalizeRetailItems([
+    { name: "ilo de pulpa", quantity: 1000, unit: "COP", quantityKind: "amount", rawText: "1 kilo de pulpa" },
+  ], "1 kilo de pulpa", catalog);
+
+  assert.deepEqual(items.map(({ product_name, quantity, unit_price }) => ({ product_name, quantity, unit_price })), [
+    { product_name: "Pulpa", quantity: 1, unit_price: 22_000 },
+  ]);
+});
+
 test("usa molida súper especial por defecto y corriente solo si el cliente lo especifica", () => {
   const items = normalizeRetailItems([], [
     "2 libras de carne molida",

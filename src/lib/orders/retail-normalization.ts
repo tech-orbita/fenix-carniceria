@@ -241,6 +241,25 @@ function parsedLine(item: RetailInputItem) {
   };
 }
 
+function isRetailAdministrativeLine(value: string) {
+  const normalized = normalizeProductName(value)
+    .replace(/^[-*•]+\s*/, "")
+    .trim();
+  if (!normalized) return true;
+
+  // Estos renglones completan el cliente o la entrega; nunca son productos.
+  // Es común que el extractor los conserve junto a una lista escrita en un
+  // solo mensaje (nombre, dirección, barrio y forma de pago).
+  if (/^(?:a nombre (?:de|del)|nombre(?: del cliente)?|direccion|domicilio|barrio|urbanizacion|ciudadela|metodo de pago|forma de pago|medio de pago|telefono|celular|documento|cedula|nit)\b/.test(normalized)) return true;
+  if (/^(?:pago(?: por)? )?(?:transferencia|efectivo|nequi|daviplata|bancolombia|contraentrega)$/.test(normalized)) return true;
+
+  // Indicaciones generales sin producto ni cantidad deben permanecer en el
+  // texto original del pedido, pero no convertirse en artículos de 1 kg.
+  if (/^(?:por favor|favor|porfa|xfa)\b/.test(normalized)
+    && !/\b\d+(?:[.,]\d+)?\s*(?:kg|kilo|lb|libra|unidad|und|mil|k|pesos?)\b/.test(normalized)) return true;
+  return /^(?:carnes|productos|pedido)\s*:?$/.test(normalized);
+}
+
 export function normalizeRetailItems(
   supplied: readonly RetailInputItem[],
   rawOrderText: string,
@@ -254,9 +273,13 @@ export function normalizeRetailItems(
     .map((line) => line.replace(/^\s*(?:[-*•]|\d+[.)])\s*/, "").trim())
     .filter(Boolean)
     .map((rawText) => ({ rawText }));
-  // No se confía en una extracción estructurada incompleta. Si el texto
-  // original contiene más renglones reconocibles, estos son la fuente fiel.
-  const input = fallback.length > supplied.length ? fallback : supplied.length ? supplied : fallback;
+  // rawOrderText es la fuente fiel: evita corrupciones del paso estructurado
+  // (por ejemplo, interpretar "1 kilo" como "1k" y dejar "ilo de...").
+  // Los datos administrativos se conservan en source_payload, pero no llegan
+  // a order_items ni aparecen como productos pendientes de precio.
+  const cleanFallback = fallback.filter((item) => !isRetailAdministrativeLine(String(item.rawText ?? "")));
+  const cleanSupplied = supplied.filter((item) => !isRetailAdministrativeLine(String(item.rawText ?? item.product_name ?? item.name ?? "")));
+  const input = rawOrderText.trim() ? cleanFallback : cleanSupplied;
 
   return input.slice(0, 100).map((item): NormalizedRetailItem | null => {
     const parsed = parsedLine(item);
