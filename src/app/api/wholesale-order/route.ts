@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { classifyHighLevelContact, sendHighLevelMessage, syncHighLevelOrderFields, syncWholesalePipeline } from "@/lib/orders/highlevel-pipeline";
 import { wholesaleOrderConfirmationMessage } from "@/lib/orders/wholesale-messages";
 import { parseOrderTextDetailed } from "@/lib/orders/product-parser";
+import { selectedWholesaleCustomer } from "@/lib/orders/wholesale-customer-lookup";
 import { validateWholesalePortalOrder } from "@/lib/orders/wholesale-portal";
 import { normalizedWholesaleBusiness, normalizedWholesalePhone } from "@/lib/orders/wholesale-routes";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -100,25 +101,25 @@ export async function POST(request: NextRequest) {
     await supabase.from("form_submissions").update({ status: "failed", error_message: "No se pudo consultar el registro de clientes.", completed_at: new Date().toISOString() }).eq("id", submission.id);
     return NextResponse.json({ error: "No pudimos verificar tu registro. Intenta nuevamente." }, { status: 500 });
   }
-  const matches = (candidates ?? []).filter((customer) =>
-    normalizedWholesalePhone(customer.phone) === normalizedPhone
-    && normalizedWholesaleBusiness(customer.business_name || customer.name) === normalizedBusiness,
-  );
-  if (matches.length !== 1) {
+  const customer = selectedWholesaleCustomer(candidates ?? [], {
+    phone: orderInput.phone,
+    customerId: orderInput.customerId,
+    businessName: orderInput.businessName,
+  });
+  if (!customer) {
     await supabase.from("form_submissions").update({
       status: "needs_review",
       integration_status: "not_required",
-      error_message: matches.length ? "Hay más de un registro coincidente." : "Cliente mayorista no registrado.",
+      error_message: "Cliente mayorista no registrado o establecimiento no seleccionado.",
       completed_at: new Date().toISOString(),
     }).eq("id", submission.id);
     return NextResponse.json({
-      error: "No encontramos un cliente mayorista registrado con ese establecimiento y teléfono. Regístrate antes de enviar el pedido.",
+      error: "No pudimos confirmar el establecimiento para ese teléfono. Comprueba el número o regístrate antes de enviar el pedido.",
       registrationRequired: true,
       registrationUrl: "/registro-mayorista",
     }, { status: 404 });
   }
 
-  const customer = matches[0];
   const needsReview = parsed.unresolved.length > 0 || parsed.items.some((item) => item.quantity <= 0);
   const sourcePayload = {
     source: "system-form",

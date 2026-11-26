@@ -1,5 +1,6 @@
 export type WholesalePortalOrder = {
   idempotencyKey: string;
+  customerId?: number;
   businessName: string;
   phone: string;
   orderText: string;
@@ -16,6 +17,7 @@ export function validateWholesalePortalOrder(value: unknown): WholesalePortalOrd
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("No pudimos leer el pedido.");
   const record = value as Record<string, unknown>;
   const idempotencyKey = cleanText(record.idempotencyKey, 60);
+  const customerId = typeof record.customerId === "number" && Number.isSafeInteger(record.customerId) && record.customerId > 0 ? record.customerId : undefined;
   const businessName = cleanText(record.businessName, 160);
   const phone = cleanText(record.phone, 30);
   const orderText = cleanText(record.orderText, 6_000);
@@ -25,6 +27,6 @@ export function validateWholesalePortalOrder(value: unknown): WholesalePortalOrd
   const phoneDigits = phone.replace(/\D/g, "");
   if (phoneDigits.length < 8 || phoneDigits.length > 15) throw new Error("Escribe un teléfono válido.");
   if (!orderText) throw new Error("Escribe al menos un producto.");
-  return { idempotencyKey, businessName, phone, orderText, notes: notes || undefined };
+  return { idempotencyKey, customerId, businessName, phone, orderText, notes: notes || undefined };
 }
 

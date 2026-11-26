@@ -52,8 +52,14 @@
 .portal-customer-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
 .portal-customer-fields label, .portal-free-order { display: grid; gap: 7px; }
 .portal-customer-fields label > span, .portal-free-order > span { color: #f5f1ec; font-size: .9rem; font-weight: 800; }
-.portal-customer-fields input, .portal-free-order textarea { width: 100%; min-width: 0; border: 1px solid #d7d2cb; border-radius: 9px; padding: 13px 14px; background: #fff; color: #171717; font: inherit; font-size: 1rem; outline: none; }
-.portal-customer-fields input:focus, .portal-free-order textarea:focus { border-color: var(--portal-gold); box-shadow: 0 0 0 3px rgba(215, 169, 77, .22); }
+.portal-customer-fields input, .portal-customer-fields select, .portal-free-order textarea { width: 100%; min-width: 0; border: 1px solid #d7d2cb; border-radius: 9px; padding: 13px 14px; background: #fff; color: #171717; font: inherit; font-size: 1rem; outline: none; }
+.portal-customer-fields input:read-only { background: #eeeae5; color: #49433d; }
+.portal-customer-fields input:focus, .portal-customer-fields select:focus, .portal-free-order textarea:focus { border-color: var(--portal-gold); box-shadow: 0 0 0 3px rgba(215, 169, 77, .22); }
+.portal-customer-notice { margin: -10px 0 0; color: #c8c1b9; font-size: .9rem; line-height: 1.45; }
+.portal-customer-notice.is-success { color: #bfe8bf; }
+.portal-customer-notice.is-error { color: #ff9ca0; }
+.portal-registration-required { margin: -12px 0 0; }
+.portal-registration-required a { color: var(--portal-gold-light); font-weight: 850; }
 .portal-free-order > small { color: #aaa39b; line-height: 1.5; }
 .portal-free-order textarea { min-height: 190px; resize: vertical; line-height: 1.55; }
 .portal-order-preview { overflow: hidden; border: 1px solid rgba(215, 169, 77, .4); border-radius: 14px; background: rgba(215, 169, 77, .055); }
