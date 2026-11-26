@@ -1,7 +1,19 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { splitWholesaleRouteFilters, wholesaleCustomerRouteId, wholesaleRouteFilters, wholesaleRouteRank } from "../src/lib/orders/wholesale-routes.ts";
+import { customerIdentityKey, splitWholesaleRouteFilters, wholesaleCustomerRouteId, wholesaleRouteFilters, wholesaleRouteRank } from "../src/lib/orders/wholesale-routes.ts";
+
+test("separa negocios mayoristas con el mismo nombre usando el teléfono", () => {
+  assert.equal(customerIdentityKey("wholesale", {
+    businessName: "Tienda La Fe",
+    name: "Holman",
+    phone: "315 0285755",
+  }), "business:tienda la fe|phone:573150285755");
+  assert.notEqual(
+    customerIdentityKey("wholesale", { businessName: "Tienda La Fe", name: "Holman", phone: "315 0285755" }),
+    customerIdentityKey("wholesale", { businessName: "Tienda La Fe", name: "Stiven", phone: "317 3737077" }),
+  );
+});
 
 test("normaliza filtros de ruta y descarta valores desconocidos", () => {
   assert.deepEqual(

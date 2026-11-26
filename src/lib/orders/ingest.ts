@@ -5,7 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { classifyHighLevelContact, sendHighLevelMessage, syncHighLevelOrderFields, syncWholesalePipeline } from "@/lib/orders/highlevel-pipeline";
 import { wholesaleOrderConfirmationMessage } from "@/lib/orders/wholesale-messages";
-import { customerIdentityKey, normalizedCustomerPhone, normalizedTaxId, wholesaleCustomerRouteId } from "@/lib/orders/wholesale-routes";
+import { customerIdentityKey, normalizedCustomerPhone, normalizedTaxId, normalizedWholesaleBusiness, wholesaleCustomerRouteId } from "@/lib/orders/wholesale-routes";
 import { existingWholesaleCustomerPayload, isExistingWholesaleCustomerOrder } from "@/lib/orders/wholesale-form-customer";
 
 type IngestItem = {
@@ -123,7 +123,7 @@ export async function ingestOrder(body: IngestBody) {
 
   const { data: customerByIdentity, error: existingCustomerError } = await supabase
     .from("customers")
-    .select("id,name,phone,business_name,tax_id,email,address,neighborhood,city,route_id,wholesale_registered_at")
+    .select("id,name,phone,business_name,tax_id,email,address,neighborhood,city,route_id,wholesale_registered_at,ghl_contact_id")
     .eq("customer_type", body.customer_type)
     .eq("identity_key", identityKey)
     .eq("is_active", true)
@@ -136,27 +136,36 @@ export async function ingestOrder(body: IngestBody) {
   const { data: stableIdentityCandidates, error: stableIdentityCandidatesError } = body.customer_type === "wholesale" && (submittedTaxId || submittedPhone)
     ? await supabase
       .from("customers")
-      .select("id,name,phone,business_name,tax_id,email,address,neighborhood,city,route_id,wholesale_registered_at")
+      .select("id,name,phone,business_name,tax_id,email,address,neighborhood,city,route_id,wholesale_registered_at,ghl_contact_id")
       .eq("customer_type", "wholesale")
       .eq("is_active", true)
     : { data: [], error: null };
   if (stableIdentityCandidatesError) {
     return NextResponse.json({ error: "Could not look up stable customer identity" }, { status: 500 });
   }
+  const submittedBusiness = normalizedWholesaleBusiness(body.customer.business_name || body.customer.name);
+  const sameBusiness = (customer: { business_name: string | null; name: string }) => (
+    normalizedWholesaleBusiness(customer.business_name || customer.name) === submittedBusiness
+  );
+  const submittedContactId = body.form_data?.contact_id?.trim();
+  const matchingContactCustomers = submittedContactId
+    ? (stableIdentityCandidates ?? []).filter((customer) => customer.ghl_contact_id === submittedContactId)
+    : [];
+  const customerByContact = matchingContactCustomers.length === 1 ? matchingContactCustomers[0] : undefined;
   const matchingTaxCustomers = submittedTaxId
-    ? (stableIdentityCandidates ?? []).filter((customer) => normalizedTaxId(customer.tax_id) === submittedTaxId)
+    ? (stableIdentityCandidates ?? []).filter((customer) => normalizedTaxId(customer.tax_id) === submittedTaxId && sameBusiness(customer))
     : [];
   const customerByTaxId = matchingTaxCustomers.length === 1 ? matchingTaxCustomers[0] : undefined;
   const matchingPhoneCustomers = submittedPhone
-    ? (stableIdentityCandidates ?? []).filter((customer) => normalizedCustomerPhone(customer.phone) === submittedPhone)
+    ? (stableIdentityCandidates ?? []).filter((customer) => normalizedCustomerPhone(customer.phone) === submittedPhone && sameBusiness(customer))
     : [];
   const registeredPhoneCustomers = matchingPhoneCustomers.filter((customer) => customer.wholesale_registered_at);
   const customerByPhone = matchingPhoneCustomers.length === 1
     ? matchingPhoneCustomers[0]
     : registeredPhoneCustomers.length === 1 ? registeredPhoneCustomers[0] : undefined;
-  const existingCustomer = customerByTaxId ?? customerByPhone ?? customerByIdentity;
+  const existingCustomer = customerByContact ?? customerByTaxId ?? customerByPhone ?? customerByIdentity;
   const usesExistingWholesaleCustomer = Boolean(existingCustomer) && (
-    isExistingWholesaleCustomerOrder(body) || Boolean(customerByTaxId) || Boolean(customerByPhone)
+    isExistingWholesaleCustomerOrder(body) || Boolean(customerByContact) || Boolean(customerByTaxId) || Boolean(customerByPhone)
   );
   const normalizedBody = usesExistingWholesaleCustomer
     ? { ...body, customer: existingWholesaleCustomerPayload(body.customer, existingCustomer!) }
@@ -185,6 +194,7 @@ export async function ingestOrder(body: IngestBody) {
         neighborhood: normalizedBody.customer.neighborhood?.trim() || existingCustomer?.neighborhood || null,
         city: normalizedBody.customer.city?.trim() || existingCustomer?.city || "Barranquilla",
         route_id: customerRouteId,
+        ghl_contact_id: normalizedBody.form_data?.contact_id?.trim() || null,
       }, { onConflict: "customer_type,identity_key" })
       .select("id")
       .single();

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 
-import { customerIdentityKey, normalizedCustomerPhone, normalizedTaxId } from "@/lib/orders/wholesale-routes";
+import { customerIdentityKey, normalizedCustomerPhone, normalizedTaxId, normalizedWholesaleBusiness } from "@/lib/orders/wholesale-routes";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   RegistrationValidationError,
@@ -70,38 +70,41 @@ export async function POST(request: Request) {
         city: registration.city,
       },
     }).select("id").maybeSingle();
-    // Un mayorista se identifica por establecimiento: varios negocios pueden compartir
-    // teléfono, así que el teléfono no sirve para decidir qué ficha actualizar.
-    const identityKey = customerIdentityKey("wholesale", { businessName: registration.businessName, name: registration.name });
-    const selectFields = "id,email,tax_id,phone,wholesale_registered_at";
+    // La combinación establecimiento + teléfono permite separar sucursales con el
+    // mismo nombre y también varios negocios atendidos por una misma persona.
+    const identityKey = customerIdentityKey("wholesale", { businessName: registration.businessName, name: registration.name, phone: registration.phone });
+    const selectFields = "id,email,tax_id,phone,business_name,wholesale_registered_at";
     const [{ data: byIdentity, error: identityError }, { data: byEmail, error: emailError }, { data: stableIdentityCandidates, error: stableIdentityError }] = await Promise.all([
       supabase.from("customers").select(selectFields).eq("customer_type", "wholesale").eq("identity_key", identityKey).maybeSingle(),
       supabase.from("customers").select(selectFields).eq("customer_type", "wholesale").ilike("email", registration.email).limit(2),
       supabase.from("customers").select(selectFields).eq("customer_type", "wholesale").eq("is_active", true),
     ]);
     if (identityError || emailError || stableIdentityError) throw new Error("No se pudo consultar el registro de clientes");
-    if (!byIdentity && (byEmail?.length ?? 0) > 1) {
-      return NextResponse.json({ error: "El correo ya aparece en más de un registro. Comunícate con Fénix para actualizar tus datos." }, { status: 409 });
+    const submittedBusiness = normalizedWholesaleBusiness(registration.businessName);
+    const sameBusiness = (customer: { business_name: string | null }) => normalizedWholesaleBusiness(customer.business_name) === submittedBusiness;
+    const matchingEmailCustomers = (byEmail ?? []).filter((customer) => sameBusiness(customer));
+    if (!byIdentity && matchingEmailCustomers.length > 1) {
+      return NextResponse.json({ error: "El correo ya aparece más de una vez para este establecimiento. Comunícate con Fénix para actualizar tus datos." }, { status: 409 });
     }
-
     const submittedTaxId = normalizedTaxId(registration.taxId);
-    const matchingTaxCustomers = (stableIdentityCandidates ?? []).filter((customer) => normalizedTaxId(customer.tax_id) === submittedTaxId);
+    const matchingTaxCustomers = (stableIdentityCandidates ?? []).filter((customer) => normalizedTaxId(customer.tax_id) === submittedTaxId && sameBusiness(customer));
     if (matchingTaxCustomers.length > 1) {
       return NextResponse.json({ error: "La identificación aparece en más de un registro. Comunícate con Fénix para actualizar tus datos." }, { status: 409 });
     }
     const submittedPhone = normalizedCustomerPhone(registration.phone);
-    const matchingPhoneCustomers = (stableIdentityCandidates ?? []).filter((customer) => normalizedCustomerPhone(customer.phone) === submittedPhone);
+    const matchingPhoneCustomers = (stableIdentityCandidates ?? []).filter((customer) => normalizedCustomerPhone(customer.phone) === submittedPhone && sameBusiness(customer));
     const registeredPhoneCustomers = matchingPhoneCustomers.filter((customer) => customer.wholesale_registered_at);
     const customerByPhone = matchingPhoneCustomers.length === 1
       ? matchingPhoneCustomers[0]
       : registeredPhoneCustomers.length === 1 ? registeredPhoneCustomers[0] : undefined;
-    const existing = matchingTaxCustomers[0] ?? customerByPhone ?? byIdentity ?? byEmail?.[0];
+    const customerByEmail = matchingEmailCustomers[0];
+    const existing = matchingTaxCustomers[0] ?? customerByPhone ?? byIdentity ?? customerByEmail;
     const registeredAt = new Date().toISOString();
     const customerValues = {
       customer_type: "wholesale",
       identity_key: identityKey,
       name: registration.name,
-      business_name: registration.businessName,
+      business_name: existing?.business_name?.includes("·") ? existing.business_name : registration.businessName,
       tax_id: registration.taxId,
       phone: registration.phone,
       email: registration.email,

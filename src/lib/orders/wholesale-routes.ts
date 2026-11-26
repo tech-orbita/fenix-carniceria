@@ -71,7 +71,9 @@ export function customerIdentityKey(
 ) {
   if (customerType === "wholesale") {
     const business = normalizedIdentityPart(values.businessName || values.name);
-    return business ? `business:${business}` : "";
+    const phone = normalizedWholesalePhone(values.phone);
+    if (!business) return "";
+    return phone ? `business:${business}|phone:${phone}` : `business:${business}`;
   }
   const phone = (values.phone ?? "").replace(/\D/g, "");
   return phone ? `phone:${phone}` : "";
