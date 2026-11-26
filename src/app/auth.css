@@ -342,6 +342,15 @@
 .route-bulk-toolbar button { min-height: 36px; border: 0; border-radius: 8px; padding: 0 14px; background: #1769e0; color: white; cursor: pointer; font: inherit; font-size: 12px; font-weight: 800; white-space: nowrap; }
 .route-bulk-toolbar button:disabled, .route-bulk-toolbar select:disabled, .customer-route-select:disabled { opacity: .55; cursor: default; }
 .customer-route-select.is-unassigned { border-color: #e0a52a; background: #fff7e7; color: #8a5a0c; }
+.customer-search-toolbar { display: grid; gap: 6px; margin-bottom: 14px; border: 1px solid #dce5f2; border-radius: 12px; padding: 12px; background: #fff; }
+.customer-search-toolbar > label { color: #17233d; font-size: 12px; font-weight: 800; }
+.customer-search-toolbar > div { display: flex; align-items: center; gap: 10px; }
+.customer-search-toolbar input { min-width: 280px; min-height: 38px; flex: 1; border: 1px solid #c8d4e5; border-radius: 8px; padding: 0 12px; background: #fff; color: #17233d; font: inherit; font-size: 13px; }
+.customer-search-toolbar input:focus { border-color: #1769e0; outline: 3px solid rgba(23, 105, 224, .13); }
+.customer-search-toolbar span { color: #50627d; font-size: 12px; font-weight: 800; white-space: nowrap; }
+.customer-search-toolbar button { min-height: 38px; border: 0; border-radius: 8px; padding: 0 14px; background: #1769e0; color: #fff; cursor: pointer; font: inherit; font-size: 12px; font-weight: 800; white-space: nowrap; }
+.customer-search-toolbar button.is-secondary { border: 1px solid #c8d4e5; background: #fff; color: #29405f; }
+.customer-search-toolbar button:disabled { opacity: .5; cursor: default; }
 .customer-select-cell { width: 34px; min-width: 34px; text-align: center !important; }
 .customer-select-cell input { width: 16px; height: 16px; accent-color: #1769e0; }
 .users-notice.is-success { border-color: #a7d7b7; background: #e7f7ed; color: #1f6b44; }
@@ -357,6 +366,10 @@
   .route-bulk-toolbar > div { min-width: 0; margin-right: 0; }
   .route-bulk-toolbar > span { align-self: flex-start; }
   .route-bulk-toolbar select, .route-bulk-toolbar button { width: 100%; }
+  .customer-search-toolbar > div { align-items: stretch; flex-direction: column; }
+  .customer-search-toolbar input { width: 100%; min-width: 0; }
+  .customer-search-toolbar span { align-self: flex-start; }
+  .customer-search-toolbar button { width: 100%; }
 }
 .form-submissions-page { max-width: 1440px; }
 .form-submissions-page .users-header { justify-content: space-between; }
