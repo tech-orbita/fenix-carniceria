@@ -9,7 +9,7 @@ import { useRouter } from "next/navigation";
 import { catalogProductFor, isWholesaleCommunicationText, normalizeProductName, UNSPECIFIED_WHOLESALE_UNIT, wholesaleProductCatalog, wholesaleUnitFor } from "@/lib/orders/product-parser";
 import type { RetailCatalogProduct } from "@/lib/orders/retail-normalization";
 import type { WholesaleProduct } from "@/lib/orders/product-parser";
-import { wholesaleServiceDay } from "@/lib/orders/wholesale-service-day";
+import { wholesaleDeletedDay, wholesaleServiceDay } from "@/lib/orders/wholesale-service-day";
 import { changedWholesaleTableRow } from "@/lib/orders/wholesale-table-edit";
 import { formatWholesaleDisplayLines } from "@/lib/orders/wholesale-lines";
 import { unassignedWholesaleRoute, wholesaleRouteLabel, wholesaleRouteRank, wholesaleRoutes } from "@/lib/orders/wholesale-routes";
@@ -586,12 +586,21 @@ function WholesaleOrdersTable({ formAlertsError, formSubmissionAlerts, hasMoreOr
     });
     return grouped;
   }, [allOrders]);
+  const deletedOrdersByDay = useMemo(() => {
+    const grouped = new Map<string, Order[]>();
+    allOrders.forEach((order) => {
+      if (!order.deletedAt) return;
+      const day = wholesaleDeletedDay(order.deletedAt);
+      grouped.set(day, [...(grouped.get(day) ?? []), order]);
+    });
+    return grouped;
+  }, [allOrders]);
   const selectedDay = addDays(today, dayOffset);
   const selectedDayOrders = ordersByServiceDay.get(selectedDay);
   const chatHelpRequests = selectedDayOrders?.help ?? [];
   const dispatchedOrders = selectedDayOrders?.dispatched ?? [];
   const openOrders = selectedDayOrders?.open ?? [];
-  const deletedOrders = allOrders.filter((order) => Boolean(order.deletedAt));
+  const deletedOrders = deletedOrdersByDay.get(selectedDay) ?? [];
   const baseOrders = listMode === "help" ? chatHelpRequests : listMode === "dispatched" ? dispatchedOrders : listMode === "deleted" ? deletedOrders : openOrders;
   // Refleja la ruta elegida en el acto; el refresco del servidor confirma después
   // el dato persistido sin hacer que el operador espere viendo el valor anterior.
@@ -602,8 +611,10 @@ function WholesaleOrdersTable({ formAlertsError, formSubmissionAlerts, hasMoreOr
   const dispatchedCount = dispatchedOrders.length;
   const deletedCount = deletedOrders.length;
   const orderCount = openOrders.length;
-  const pendingByDay = (offset: number) => {
-    const group = ordersByServiceDay.get(addDays(today, offset));
+  const recordsByDay = (offset: number) => {
+    const day = addDays(today, offset);
+    if (listMode === "deleted") return deletedOrdersByDay.get(day)?.length ?? 0;
+    const group = ordersByServiceDay.get(day);
     return (group?.open.length ?? 0) + (group?.help.length ?? 0);
   };
   const products = useMemo(() => productsForOrders(orders), [orders]);
@@ -804,9 +815,9 @@ function WholesaleOrdersTable({ formAlertsError, formSubmissionAlerts, hasMoreOr
       <div className="section-toolbar">
         <div className="table-filters">
           <div aria-label="Día de despacho" className="day-navigator" role="group">
-            <button aria-label="Día anterior" disabled={editing} onClick={() => setDayOffset((current) => current - 1)} title={`${pendingByDay(dayOffset - 1)} pendientes`} type="button">‹</button>
+            <button aria-label="Día anterior" disabled={editing} onClick={() => setDayOffset((current) => current - 1)} title={`${recordsByDay(dayOffset - 1)} ${listMode === "deleted" ? "eliminados" : "pendientes"}`} type="button">‹</button>
             <span><strong>{serviceDayName(selectedDay, today) || "Despacho"}</strong>{dayLabel.format(new Date(`${selectedDay}T12:00:00Z`))}</span>
-            <button aria-label="Día siguiente" disabled={editing} onClick={() => setDayOffset((current) => current + 1)} title={`${pendingByDay(dayOffset + 1)} pendientes`} type="button">›</button>
+            <button aria-label="Día siguiente" disabled={editing} onClick={() => setDayOffset((current) => current + 1)} title={`${recordsByDay(dayOffset + 1)} ${listMode === "deleted" ? "eliminados" : "pendientes"}`} type="button">›</button>
             {dayOffset !== 0 && <button className="day-today" disabled={editing} onClick={() => setDayOffset(0)} type="button">Hoy</button>}
           </div>
           <FilterMenu label="Ruta" onChange={changeZones} options={zoneOptions} selected={zones} />
@@ -887,7 +898,7 @@ function WholesaleOrdersTable({ formAlertsError, formSubmissionAlerts, hasMoreOr
                 return <td aria-label={value && !editing ? `${product.name} de ${order.orderNumber}: ${value}. ${prepared ? "Listo" : "Pendiente"}` : undefined} className={`${editing ? "matrix-quantity-cell is-editing" : value ? "matrix-quantity-cell has-value" : "matrix-quantity-cell"}${prepared ? " is-prepared" : ""}${preparedPendingKey === preparedKey ? " is-prepared-pending" : ""}${product.name === "Blanda" ? " is-blanda-column" : ""}`} key={product.name} onDoubleClick={value && !editing ? () => void togglePrepared(order, product, prepared) : undefined} onKeyDown={value && !editing ? (event) => { if (event.key === "Enter") void togglePrepared(order, product, prepared); } : undefined} tabIndex={value && !editing ? 0 : undefined} title={cellTitle}>{editing ? <input aria-label={`${product.name} de ${order.orderNumber}`} onChange={(event) => updateDraft(order.id, product.name, event.target.value)} placeholder={placeholder} title={title} value={draftRows[order.id]?.quantities[product.name] ?? ""} /> : value || ""}</td>;
               })}
             </tr>)}
-            {!visibleOrders.length && <tr><td className="matrix-empty" colSpan={visibleProducts.length + (showInfoColumns ? 4 : 2)}>{hasFilters ? "Ningún pedido coincide con los filtros." : listMode === "deleted" ? "No hay pedidos eliminados." : listMode === "dispatched" ? "No hay pedidos despachados para este día." : listMode === "help" ? "No hay solicitudes de ayuda para este día." : "No hay pedidos pendientes para este día."}</td></tr>}
+            {!visibleOrders.length && <tr><td className="matrix-empty" colSpan={visibleProducts.length + (showInfoColumns ? 4 : 2)}>{hasFilters ? "Ningún pedido coincide con los filtros." : listMode === "deleted" ? "No hay pedidos eliminados en este día." : listMode === "dispatched" ? "No hay pedidos despachados para este día." : listMode === "help" ? "No hay solicitudes de ayuda para este día." : "No hay pedidos pendientes para este día."}</td></tr>}
           </tbody>
           {visibleOrders.length > 0 && visibleProducts.length > 0 && <tfoot><tr><th scope="row">{showInfoColumns ? "Total" : `Total · ${visibleSummary}`}</th><td className="product-count-column">{visibleOrders.reduce((sum, order) => sum + orderProductCount(order), 0)}</td>{showInfoColumns && <td colSpan={2}>{visibleSummary}</td>}{totals.map((total, index) => <td key={visibleProducts[index].name}>{total || "—"}</td>)}</tr></tfoot>}
         </table>

@@ -59,3 +59,7 @@ export function wholesaleServiceDay(receivedAt: string, requestedDeliveryDay?: s
   while (!isWholesaleOperatingDay(day)) day = addDays(day, 1);
   return day;
 }
+
+export function wholesaleDeletedDay(deletedAt: string) {
+  return bogotaDay.format(new Date(deletedAt));
+}

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { isWholesaleOperatingDay, wholesaleServiceDay } from "../src/lib/orders/wholesale-service-day.ts";
+import { isWholesaleOperatingDay, wholesaleDeletedDay, wholesaleServiceDay } from "../src/lib/orders/wholesale-service-day.ts";
 
 test("aplica el corte mayorista de las 5 a. m. de Bogotá", () => {
   assert.equal(wholesaleServiceDay("2026-10-26T04:59:00-05:00"), "2026-10-26");
@@ -21,4 +21,9 @@ test("reconoce festivos colombianos fijos, trasladados y de Semana Santa", () =>
 
 test("respeta una fecha asignada manualmente por el personal", () => {
   assert.equal(wholesaleServiceDay("2026-10-31T04:00:00-05:00", "2026-11-01"), "2026-11-01");
+});
+
+test("agrupa eliminados por el día real de eliminación en Bogotá", () => {
+  assert.equal(wholesaleDeletedDay("2026-11-26T04:59:00Z"), "2026-11-25");
+  assert.equal(wholesaleDeletedDay("2026-11-26T05:01:00Z"), "2026-11-26");
 });
